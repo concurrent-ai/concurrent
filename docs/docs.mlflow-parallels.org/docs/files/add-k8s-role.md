@@ -1,10 +1,10 @@
-# Add a Kubernetes Role for Pods/Jobs started by MLflow Parallels
+# Add a Kubernetes Role for Pods/Jobs started by Concurrent for MLflow
 
 ## Create a k8s role for running jobs and bind this role to a k8s ServiceAccount
 
 **Create a k8s role for running jobs**
 
-Download the yaml file k8s-role-for-parallels.yaml from [here](https://docs.mlflow-parallels.org/scripts/k8s-role-for-parallels.yaml "Download k8s-role-for-parallels.yaml"). Apply this yaml file to your cluster
+Download the yaml file k8s-role-for-parallels.yaml from [here](https://docs.concurrent-ai.org/scripts/k8s-role-for-parallels.yaml "Download k8s-role-for-parallels.yaml"). Apply this yaml file to your cluster
 
 Here's an example for a Regional cluster:
 
@@ -31,14 +31,14 @@ clusterrolebinding.rbac.authorization.k8s.io/k8s-role-for-parallels-lambda-bindi
 
 **Create a namespace called parallelsns, and a ServiceAccount called k8s-serviceaccount-for-parallels-parallelsns**
 
-In this example, we create a namespace called parallelsns in k8s and configure it for use with MLflow Parallels
+In this example, we create a namespace called parallelsns in k8s and configure it for use with Concurrent for MLflow
 
 ```
 kubectl create namespace parallelsns
 namespace/parallelsns created
 ```
 
-Download the yaml file k8s-service-role.yaml from [here](https://docs.mlflow-parallels.org/scripts/k8s-service-role.yaml "Download k8s-service-role.yaml"). Apply this yaml file to your cluster
+Download the yaml file k8s-service-role.yaml from [here](https://docs.concurrent-ai.org/scripts/k8s-service-role.yaml "Download k8s-service-role.yaml"). Apply this yaml file to your cluster
 
 ```
 kubectl apply -f k8s-service-role.yaml 

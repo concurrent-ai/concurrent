@@ -1,5 +1,5 @@
 site_name: Documentation
-copyright: (c) Copyright 2022 mlflow-parallels.org. All Rights Reserved.
+copyright: (c) Copyright 2022 The Concurrent AI Project. All Rights Reserved.
 nav:
         - Home: 'index.md'
         - 'Architecture': 'files/arch.md'
@@ -8,6 +8,8 @@ nav:
                 - 'Sign Up': 'files/free.md'
                 - 'Hello World': 'files/free-helloworld.md'
                 - 'Test CLI': 'files/free-cli.md'
+        - 'Roadmap':
+                - 'Projects': 'files/roadmap-projects.md'
         - 'Admin':
                 - 'Install Control Plane':
                         - 'Introduction': 'files/install-intro.md'

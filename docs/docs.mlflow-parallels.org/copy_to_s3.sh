@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BUCKET=docs.mlflow-parallels.org
+BUCKET=docs.concurrent-ai.org
 
 echo "Trying to access bucket s3://${BUCKET}"
 aws s3 ls s3://${BUCKET}/ >& /dev/null || { echo "Unable to access bucket s3://${BUCKET}. Fix ~/.aws/credentials and try again" ; exit 1; }

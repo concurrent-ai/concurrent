@@ -1,6 +1,6 @@
-# Create Google Cloud Service Account for MLflow Parallels
+# Create Google Cloud Service Account for Concurrent for MLflow
 
-This section describes the process of creating a Google Cloud Service Account for MLflow Parallels. Google Cloud Service Accounts are created in the context of a project.
+This section describes the process of creating a Google Cloud Service Account for Concurrent for MLflow. Google Cloud Service Accounts are created in the context of a project.
 
 
 ## Step 1: Create Service Account
@@ -8,7 +8,7 @@ This section describes the process of creating a Google Cloud Service Account fo
 [Browse](https://console.cloud.google.com "Google Cloud Console") to the specific project in the google cloud console, and click on **Create Service Account** as shown below
 
 
-[![](https://docs.mlflow-parallels.org/images/create-service-account-1.png?raw=true)](https://docs.mlflow-parallels.org/images/create-service-account-1.png?raw=true)
+[![](https://docs.concurrent-ai.org/images/create-service-account-1.png?raw=true)](https://docs.concurrent-ai.org/images/create-service-account-1.png?raw=true)
 
 Add the following three **Roles** to this **Service Account**
 
@@ -18,7 +18,7 @@ Add the following three **Roles** to this **Service Account**
 
 When you click on the **IAM And Permissions** page and choose the **IAM** item in the left navbar, the table displayed should have an entry such as the following:
 
-[![](https://docs.mlflow-parallels.org/images/create-service-account-2.png?raw=true)](https://docs.mlflow-parallels.org/images/create-service-account-2.png?raw=true)
+[![](https://docs.concurrent-ai.org/images/create-service-account-2.png?raw=true)](https://docs.concurrent-ai.org/images/create-service-account-2.png?raw=true)
 
 ## Step 2: Create Key For Service Account
 

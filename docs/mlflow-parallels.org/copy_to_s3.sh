@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BUCKET=mlflow-parallels.org
+BUCKET=concurrent-ai.org
 
 echo "Trying to access bucket s3://${BUCKET}"
 aws s3 ls s3://${BUCKET}/ >& /dev/null || { echo "Unable to access bucket s3://${BUCKET}. Fix ~/.aws/credentials and try again" ; exit 1; }
@@ -26,10 +26,10 @@ aws s3 rm s3://${BUCKET}/style-guide.html
 (cd site; aws s3 cp index.html s3://${BUCKET}/index.html)
 (cd site; aws s3 cp style-guide.html s3://${BUCKET}/style-guide.html)
 
-if [ x"$MLFLOW_PARALLELS_DISTID" != "x" ] ; then
-  echo Flushing CloudFront distro $MLFLOW_PARALLELS_DISTID
-  aws cloudfront create-invalidation --distribution-id ${MLFLOW_PARALLELS_DISTID} --paths "/*"
+if [ x"$CONCURRENT_AI_DISTID" != "x" ] ; then
+  echo Flushing CloudFront distro $CONCURRENT_AI_DISTID
+  aws cloudfront create-invalidation --distribution-id ${CONCURRENT_AI_DISTID} --paths "/*"
 else
-  echo MLFLOW_PARALLELS_DISTID is not set. CloudFront distro not flushed
+  echo CONCURRENT_AI_DISTID is not set. CloudFront distro not flushed
 fi
 exit 0

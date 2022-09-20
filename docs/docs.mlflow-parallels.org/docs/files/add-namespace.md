@@ -1,24 +1,24 @@
-# Add namespace to Kubernetes Cluster for Parallels
+# Add namespace to Kubernetes Cluster for Concurrent
 
-This page describes the process for creating a new namespace called **newnsforparallels** for use by Parallels.
+This page describes the process for creating a new namespace called **newnsforconcurrent** for use by Concurrent.
 
 ## Create namespace
 
 Download the following policy template:
 
 ```
-wget https://docs.mlflow-parallels.org/scripts/k8s-service-role.yaml
+wget https://docs.concurrent-ai.org/scripts/k8s-service-role.yaml
 ```
 
-Modify the role to reflect the new name. In the following example, we are creating a new namespace called **newnsforparallels**:
+Modify the role to reflect the new name. In the following example, we are creating a new namespace called **newnsforconcurrent**:
 ```
-sed -e 's/parallelsns/newnsforparallels/gc' k8s-service-role.yaml > k8s-service-role-new.yaml
+sed -e 's/parallelsns/newnsforconcurrent/gc' k8s-service-role.yaml > k8s-service-role-new.yaml
 ```
 
-Create a namespace called **newnsforparallels**
+Create a namespace called **newnsforconcurrent**
 
 ```
-kubectl create namespace newnsforparallels
+kubectl create namespace newnsforconcurrent
 ```
 
 Finally, create a service role for this new namespace
