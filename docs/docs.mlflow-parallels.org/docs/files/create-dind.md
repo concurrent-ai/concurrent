@@ -1,10 +1,10 @@
-# Create a Docker-In-Docker Service for MLflow Parallels
+# Create a Docker-In-Docker Service for Concurrent for MLflow
 
-MLflow Parallels takes over the job of creating Docker containers for running workloads on Kubernetes. It uses a Docker In Docker service for this purpose. This service is per namespace.
+Concurrent for MLflow takes over the job of creating Docker containers for running workloads on Kubernetes. It uses a Docker In Docker service for this purpose. This service is per namespace.
 
 Use the following command to download k8s-dind-service.yaml
 ```
-wget https://docs.mlflow-parallels.org/cft/version/0.6/k8s-dind-service.yaml
+wget https://docs.concurrent-ai.org/cft/version/0.6/k8s-dind-service.yaml
 ```
 
 Apply it to your kubernetes cluster using kubectl as follows:
