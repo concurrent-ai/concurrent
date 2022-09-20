@@ -24,10 +24,10 @@ aws s3 rm --recursive s3://${BUCKET}/sitemap.xml.gz
 (cd site; aws s3 cp sitemap.xml s3://${BUCKET}/sitemap.xml)
 (cd site; aws s3 cp sitemap.xml.gz s3://${BUCKET}/sitemap.xml.gz)
 
-if [ x"$MLFLOW_PARALLELS_DOCS_DISTID" != "x" ] ; then
-  echo Flushing CloudFront distro $MLFLOW_PARALLELS_DOCS_DISTID
-  aws cloudfront create-invalidation --distribution-id ${MLFLOW_PARALLELS_DOCS_DISTID} --paths "/*"
+if [ x"$CONCURRENT_AI_DOCS_DISTID" != "x" ] ; then
+  echo Flushing CloudFront distro $CONCURRENT_AI_DOCS_DISTID
+  aws cloudfront create-invalidation --distribution-id ${CONCURRENT_AI_DOCS_DISTID} --paths "/*"
 else
-  echo MLFLOW_PARALLELS_DOCS_DISTID is not set. CloudFront distro not flushed
+  echo CONCURRENT_AI_DOCS_DISTID is not set. CloudFront distro not flushed
 fi
 exit 0
