@@ -32,7 +32,7 @@ extra:
 
 theme:
         name: material
-        logo: https://docs.mlflow-parallels.org/images/MLflow_Parallels_Logo.png
+        logo: https://docs.concurrent-ai.org/images/concurrent-logo.png
         palette:
                 primary: blue
                 accent: orange
