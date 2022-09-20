@@ -1,0 +1,9 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Wrapper that creates the k8s role
+Resources:
+  CreateK8sRole:
+    Type: "AWSQS::Kubernetes::Resource"
+    Properties:
+      ClusterName: mlflow-parallels
+      Namespace: "default"
+      Url: s3://docs.mlflow-parallels.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/k8s-service-role-for-parallels.yaml

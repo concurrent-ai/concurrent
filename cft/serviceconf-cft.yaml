@@ -1,0 +1,147 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create the required entry in ddb table infinstor-ServiceConf
+Parameters:
+  MlflowParallelsDomain:
+    Type: String
+  MlflowParallelsDnsName:
+    Type: String
+    Description: 'DNS endpoint of mlflow REST API, InfinStorDomain is appended to this value to create the FQDN'
+  MlflowParallelsUiDnsName:
+    Type: String
+    Description: 'DNS endpoint of mlflow web UI, InfinStorDomain is appended to this value to create the FQDN'
+  ServiceConfTable:
+    Type: String
+    Description: 'parallels-ServiceConf table'
+Resources: 
+  DynamoCfnLambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+          AssumeRolePolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                  - Effect: Allow
+                    Principal:
+                        Service:
+                            - lambda.amazonaws.com
+                    Action:
+                        - sts:AssumeRole
+          Path: '/'
+          Policies:
+              - PolicyName: 'dynamodbAccessRole'
+                PolicyDocument:
+                    Version: '2012-10-17'
+                    Statement:
+                        - Effect: Allow
+                          Action:
+                              - dynamodb:*
+                          Resource: '*'
+                        - Effect: Allow
+                          Action:
+                              - logs:*
+                          Resource: '*'
+  ServiceConfDdbLambda:
+      Type: AWS::Lambda::Function
+      Properties:
+          Description: 'Create s3 bucket and populate with static html/js for mflowui and dashboard'
+          Handler: index.handler
+          # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-lambda-function.html#cfn-lambda-function-memorysize
+          MemorySize: 1024
+          Runtime: python3.8
+          Role: !GetAtt DynamoCfnLambdaRole.Arn
+          Timeout: 60
+          Code:
+              ZipFile: |
+                import boto3
+                from typing import TYPE_CHECKING
+                if TYPE_CHECKING:
+                    from mypy_boto3_dynamodb import DynamoDBClient
+                    from mypy_boto3_dynamodb.type_defs import UpdateItemOutputTypeDef
+                else:
+                    DynamoDBClient = object
+                    UpdateItemOutputTypeDef = object
+                import cfnresponse
+
+                def handler(event, context):
+                    print(f'event={event}')
+                    print(f'context={context}')
+                    
+                    # initialized outside the 'try' block as used as the physicalResourceId in cfnresponse.send()
+                    serviceConfTable = event['ResourceProperties']['ServiceConfTable']
+                    try:
+                        ddb_client:DynamoDBClient = boto3.client('dynamodb')    
+                        
+                        reqType:str = event['RequestType']
+                        if  reqType == "Create" or reqType == "Update":
+                            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html#DynamoDB.Client.update_item
+                            # Edits an existing item's attributes, or adds a new item to the table if it does not already exist. You can put, delete, or add attribute values. You can also perform a conditional update on an existing item (insert a new attribute name-value pair if it doesn't exist, or replace an existing name-value pair if it has certain expected attribute values).
+                            #
+                            # do not use put_item() since it replaces and doesn't udpate.
+                            ean = {
+                                #'#configVersion': 'configVersion', 
+                                '#cognitoUserPool' : 'cognitoUserPool',
+                                '#cognitoClientId' : 'cognitoClientId',
+                                '#cognitoCliClientId' : 'cognitoCliClientId',
+                                '#cognitoMlflowuiClientId' : 'cognitoMlflowuiClientId',
+                                '#isStaging' : 'isStaging',
+                                '#cookieHost' : 'cookieHost',
+                                '#serviceHost' : 'serviceHost',
+                                '#periodRunLambdaArn' : 'periodRunLambdaArn',
+                                '#runProjectLambda' : 'runProjectLambda',
+                                '#executeDagLambda' : 'executeDagLambda',
+                                '#mlflowParallelsApiId' : 'mlflowParallelsApiId',
+                                '#mlflowParallelsDnsName' : 'mlflowParallelsDnsName',
+                                '#mlflowParallelsUiDnsName' : 'mlflowParallelsUiDnsName'
+                            }
+
+                            eav = {
+                                #':configVersion': { 'N': 1 }, 
+                                ':cognitoUserPool' : { 'S': event['ResourceProperties']['CognitoUserPoolId'] },
+                                ':cognitoClientId' : { 'S': event['ResourceProperties']['CliClientId'] },
+                                ':cognitoCliClientId' : { 'S': event['ResourceProperties']['CliClientId'] },
+                                ':cognitoMlflowuiClientId' : { 'S': event['ResourceProperties']['MlflowuiClientId'] },
+                                ':isStaging' : { 'S': 'true' },
+                                ':cookieHost' : { 'S': event['ResourceProperties']['MlflowParallelsDomain'] },
+                                ':serviceHost' : { 'S': event['ResourceProperties']['MlflowParallelsDomain'] },
+                                ':periodRunLambdaArn' : { 'S': event['ResourceProperties']['periodRunLambdaArn'] },
+                                ':runProjectLambda' : { 'S': event['ResourceProperties']['runProjectLambdaArn'] },
+                                ':executeDagLambda' : { 'S': event['ResourceProperties']['executeDagLambdaArn'] },
+                                ':mlflowParallelsApiId' : { 'S': event['ResourceProperties']['MlflowParallelsApiId'] },
+                                ':mlflowParallelsDnsName' : { 'S': event['ResourceProperties']['MlflowParallelsDnsName'] },
+                                ':mlflowParallelsUiDnsName' : { 'S': event['ResourceProperties']['MlflowParallelsUiDnsName'] }
+                            }
+                            
+                            print(f'eav={eav}')
+                            print(f'serviceConfTable={serviceConfTable}')
+
+                            update_item_retval:UpdateItemOutputTypeDef = ddb_client.update_item(
+                                ExpressionAttributeNames=ean, ExpressionAttributeValues=eav, Key={ 'configVersion': { 'N': '1' } }, 
+                                ReturnValues='ALL_NEW', TableName=serviceConfTable, 
+                                UpdateExpression="SET #cognitoUserPool = :cognitoUserPool, #cognitoClientId = :cognitoClientId, #cognitoCliClientId = :cognitoCliClientId, #cognitoMlflowuiClientId = :cognitoMlflowuiClientId,  #isStaging = :isStaging, #cookieHost = :cookieHost, #serviceHost = :serviceHost, #periodRunLambdaArn = :periodRunLambdaArn, #runProjectLambda = :runProjectLambda, #executeDagLambda = :executeDagLambda, #mlflowParallelsApiId = :mlflowParallelsApiId, #mlflowParallelsDnsName = :mlflowParallelsDnsName, #mlflowParallelsUiDnsName = :mlflowParallelsUiDnsName")
+                            
+                            print(f'update_item_retval={update_item_retval}')
+                            
+                            cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, physicalResourceId=serviceConfTable)
+                        elif reqType == 'Delete':
+                            cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, physicalResourceId=serviceConfTable)
+                        else:
+                            cfnresponse.send(event, context, cfnresponse.FAILED, {'Data':f'unknown requestType={reqType}'}, physicalResourceId=serviceConfTable)
+                    except Exception as e:
+                        print('Operation failed...')
+                        print(str(e))
+                        cfnresponse.send(event, context, cfnresponse.FAILED, {'Data':str(e)}, physicalResourceId=serviceConfTable)
+
+  ServiceConfVersionOneEntry:
+      Type: Custom::ServiceConfDdbLambda
+      Properties:
+          ServiceToken: !GetAtt ServiceConfDdbLambda.Arn
+          ServiceConfTable: !Ref ServiceConfTable
+          MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
+          MlflowParallelsUiDnsName: !Ref MlflowParallelsUiDnsName
+          CognitoUserPoolId: !ImportValue mlflow-parallels-cognito-user-pool:CognitoUserPoolId
+          CliClientId: !ImportValue mlflow-parallels-cognito-user-pool:CliClientId
+          MlflowuiClientId: !ImportValue mlflow-parallels-cognito-user-pool:MlflowuiClientId
+          MlflowParallelsDomain: !Ref MlflowParallelsDomain
+          MlflowParallelsApiId: !ImportValue mlflow-parallels-lambdas:MlflowParallelsApiId
+          periodRunLambdaArn: !ImportValue mlflow-parallels-lambdas:periodrun
+          runProjectLambdaArn: !ImportValue mlflow-parallels-lambdas:runproject
+          executeDagLambdaArn: !ImportValue mlflow-parallels-lambdas:executeDagLambdaArn

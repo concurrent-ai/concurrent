@@ -1,0 +1,84 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "Create certificates required for the mflow-parallels service",
+
+  "Parameters" : {
+    "MlflowParallelsDomain" : {
+      "Description" : "Base Domain. if this value is mflow-parallels.com, the FQDNs for the service will be service.mflow-parallels.com, mlflow.mflow-parallels.com, etc.",
+      "Type" : "String"
+    },
+    "Route53HostedZoneId" : {
+      "Description" : "The Route 53 Hosted Zone ID for the Base Domain",
+      "Type" : "String"
+    },
+    "MlflowParallelsUiDnsName" : {
+      "Description" : "subdomain for mlflow web UI. MlflowParallelsDomain is appended to this value to create the FQDN",
+      "Type" : "String",
+      "Default": "parallelsui"
+    },
+    "MlflowParallelsUiCertArn": {
+      "Type": "String",
+      "Description": "if empty, then a certificate is automatically created.  If not, this certificate is reused",
+      "Default": ""
+    },
+    "MlflowParallelsDnsName" : {
+      "Description" : "submain for mlflow parallels API endpoint. MlflowParallelsDomain is appended to this value to create the FQDN",
+      "Type" : "String",
+      "Default" : "parallels"
+    },
+    "MlflowServerType" : {
+      "Type" : "String",
+      "Description": "The Mlflow Server type that mlflow server is to work with.",
+      "AllowedValues": ["infinstor","databricks","azure","opensource"]
+      }
+  },
+  "Conditions": {
+    "isNotInfinstorMlflowServerType": { "Fn::Not": [ { "Fn::Equals": [ {"Ref": "MlflowServerType"}, "infinstor" ] } ] }
+  },
+  "Resources":{
+    "MlflowParallelsCertificate":{
+      "Type":"AWS::CertificateManager::Certificate",
+      "Properties":{
+        "DomainName": {"Fn::Join": [ ".", [ {"Ref": "MlflowParallelsDnsName"}, {"Ref": "MlflowParallelsDomain"} ] ]},
+        "CertificateTransparencyLoggingPreference" : "ENABLED",
+        "ValidationMethod":"DNS",
+        "DomainValidationOptions": [{"DomainName": {"Fn::Join": [ ".", [ {"Ref": "MlflowParallelsDnsName"}, {"Ref": "MlflowParallelsDomain"} ] ]}, "HostedZoneId": {"Ref": "Route53HostedZoneId"}}]
+      }
+    },
+    "MlflowParallelsUiCertificate":{
+      "Type":"AWS::CertificateManager::Certificate",
+      "Condition": "isNotInfinstorMlflowServerType" ,
+      "Properties":{
+        "DomainName": {"Fn::Join": [ ".", [ {"Ref": "MlflowParallelsUiDnsName"}, {"Ref": "MlflowParallelsDomain"} ] ]},
+        "CertificateTransparencyLoggingPreference" : "ENABLED",
+        "ValidationMethod":"DNS",
+        "DomainValidationOptions": [{"DomainName": {"Fn::Join": [ ".", [ {"Ref": "MlflowParallelsUiDnsName"}, {"Ref": "MlflowParallelsDomain"} ] ]}, "HostedZoneId": {"Ref": "Route53HostedZoneId"}}]
+      }
+    }
+  },
+
+  "Outputs" : {
+    "Route53HostedZoneId": {
+      "Description" : "Route 53 Hosted Zone ID for mflow-parallels Domain. Passed in as param to this cft",
+      "Value" :  { "Ref" : "Route53HostedZoneId" },
+      "Export" : {
+        "Name": "mlflow-parallels-certs:Route53HostedZoneId"
+      }
+    },
+    "MlflowParallelsCertificateARN" : {
+      "Description" : "ARN of newly created certificate for mlflow.mflow-parallels_DOMAIN",
+      "Value" :  { "Ref" : "MlflowParallelsCertificate" },
+      "Export" : {
+        "Name": "mlflow-parallels-certs:MlflowParallelsCertificateARN"
+      }
+    },
+    "MlflowParallelsUiCertificateARN" : {
+      "Description" : "ARN of newly created certificate for MlflowParallelsUi.mflow-parallels_DOMAIN",
+      "Value" :  { "Fn::If": ["isNotInfinstorMlflowServerType", { "Ref" : "MlflowParallelsUiCertificate" }, { "Ref" : "MlflowParallelsUiCertArn" }] },
+      "Export" : {
+        "Name": "mlflow-parallels-certs:MlflowParallelsUiCertARN"
+      }
+    }
+  }
+}

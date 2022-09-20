@@ -1,0 +1,78 @@
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: parallels-super-high-for-dind
+value: 10000
+globalDefault: false
+description: "parallels highest prio for docker in docker pod"
+---
+# PVC for storing dind data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  labels:
+    app: docker-dind
+  name: docker-dind-data
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: docker-dind
+  name: docker-dind
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: docker-dind
+  template:
+    metadata:
+      labels:
+        app: docker-dind
+    spec:
+      priorityClassName: parallels-super-high-for-dind
+      containers:
+        - image: docker:20.10.18-dind
+          name: docker-dind
+          env:
+            - name: DOCKER_HOST
+              value: tcp://0.0.0.0:2375
+            - name: DOCKER_TLS_CERTDIR #Disable TLS as traffic is not going outside of network.
+              value: ""
+          volumeMounts:
+            - name: docker-dind-data-vol #Persisting the docker data
+              mountPath: /var/lib/docker/
+          ports:
+            - name: daemon-port
+              containerPort: 2375
+              protocol: TCP
+          securityContext:
+            privileged: true #Required for dind container to work.
+      volumes:
+        - name: docker-dind-data-vol
+          persistentVolumeClaim:
+            claimName: docker-dind-data
+---
+## Service for exposing docker-dind
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: docker-dind
+  name: docker-dind
+  namespace: default
+spec:
+  ports:
+    - port: 2375
+      protocol: TCP
+      targetPort: 2375
+  selector:
+    app: docker-dind

@@ -1,0 +1,51 @@
+site_name: Documentation
+copyright: (c) Copyright 2022 mlflow-parallels.org. All Rights Reserved.
+nav:
+        - Home: 'index.md'
+        - 'Architecture': 'files/arch.md'
+        - 'FAQ': 'files/faq.md'
+        - 'Free Hosted Service':
+                - 'Sign Up': 'files/free.md'
+                - 'Hello World': 'files/free-helloworld.md'
+                - 'Test CLI': 'files/free-cli.md'
+        - 'Admin':
+                - 'Install Control Plane':
+                        - 'Introduction': 'files/install-intro.md'
+                        - 'AWS': 'files/install-parallels.md'
+                - 'Prepare k8s':
+                        - 'Introduction': 'files/prepare-k8s-intro.md'
+                        - 'EKS':
+                                - 'Create New EKS': 'files/install-create.md'
+                                - 'Use Existing EKS': 'files/install-existing.md'
+                        - 'GKE':
+                                - 'Create Service Account': 'files/create-service-account.md'
+                                - 'Add k8s Role': 'files/add-k8s-role.md'
+                                - 'Create Docker-In-Docker Service': 'files/create-dind.md'
+                        - 'Add new k8s namespace': 'files/add-namespace.md'
+
+extra:
+        analytics:
+                provider: google
+                property: G-PRSF2S114K
+
+theme:
+        name: material
+        logo: https://docs.mlflow-parallels.org/images/MLflow_Parallels_Logo.png
+        palette:
+                primary: blue
+                accent: orange
+
+markdown_extensions:
+        - admonition
+        - toc:
+                # https://python-markdown.github.io/extensions/toc/
+                permalink: true
+        - pymdownx.highlight:
+                # https://facelessuser.github.io/pymdown-extensions/extensions/highlight/
+                use_pygments: true
+                linenums: true
+                linenums_style: pymdownx-inline
+        - pymdownx.superfences
+                # https://facelessuser.github.io/pymdown-extensions/extensions/superfences/
+        - attr_list
+                # https://python-markdown.github.io/extensions/attr_list/

@@ -1,0 +1,783 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: >-
+  MLflow Parallels Server Using AWS Lambda and DDB
+
+Parameters:
+  PoolIdParameter:
+    Type: String
+    Description: Enter the Cognito User Pool Id
+  CustomDomainParameter:
+    Type: String
+    Description: Enter the custom domain name, e.g. parallels.isstage4.com
+  MlflowParallelsCertArnParameter:
+    Type: String
+    Description: Enter the ARN of the certificate for parallels.X.com
+  PeriodicRunsTable:
+    Type: String
+    Description: 'parallels-PeriodicRuns table'
+    Default: parallels-PeriodicRuns
+  CredentialsTable:
+    Type: String
+    Description: 'parallels-Credentials table'
+    Default: parallels-Credentials
+  ServiceConfTable:
+    Type: String
+    Description: 'parallels-ServiceConf table'
+    Default: parallels-ServiceConf
+  XformsTable:
+    Type: String
+    Description: 'parallels-Xforms table'
+    Default: parallels-Xforms
+  dagTable:
+    Type: String
+    Description: 'mlflow-parallels-dag table'
+    Default: mlflow-parallels-dag
+  SubscribersTable:
+    Type: String
+    Description: 'parallels-Subscribers table'
+    Default: parallels-Subscribers
+  dagexecutionTable:
+    Type: String
+    Description: 'parallels-dag-execution table'
+    Default: parallels-dag-execution
+  kubeClustersTable:
+    Type: String
+    Description: 'parallels-k8s-clusters table'
+    Default: parallels-k8s-clusters
+  UseBoundaryPolicy:
+    Type: String
+    Description: 'Should this stack apply the specified boundary policy to the IAM role created for the MLflow Parallels service?'
+    AllowedValues: [true, false]
+    Default: false
+  BoundaryPolicyARN:
+    Type: String
+    Description: 'ARN of the boundary policy to use for the IAM Role created for the MLflow Parallels service. Leave empty if UseBoundaryPolicy above is false'
+  CustomTokensTable:
+    Type: String
+    Description: 'custom tokens table'
+    Default: parallels-custom-tokens
+
+Globals:
+  #https://github.com/awslabs/serverless-application-model/blob/develop/docs/globals.rst
+  Function:
+    Runtime: python3.8
+    MemorySize: 2048
+    Timeout: 900
+    Environment:
+      Variables:
+        POOL_ID: !Ref PoolIdParameter
+
+Conditions:
+  BoundaryPolicyCondition: !Equals
+    - !Ref UseBoundaryPolicy
+    - true
+
+Resources:
+  libs:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: parallels-mlflow-server-deps
+      Description: Dependencies for the parallels-mlflow-server
+      ContentUri: package/.
+      CompatibleRuntimes:
+        - python3.8
+  MLflowLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonCognitoPowerUser'
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+        - 'arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess'
+      PermissionsBoundary:
+        !If [BoundaryPolicyCondition, !Ref BoundaryPolicyARN, !Ref "AWS::NoValue"]
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - 'lambda.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        -
+          PolicyName: 'AllowSQS'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - 'sqs:*'
+                Resource: '*'
+        -
+          PolicyName: 'AllowSTS'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - 'sts:AssumeRole'
+                Resource: '*'
+        -
+          PolicyName: 'AllowPassROle'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - 'execute-api:Invoke'
+                Resource: '*'
+        -
+          PolicyName: 'AllowInvokeOtherLambda'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                Resource: '*'
+
+  ParallelsMlflowApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: Prod
+      Cors:
+        AllowOrigin: "'*'"
+        AllowMethods: "'GET,HEAD,OPTIONS,POST,PUT,PATCH,DELETE'"
+        AllowHeaders: "'Access-Control-Allow-Headers,Access-Control-Allow-Origin,Origin,Accept,X-Requested-With,Content-Type,Access-Control-Request-Method,Access-Control-Request-Headers,x-requested-with,X-Api-Key,Authorization,X-Amz-Date,X-Forwarded-For,Idtoken'"
+        AllowCredentials: false
+      Auth:
+        DefaultAuthorizer: ParallelsLambdaAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
+        Authorizers:
+          ParallelsLambdaAuthorizer:
+            FunctionArn: !GetAtt parallelsauth.Arn
+            TokenSource: Authorization
+      Domain:
+        DomainName: !Ref CustomDomainParameter
+        CertificateArn: !Ref MlflowParallelsCertArnParameter
+        EndpointConfiguration: REGIONAL
+        BasePath:
+          - /Prod
+          - /api
+  
+  runproject: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: run_project.run_project
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/run-project
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  parallelsauth:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: parallels_jwtauth.lambda_handler
+      CodeUri: lambdas/.
+      Description: >-
+       Custom authorizer implemented using lambda and ddb
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  getversion:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: getversion.getversion
+      CodeUri: lambdas/.
+      Description: >-
+       get basic info about this parallels service instance. no need for auth
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/getversion
+            Method: ANY
+            Auth:
+              Authorizer: NONE
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  cliclientauthorize:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: lambda_func_handlers.cliclient_authorize
+      CodeUri: lambdas/.
+      Description: >-
+       OAuth redirect URI for cli client. no need for auth
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/cliclient_authorize
+            Method: GET
+            Auth:
+              Authorizer: NONE
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  addmodperiodicrun: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: eventbridge.add_mod_periodicrun
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/add-mod-periodicrun
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  delperiodicrun: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: eventbridge.del_periodicrun
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/del-periodicrun
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  periodrun:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: period_run.period_run
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/period
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  listdag: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: list_dag.list_dag
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/listdag
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  executedag: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: execute_dag.execute_dag
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/execdag
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  getdagexecinfo: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: get_dag_execution.get_dag_execution
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/getdagexecinfo
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  createparallel: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: cruds_parallel.create_or_update_parallel
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/createparallel
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  updateparallel: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: cruds_parallel.create_or_update_parallel
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/updateparallel
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  deleteparallel: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: cruds_parallel.delete_parallel
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/delete
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  renameparallel: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: cruds_parallel.rename_parallel
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/rename
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  getparallel: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: get_parallel.get_parallel
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/get
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  searchparallels: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: search_parallels.search_parallels
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/search
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  setparalleltag: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: set_parallel_tag.set_parallel_tag
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/settag
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  removeparalleltag: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: set_parallel_tag.remove_parallel_tag
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/removetag
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  addkubecluster: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: kube_clusters.add_kube_cluster
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/addkubecluster
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  removekubecluster: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: kube_clusters.remove_kube_cluster
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/removekubecluster
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  getkubeclusters: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: kube_clusters.get_kube_clusters
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/getkubeclusters
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+   
+Outputs:
+  MlflowParallelsApiId:
+    Description: Root resource ID for the REST Api published by this application
+    Value: !Ref ParallelsMlflowApi
+    Export:
+      Name: !Sub "${AWS::StackName}-MlflowParallelsApiId"
+  runproject:
+    Description: runproject lambda arn
+    Value: !GetAtt [runproject, Arn]
+    Export:
+      Name: !Sub "${AWS::StackName}-runproject"
+  periodrun:
+    Description: periodrun lambda arn
+    Value: !GetAtt [periodrun, Arn]
+    Export:
+      Name: !Sub "${AWS::StackName}-periodrun"
+  executeDagLambdaArn:
+    Description: executeDag lambda arn
+    Value: !GetAtt [executedag, Arn]
+    Export:
+      Name: !Sub "${AWS::StackName}-executedag"
+  MlflowParallelsApiDomainName:
+    Description: Root resource ID for the REST Api published by this application
+    Value: !GetAtt [ParallelsMlflowApi.DomainName, RegionalDomainName]
+    Export:
+      Name: !Sub "${AWS::StackName}-MlflowParallelsDomainName"
