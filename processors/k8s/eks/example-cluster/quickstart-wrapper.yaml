@@ -1,0 +1,24 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Wrapper that calls the quickstart EKS creation CFT
+Parameters:
+  NumberOfNodes:
+    Type: Number
+    Description: Number of instances
+  NodeInstanceType:
+    Description: EC2 instance type.
+    Type: String
+Resources:
+  ekscluster:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/aws-quickstart/quickstart-amazon-eks/templates/amazon-eks-entrypoint-new-vpc.template.yaml
+      Parameters:
+        AvailabilityZones: us-east-2a,us-east-2b,us-east-2c
+        EKSPublicAccessEndpoint: Enabled
+        RemoteAccessCIDR: 0.0.0.0/0
+        EKSClusterName: mlflow-parallels
+        AdditionalEKSAdminRoleArn: !ImportValue parallels:RoleForAccessingEksAndEcr
+        NodeInstanceType: !Ref NodeInstanceType
+        NumberOfNodes: !Ref NumberOfNodes
+        ProvisionBastionHost: Disabled
+        ClusterAutoScaler: Enabled

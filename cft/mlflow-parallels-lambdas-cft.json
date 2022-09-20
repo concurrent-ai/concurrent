@@ -1,0 +1,374 @@
+{
+  "Transform" : "AWS::Serverless-2016-10-31",
+  "Description" : "Create mlflow-parallels service lambdas from the mlflow-parallels Service published on AWS Serverless Application Repository",
+
+  "Parameters" : {
+    "MlflowParallelsDomain" : {
+      "Description" : "Base Domain. if this value is mlflow-parallels.com, the FQDNs for the service will be mlflowui.mlflow-parallels.com, mlflow-parallels.mflow-parallels.com, etc.",
+      "Type" : "String"
+    },
+    "MlflowParallelsLambdaVersion" : {
+      "Description" : "Semantic version of the mlflow-parallels Service as published on AWS Serverless Application Repository",
+      "Type" : "String"
+    },
+    "MlflowParallelsDnsName" : {
+      "Description" : "DNS endpoint of mlflow-parallels API, mlflow-parallels domain is appended to this value to create the FQDN",
+      "Type" : "String"
+    },
+    "MlflowServerType" : {
+      "Type" : "String",
+      "Description": "The Mlflow Server type that mlflow server is to work with.",
+      "AllowedValues": ["infinstor","databricks","azure","opensource"]
+    },    
+    "ServiceConfTable": {
+      "Type": "String",
+      "Description": "parallels-ServiceConf table"
+    },
+    "SubscribersTable": {
+      "Type": "String",
+      "Description": "parallels-Subscribers table"
+    },
+    "XformsTable": {
+      "Type": "String",
+      "Description": "parallels-Xforms table"
+    },
+    "PeriodicRunsTable": {
+      "Type": "String",
+      "Description": "parallels-PeriodicRuns table"
+    },
+    "dagTable": {
+      "Type": "String", 
+      "Description": "parallels-dag table"
+    },
+    "dagExecutionTable": {
+      "Type": "String",
+      "Description": "parallels-dag-execution table"
+    },
+    "customTokensTable": {
+      "Type": "String",
+      "Description": "parallels-custom-tokens table"
+    },
+    "kubeClustersTable": {
+      "Type": "String",
+      "Description": "k8s cluster table"
+    },
+    "UseBoundaryPolicy" : {
+      "Description" : "Should this stack apply the specified boundary policy to the IAM role created for the mlflow-parallels service?",
+      "AllowedValues" : ["true", "false"],
+      "Type" : "String"
+    },
+    "BoundaryPolicyARN" : {
+      "Description" : "ARN of the boundary policy to use for the IAM Role created for the mlflow-parallels service. Ignored if UseBoundaryPolicy above is false",
+      "Type" : "String"
+    }    
+  },
+  "Mappings" : {
+    "RegionMap" : {
+      "us-east-1"        : {"SAR" : "arn:aws:serverlessrepo:us-east-1:797769785274:applications/mlflow-parallels-lambda"}
+    }
+  },
+  "Conditions": {
+    "isNotInfinstorMlflowServerType": { "Fn::Not": [ { "Fn::Equals": [ {"Ref": "MlflowServerType"}, "infinstor" ] } ] }
+  },
+  "Resources":{
+    "ServiceConfTableResource": {
+      "Type": "AWS::DynamoDB::Table",
+      "Condition": "isNotInfinstorMlflowServerType",
+      "Properties": {
+        "TableName": { "Ref": "ServiceConfTable"},
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "configVersion",
+            "AttributeType": "N"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "configVersion",
+            "KeyType": "HASH"
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    },
+    "SubscribersTableResource": {
+      "Type": "AWS::DynamoDB::Table",
+      "Condition": "isNotInfinstorMlflowServerType",
+      "Properties": {
+        "TableName": { "Ref": "SubscribersTable" },
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "customerId",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "productCode",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "userName",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "customerId",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "productCode",
+            "KeyType": "RANGE"
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST",
+        "GlobalSecondaryIndexes": [
+          {
+            "IndexName": "username-GSI",
+            "KeySchema": [
+              {
+                "AttributeName": "userName",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "productCode",
+                "KeyType": "RANGE"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            }
+          }
+        ]
+      }
+    },
+    "XformsTableResource": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": { "Ref": "XformsTable"},
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "username",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "xformname",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "username",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "xformname",
+            "KeyType": "RANGE"
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    },
+    "PeriodicRunsTableResource": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {"Ref": "PeriodicRunsTable"},
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "username",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "periodicRunName",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "username",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "periodicRunName",
+            "KeyType": "RANGE"
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    },
+    "DagTableResource": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": { "Ref": "dagTable"},
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "hash_key",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "range_key",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "hash_key",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "range_key",
+            "KeyType": "RANGE"
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    },
+    "DagExecutionTableResource": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": { "Ref": "dagExecutionTable"},
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "username",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "dag_execution_id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "username",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "dag_execution_id",
+            "KeyType": "RANGE"
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    },
+    "KubeClustersTableResource": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {"Ref": "kubeClustersTable"},
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "username",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "cluster_name",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "username",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "cluster_name",
+            "KeyType": "RANGE"
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    },
+    "QueueMessageTokens": {
+      "Type": "AWS::DynamoDB::Table",
+      "Condition": "isNotInfinstorMlflowServerType",
+      "Properties": {
+        "TableName": { "Ref": "customTokensTable"},
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "queue_message_uuid",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "queue_message_uuid",
+            "KeyType": "HASH"
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    },
+    "MLflowParallelsService":{
+      "Type":"AWS::Serverless::Application",
+      "Properties":{
+        "Location" : {
+          "ApplicationId": { "Fn::FindInMap" : [ "RegionMap", { "Ref" : "AWS::Region" }, "SAR"]},
+          "SemanticVersion" : { "Ref": "MlflowParallelsLambdaVersion"}
+        },
+        "Parameters" : {
+          "PoolIdParameter": { "Fn::ImportValue": "mlflow-parallels-cognito-user-pool:CognitoUserPoolId" },
+          "CustomDomainParameter": {"Fn::Join": [".", [ {"Ref": "MlflowParallelsDnsName"}, { "Ref": "MlflowParallelsDomain" }]]},
+          "MlflowParallelsCertArnParameter": { "Fn::ImportValue": "mlflow-parallels-certs:MlflowParallelsCertificateARN" },
+          "PeriodicRunsTable": {"Ref": "PeriodicRunsTable"},
+          "ServiceConfTable": { "Ref": "ServiceConfTable"},
+          "XformsTable": { "Ref": "XformsTable"},
+          "dagTable": { "Ref": "dagTable"},
+          "SubscribersTable": { "Ref": "SubscribersTable" },
+          "dagexecutionTable": { "Ref": "dagExecutionTable"},
+          "kubeClustersTable": { "Ref": "kubeClustersTable"},
+          "UseBoundaryPolicy": { "Ref": "UseBoundaryPolicy" },
+          "BoundaryPolicyARN": { "Ref": "BoundaryPolicyARN" },
+          "CustomTokensTable": { "Ref": "customTokensTable"}
+        }
+      }
+    },
+    "DnsEntry": {
+      "Type": "AWS::Route53::RecordSet",
+      "DependsOn": "MLflowParallelsService",
+      "Properties": {
+          "HostedZoneId": { "Fn::ImportValue": "mlflow-parallels-certs:Route53HostedZoneId" },
+          "ResourceRecords": [
+            {"Fn::GetAtt": [ "MLflowParallelsService", "Outputs.MlflowParallelsApiDomainName"]}
+          ],
+          "Name": {"Fn::Join": [".", [ {"Ref": "MlflowParallelsDnsName"}, { "Ref": "MlflowParallelsDomain" }]]},
+          "TTL" : "900",
+          "Type": "CNAME"
+      }
+    }    
+  },
+  "Outputs" : {
+    "MLflowServiceCloudFormationStackARN" : {
+      "Description" : "ARN of newly created Cloud Formation Stack ARN for the MLflow-parallels lambdas",
+      "Value" :  { "Ref" : "MLflowParallelsService" }
+    },
+    "MlflowParallelsDnsName": {
+      "Description" : "subdomain name for mlflow parallels REST API",
+      "Value" :  { "Ref" : "MlflowParallelsDnsName" },
+      "Export" : {
+        "Name": "mlflow-parallels-lambdas:MlflowParallelsDnsName"
+      }
+    },
+    "MlflowParallelsApiId" : {
+      "Value" :  {"Fn::GetAtt": [ "MLflowParallelsService", "Outputs.MlflowParallelsApiId"]},
+      "Export" : {
+        "Name": "mlflow-parallels-lambdas:MlflowParallelsApiId"
+      }
+    },
+    "periodrun" : {
+      "Value" :  {"Fn::GetAtt": [ "MLflowParallelsService", "Outputs.periodrun"]},
+      "Export" : {
+        "Name": "mlflow-parallels-lambdas:periodrun"
+      }
+    },
+    "runproject" : {
+      "Value" :  {"Fn::GetAtt": [ "MLflowParallelsService", "Outputs.runproject"]},
+      "Export" : {
+        "Name": "mlflow-parallels-lambdas:runproject"
+      }
+    },    
+    "executeDagLambdaArn" : {
+      "Value" :  {"Fn::GetAtt": [ "MLflowParallelsService", "Outputs.executeDagLambdaArn"]},
+      "Export" : {
+        "Name": "mlflow-parallels-lambdas:executeDagLambdaArn"
+      }
+    }
+  }
+}

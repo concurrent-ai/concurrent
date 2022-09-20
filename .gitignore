@@ -1,0 +1,6 @@
+.aws-sam
+server/aws/package
+server/aws/requirements.txt
+.idea
+__pycache__
+plugin/dist

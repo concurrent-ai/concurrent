@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="style.css">
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   </head>
+   <title> MLflow Parallels | Get Started </title>
+<body>
+  <nav>
+    <div class="nav-content">
+      <div class="imgcontainer">
+        <a href="https://mlflow-parallels.org/"><img src="MLflow_Parallels_Logo.png" alt="MLflow Parallels" class="logo"></a>
+      </div>
+    </div>
+  </nav>
+  <div class="container">
+    <div class="forms">
+        <div class="form-content">
+    <div class="signup-form">
+      <div class="title">Get started with MLflow Parallels</div>
+      <div class="subtitle">Try out predefined or custom DAGs now.
+          <a href="https://docs.mlflow-parallels.org/files/free/">Need help?</a></div>
+    <form action="https://api.mlflow-parallels.org/addsecondaryuser" method="POST" id="signupform">
+        <input type="hidden" name="fromwhere" id="fromwhere" value="docs.mlflow-parallels.org">
+        <div class="input-boxes">
+          <div class="input-box">
+            <i class="fas fa-user"></i>
+            <input type="text" name="newuser" id="newuser" placeholder="Username" required>
+          </div>
+          <div class="input-box">
+            <i class="fas fa-envelope"></i>
+            <input type="text" name="email" id="email" placeholder="Email address" required>
+          </div>
+          <div class="button input-box">
+            <input type="submit" value="Verify email address">
+          </div>
+          <div class="text sign-up-text">Already have an account?
+            <a href="https://mlflowui.mlflow-parallels.org/">Sign in</a></div>
+        </div>
+        <input type="hidden" name="code" id="code" value="scode1">
+      </form>
+    </div>
+    </div>
+    </div>
+  </div>
+  <footer>
+    <div class="footer">
+      <div class="copyright">© Copyright 2022 MLflow Parallels Project</div>
+    </div>
+  </footer>
+  <script>
+    window.addEventListener("load", () => {
+      function sendData() {
+        const xhr = new XMLHttpRequest();
+
+        // Define what happens on successful data submission
+        xhr.addEventListener("load", (event) => {
+          alert(event.target.responseText);
+          location.replace("https://mlflowui.mlflow-parallels.org");
+        });
+
+        // Define what happens in case of error
+        xhr.addEventListener("error", (event) => {
+          alert('Oops! Something went wrong.');
+        });
+
+        var nu = encodeURIComponent(document.getElementById("newuser").value);
+        var em = encodeURIComponent(document.getElementById("email").value);
+
+        xhr.open("POST", "https://api.mlflow-parallels.org/addsecondaryuser");
+        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+        xhr.send("newuser=" + nu + "&" + "email=" + em);
+      }
+
+      const form = document.getElementById("signupform");
+
+      // Add 'submit' event handler
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        sendData();
+      });
+    });
+  </script>
+</body>
+</html>

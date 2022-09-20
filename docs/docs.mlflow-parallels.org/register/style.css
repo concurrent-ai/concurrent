@@ -1,0 +1,141 @@
+*{
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "system-ui" , sans-serif;
+}
+nav{
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  border-bottom: solid;
+  border-color: #eaeaea;
+}
+footer{
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+}
+.imgcontainer {
+  text-align: left;
+  margin: 6px 0 4px 20px;
+}
+img.logo {
+  height: 40px;
+}
+body{
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  padding: 30px;
+}
+.container{
+  max-width: 850px;
+  width: 100%;
+  padding: 40px 30px;
+}
+.container .forms{
+  height: 100%;
+  width: 100%;
+  background: #fff;
+}
+.container .form-content{
+  display: flex;
+}
+.forms .form-content .title{
+  position: relative;
+  font-size: 24px;
+  font-weight: 600;
+  color: black;
+}
+.forms .signup-form  .title:before{
+  width: 20px;
+}
+.forms .form-content .subtitle{
+  position: relative;
+  font-size: 14px;
+  font-weight: 500;
+  color: black;
+  margin-top: 20px;
+}
+.forms .form-content .input-boxes{
+  margin-top: 40px;
+}
+.forms .form-content .input-box{
+  display: flex;
+  align-items: center;
+  height: 50px;
+  width: 100%;
+  margin: 10px 0;
+  position: relative;
+}
+.form-content .input-box input{
+  height: 100%;
+  width: 100%;
+  outline: none;
+  border: none;
+  padding: 0 30px;
+  font-size: 16px;
+  font-weight: 400;
+  border-bottom: 2px solid rgba(0,0,0,0.2);
+  transition: all 0.3s ease;
+}
+.form-content .input-box input:focus,
+.form-content .input-box input:valid{
+  border-color: #2374bb;
+}
+.form-content .input-box i{
+  position: absolute;
+  color: #2374bb;
+  font-size: 17px;
+}
+.forms .form-content .text{
+  font-size: 14px;
+  font-weight: 500;
+  color: black;
+}
+.forms .form-content .text a{
+  text-decoration: none;
+}
+.forms .form-content .text a:hover{
+  text-decoration: underline;
+}
+.forms .form-content .button{
+  color: #fff;
+  margin-top: 40px;
+  height: 40px;
+  width: 240px;
+}
+.forms .form-content .button input{
+  color: #fff;
+  background: #2374bb;
+  border-radius: 4px;
+  padding: 0;
+  cursor: pointer;
+  transition: all 0.4s ease;
+}
+.forms .form-content .button input:hover{
+  background: #0093e1;
+}
+.forms .form-content label{
+  color: #2374bb;
+  cursor: pointer;
+}
+.forms .form-content label:hover{
+  text-decoration: underline;
+}
+.forms .form-content .sign-up-text{
+  text-align: left;
+  margin-top: 20px;
+}
+.footer .copyright{
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 12px;
+  font-weight: 400;
+  color: gray;
+}

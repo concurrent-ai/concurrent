@@ -1,0 +1,419 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+
+  "Description" : "Create the mlflow-parallels service cognito user pool",
+
+  "Parameters" : {
+    "MlflowParallelsDomain" : {
+      "Type" : "String"
+    },
+    "MlflowServerType": {
+      "Type": "String",
+      "Description": "The Mlflow Server type that mlflow server is to work with.",
+      "AllowedValues": [
+         "infinstor",
+         "databricks",
+         "azure",
+         "opensource" ]
+    },
+    "UseBoundaryPolicy" : {
+      "Description" : "Should this stack apply the specified boundary policy to the IAM role created for the mlflow-parallels service?",
+      "AllowedValues" : ["true", "false"],
+      "Default": "false",
+      "Type" : "String"
+    },
+    "BoundaryPolicyARN" : {
+      "Description" : "ARN of the boundary policy to use for the IAM Role created for the mlflow-parallels service. Ignored if UseBoundaryPolicy above is false",
+      "Type" : "String"
+    },
+    "MlflowParallelsUiDnsName": {
+      "Type": "String",
+      "Description": "DNS endpoint of mlflow web UI, mlflow-parallels domain is appended to this value to create the FQDN",
+      "Default": "parallelsui"
+    },
+    "MlflowParallelsDnsName": {
+      "Type": "String",
+      "Description": "DNS endpoint of mlflow REST API, mlflow-parallels domain is appended to this value to create the FQDN",
+      "Default": "parallels"
+    },
+    "CognitoUserPoolId" : {
+      "Description" : "Cognito User Pool ID of an existing user pool.  If not specified, a user pool is automatically created",
+      "Type" : "String",
+      "Default": ""
+    },
+    "CliClientId" : {
+      "Description" : "CLI client ID of the existing user pool CognitoUserPoolId.  Needs to be specified if CognitoUserPoolId is specified.  If not specified, this is automatically created",
+      "Type" : "String",
+      "Default": ""
+    },
+    "MlflowuiClientId" : {
+      "Description" : "UI client ID of the existing user pool CognitoUserPoolId.  Needs to be specified if CognitoUserPoolId is specified.  If not specified, this is automatically created",
+      "Type" : "String",
+      "Default": ""
+    }
+  },
+  "Metadata" : {
+    "AWS::CloudFormation::Interface" : {
+      "ParameterGroups" : [
+        {
+          "Label": {"default": "General Options"},
+          "Parameters": ["MlflowParallelsDomain"]
+        },
+        {
+          "Label": {"default": "Boundary Policy Options"},
+          "Parameters": ["UseBoundaryPolicy", "BoundaryPolicyARN"]
+        }
+      ],
+      "ParameterLabels" : {
+        "MlflowParallelsDomain": {"default": "Domain where mlflow-parallels is being installed"},
+        "UseBoundaryPolicy": {"default": "Should this stack apply the specified boundary policy to the IAM role created for the mlflow-parallels service?"},
+        "BoundaryPolicyARN": {"default": "ARN of the boundary policy to use for the IAM Role created for the mlflow-parallels service. Ignored if UseBoundaryPolicy above is false"}
+      }
+    }
+  },
+  "Conditions": {
+    "UseBoundary": {
+      "Fn::Equals": [ { "Ref": "UseBoundaryPolicy" }, "true" ]
+    },
+    "CreateCognitoCondition": {
+      "Fn::Equals": [ { "Ref": "CognitoUserPoolId" }, "" ]
+    }
+  },
+  "Rules": {
+    "CognitoUserPoolIdValRule": {
+      "RuleCondition": { 
+        "Fn::Not": [ { "Fn::Equals": [ { "Ref": "CognitoUserPoolId" }, "" ] } ]
+      },
+      "Assertions": [
+        { "Assert": { 
+          "Fn::Not": [ { "Fn::Equals": [ { "Ref": "CliClientId" }, "" ]  } ]
+          },
+          "AssertDescription": "if CognitoUserPoolId is specified, CliClientId must be specified (not empty)"
+        },
+        { "Assert": { 
+          "Fn::Not": [ { "Fn::Equals": [ { "Ref": "MlflowuiClientId" }, "" ] } ]
+          },
+          "AssertDescription": "if CognitoUserPoolId is specified, MlflowuiClientId must be specified (not empty)"
+        },
+        { "Assert": { 
+          "Fn::Equals": [ { "Ref": "MlflowServerType" }, "infinstor" ] 
+          },
+          "AssertDescription": "if CognitoUserPoolId is specified, mlflow server type must be infinstor"
+        }
+      ]
+    }
+  },
+  "Resources":{
+    "CreateDomainNameRole": {
+      "Type" : "AWS::IAM::Role",
+      "Condition":"CreateCognitoCondition",
+      "Properties" : {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "Service": [ "lambda.amazonaws.com" ] },
+              "Action": [ "sts:AssumeRole" ]
+            }
+          ]
+        },
+        "PermissionsBoundary": { "Fn::If" : [ "UseBoundary", { "Ref" : "BoundaryPolicyARN" }, { "Ref" : "AWS::NoValue" } ] },
+        "Description" : "Role for the Lambda that generates cognito domain name by replacing . with - and prefixing infin-",
+        "Path" : "/",
+        "RoleName": "CreateDomainNameRole"
+      }
+    },
+    "CreateDomainNameLambda": {
+      "Type": "AWS::Lambda::Function",
+      "Condition":"CreateCognitoCondition",
+      "Properties": {
+        "Role": {
+          "Fn::GetAtt": ["CreateDomainNameRole","Arn"]
+        },
+        "Runtime": "python3.7",
+        "Handler": "index.lambda_handler",
+        "Code": {
+          "ZipFile" : { "Fn::Join" : ["\n", [
+                "import json",
+                "import cfnresponse",
+                "",
+                "def lambda_handler(event, context):",
+                "  input_domain_name = event['ResourceProperties']['input_domain_name']",
+                "  output_domain_name = input_domain_name.replace('.', '-')",
+                "  responseData = {}",
+                "  responseData['output_domain_name'] = output_domain_name",
+                "  cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, input_domain_name)"
+                                    ]]}
+
+        }
+      }
+    },
+    "CreateDomainNameCustomResource": {
+      "Type": "AWS::CloudFormation::CustomResource",
+      "Condition":"CreateCognitoCondition",
+      "Properties": {
+        "ServiceToken": { "Fn::GetAtt": ["CreateDomainNameLambda","Arn"] },
+        "input_domain_name": {"Fn::Join": [ ".", [ {"Ref": "MlflowParallelsDnsName"}, {"Ref": "MlflowParallelsDomain" } ] ]}
+      }
+    },
+    "CognitoUserPool":{
+      "Type" : "AWS::Cognito::UserPool",
+      "Condition":"CreateCognitoCondition",
+      "Properties" : {
+        "AdminCreateUserConfig" : { "AllowAdminCreateUserOnly": false, "InviteMessageTemplate": { "SMSMessage": "mlflow-parallels: Your username is {username} and temporary password is {####}\n", "EmailMessage": "You have been signed up for an mlflow-parallels service account. Your username is {username} and temporary password is {####}\n\nPlease browse to the mlflow-parallels mlflow UI and sign in to your account.", "EmailSubject": "Your mlflow-parallels service account temporary password" } },
+        "AutoVerifiedAttributes" : [ "email" ],
+        "EmailConfiguration" : { "EmailSendingAccount": "COGNITO_DEFAULT" },
+        "EmailVerificationMessage" : "Your mlflow-parallels verification code is {####}. \n\nThank you for creating a mlflow-parallels account.",
+        "EmailVerificationSubject" : "Your mlflow-parallels account verification code",
+        "MfaConfiguration" : "OFF",
+        "Policies" : { "PasswordPolicy": { "MinimumLength": 8, "RequireUppercase": true, "RequireLowercase": true, "RequireNumbers": true, "RequireSymbols": true, "TemporaryPasswordValidityDays": 7 } },
+        "Schema" : [ { "Name": "customerId", "AttributeDataType": "String", "DeveloperOnlyAttribute": false, "Mutable": true, "Required": false, "StringAttributeConstraints": { "MinLength": "1", "MaxLength": "256" } }, { "Name": "serviceName", "AttributeDataType": "String", "DeveloperOnlyAttribute": false, "Mutable": true, "Required": false, "StringAttributeConstraints": { "MinLength": "1", "MaxLength": "256" } } ],
+        "SmsAuthenticationMessage" : "Your mlflow-parallels authentication code is {####}.",
+        "SmsVerificationMessage" : "Your mlflow-parallels verification code is {####}.",
+        "UserPoolName" : "mlflow-parallels-service-subscribers",
+        "VerificationMessageTemplate" : { "SmsMessage": "Your mlflow-parallels verification code is {####}. ", "EmailMessage": "Your mlflow-parallels verification code is {####}. \n\nThank you for creating an mlflow-parallels account.", "EmailSubject": "Your mlflow-parallels account verification code", "DefaultEmailOption": "CONFIRM_WITH_CODE" },
+        "LambdaConfig": {"PreSignUp": { "Fn::GetAtt": ["PresignupLambda","Arn"] }}
+      }
+    },
+    "CliClient":{
+      "Type" : "AWS::Cognito::UserPoolClient",
+      "Condition":"CreateCognitoCondition",
+      "Properties" : {
+        "UserPoolId": { "Ref" : "CognitoUserPool" },
+        "ClientName": "cli-client",
+        "RefreshTokenValidity": 365,
+        "ReadAttributes": [
+          "address",
+          "birthdate",
+          "custom:customerId",
+          "custom:serviceName",
+          "email",
+          "email_verified",
+          "family_name",
+          "gender",
+          "given_name",
+          "locale",
+          "middle_name",
+          "name",
+          "nickname",
+          "phone_number",
+          "phone_number_verified",
+          "picture",
+          "preferred_username",
+          "profile",
+          "updated_at",
+          "website",
+          "zoneinfo"
+        ],
+        "WriteAttributes": [
+          "address",
+          "birthdate",
+          "custom:customerId",
+          "custom:serviceName",
+          "email",
+          "family_name",
+          "gender",
+          "given_name",
+          "locale",
+          "middle_name",
+          "name",
+          "nickname",
+          "phone_number",
+          "picture",
+          "preferred_username",
+          "profile",
+          "updated_at",
+          "website",
+          "zoneinfo"
+        ],
+        "ExplicitAuthFlows": [
+          "ALLOW_CUSTOM_AUTH",
+          "ALLOW_REFRESH_TOKEN_AUTH",
+          "ALLOW_USER_PASSWORD_AUTH",
+          "ALLOW_USER_SRP_AUTH"
+        ],
+        "SupportedIdentityProviders": [
+          "COGNITO"
+        ],
+        "AllowedOAuthFlows": [
+          "code"
+        ],
+        "AllowedOAuthScopes": [
+          "email",
+          "openid",
+          "phone",
+          "profile",
+          "aws.cognito.signin.user.admin"
+        ],
+        "CallbackURLs": [
+          { "Fn::Sub": "https://${MlflowParallelsDnsName}.${MlflowParallelsDomain}/api/2.0/mlflow/infinstor/cliclient_authorize" }
+        ],
+        "LogoutURLs": [
+          { "Fn::Sub": "https://${MlflowParallelsDnsName}.${MlflowParallelsDomain}/logout" }
+        ],
+        "AllowedOAuthFlowsUserPoolClient": true,
+        "PreventUserExistenceErrors": "ENABLED"
+      }
+    },
+    "MlflowuiClient": {
+      "Type" : "AWS::Cognito::UserPoolClient",
+      "Condition":"CreateCognitoCondition",
+      "Properties" : {
+        "UserPoolId": { "Ref" : "CognitoUserPool" },
+        "ClientName": "mlflowui-client",
+        "RefreshTokenValidity": 30,
+        "ReadAttributes": [
+          "address",
+          "birthdate",
+          "custom:customerId",
+          "custom:serviceName",
+          "email",
+          "email_verified",
+          "family_name",
+          "gender",
+          "given_name",
+          "locale",
+          "middle_name",
+          "name",
+          "nickname",
+          "phone_number",
+          "phone_number_verified",
+          "picture",
+          "preferred_username",
+          "profile",
+          "updated_at",
+          "website",
+          "zoneinfo"
+        ],
+        "WriteAttributes": [
+          "address",
+          "birthdate",
+          "custom:customerId",
+          "custom:serviceName",
+          "email",
+          "family_name",
+          "gender",
+          "given_name",
+          "locale",
+          "middle_name",
+          "name",
+          "nickname",
+          "phone_number",
+          "picture",
+          "preferred_username",
+          "profile",
+          "updated_at",
+          "website",
+          "zoneinfo"
+        ],
+        "ExplicitAuthFlows": [
+          "ALLOW_CUSTOM_AUTH",
+          "ALLOW_REFRESH_TOKEN_AUTH",
+          "ALLOW_USER_PASSWORD_AUTH",
+          "ALLOW_USER_SRP_AUTH"
+        ],
+        "SupportedIdentityProviders": [
+          "COGNITO"
+        ],
+        "CallbackURLs": [
+          { "Fn::Sub": "https://${MlflowParallelsUiDnsName}.${MlflowParallelsDomain}" }
+        ],
+        "LogoutURLs": [
+          { "Fn::Sub": "https://${MlflowParallelsUiDnsName}.${MlflowParallelsDomain}" }
+        ],
+        "AllowedOAuthFlows": [
+          "code"
+        ],
+        "AllowedOAuthScopes": [
+          "email",
+          "openid",
+          "phone",
+          "profile",
+          "aws.cognito.signin.user.admin"
+        ],
+        "AllowedOAuthFlowsUserPoolClient": true,
+        "PreventUserExistenceErrors": "ENABLED"
+      }
+    },
+    "CognitoDomain": {
+      "Type" : "AWS::Cognito::UserPoolDomain",
+      "Condition":"CreateCognitoCondition",
+      "Properties" : {
+        "Domain" : {"Fn::GetAtt": ["CreateDomainNameCustomResource", "output_domain_name"]},
+        "UserPoolId": { "Ref" : "CognitoUserPool" }
+      }
+    },
+    "PresignupLambdaRole": {
+      "Type" : "AWS::IAM::Role",
+      "Condition":"CreateCognitoCondition",
+      "Properties" : {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "Service": [ "lambda.amazonaws.com" ] },
+              "Action": [ "sts:AssumeRole" ]
+            }
+          ]
+        },
+        "Description" : "Role for the Cognito Pre-signup Lambda that auto verifies email addresses",
+        "ManagedPolicyArns" : [ "arn:aws:iam::aws:policy/AmazonCognitoPowerUser" ],
+        "Path" : "/",
+        "RoleName": "PresignupLambdaRole"
+      }
+    },
+    "PresignupPermission": {
+      "Type" : "AWS::Lambda::Permission",
+      "Condition":"CreateCognitoCondition",
+      "Properties" : {
+        "Action" : "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": ["PresignupLambda","Arn"]
+        },
+        "Principal" : "cognito-idp.amazonaws.com",
+        "SourceArn": {
+          "Fn::GetAtt": ["CognitoUserPool","Arn"]
+        }
+      }
+    },
+    "PresignupLambda": {
+      "Type": "AWS::Lambda::Function",
+      "Condition":"CreateCognitoCondition",
+      "Properties": {
+        "Role": {
+          "Fn::GetAtt": ["PresignupLambdaRole","Arn"]
+        },
+        "Runtime": "python3.7",
+        "Handler": "index.lambda_handler",
+        "Code": {
+          "ZipFile": "def lambda_handler(event, context):\n    # Confirm the user\n    event['response']['autoConfirmUser'] = True\n\n    # Set the email as verified if it is in the request\n    if 'email' in event['request']['userAttributes']:\n        event['response']['autoVerifyEmail'] = True\n\n    # Set the phone number as verified if it is in the request\n    if 'phone_number' in event['request']['userAttributes']:\n        event['response']['autoVerifyPhone'] = True\n\n    # Return to Amazon Cognito\n    return event\n"
+        }
+      }
+    }
+  },
+  "Outputs" : {
+    "CognitoUserPoolId" : {
+      "Description" : "Id of newly created cognito user pool named mlflow-parallels-service-subscribers",
+      "Value" :  { "Fn::If" : [ "CreateCognitoCondition", { "Ref" : "CognitoUserPool" }, { "Ref" : "CognitoUserPoolId" } ] },
+      "Export" : {
+        "Name": "mlflow-parallels-cognito-user-pool:CognitoUserPoolId"
+      }
+    },
+    "CliClientId" : {
+      "Description" : "Id of newly created cognito user pool client for use by the mlflow cli login",
+      "Value" :  { "Fn::If" : [ "CreateCognitoCondition", { "Ref" : "CliClient" }, { "Ref" : "CliClientId" } ] },
+      "Export" : {
+        "Name": "mlflow-parallels-cognito-user-pool:CliClientId"
+      }
+    },
+    "MlflowuiClientId" : {
+      "Description" : "Id of newly created cognito user pool client for use by Mlfowu proxyless website",
+      "Value" :  { "Fn::If" : [ "CreateCognitoCondition", { "Ref" : "MlflowuiClient" }, { "Ref" : "MlflowuiClientId" } ] },
+      "Export" : {
+        "Name": "mlflow-parallels-cognito-user-pool:MlflowuiClientId"
+      }
+    }
+  }
+}

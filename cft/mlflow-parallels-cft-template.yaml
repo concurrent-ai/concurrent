@@ -1,0 +1,307 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cloudformation template for setting up mlflow-parallels 
+Parameters:
+  Route53HostedZoneId:
+    Type: String
+    Description: Hosted Zone ID of (sub)domain where InfinStor service is to be installed.
+  MlflowParallelsDomain:
+    Type: String
+  MlflowParallelsDnsName:
+    Type: String
+    Default: parallels
+  MlflowParallelsUiDnsName:
+    Type: String
+    Default: parallelsui
+  MlflowParallelsUiCertArn: 
+    Type: String
+    Description: Must be specified if MlflowServerType is 'infinstor'.  For other server types, certificate is automatically created and used.
+    Default: ""
+  MlflowServerType:
+    Type: String
+    Description: The Mlflow Server type that mlflow server is to work with.
+    AllowedValues: [infinstor,databricks,azure,opensource]
+  CognitoUserPoolId:
+    Type: String
+    Description: Cognito User Pool ID of an existing pool.  If not specified, a user pool is automatically created.  For MlflowServerType of 'infinstor', the existing pool is reused.
+    Default: ""
+  CliClientId: 
+    Description : CLI client ID of the existing user pool CognitoUserPoolId.  Needs to be specified if CognitoUserPoolId is specified.  If not specified, this is automatically created
+    Type : String
+    Default: ""
+  MlflowuiClientId : 
+    Description : UI client ID of the existing user pool CognitoUserPoolId.  Needs to be specified if CognitoUserPoolId is specified.  If not specified, this is automatically created
+    Type : String
+    Default: ""
+  ServiceConfTable:
+    Type: String
+    Description: 'parallels-ServiceConf table'
+    Default: parallels-ServiceConf
+  SubscribersTable:
+    Type: String
+    Description: 'parallels-Subscribers table'
+    Default: parallels-Subscribers
+  XformsTable:
+    Type: String
+    Description: 'parallels-Xforms table'
+    Default: parallels-Xforms
+  PeriodicRunsTable:
+    Type: String
+    Description: 'parallels-PeriodicRuns table'
+    Default: parallels-PeriodicRuns    
+  dagTable:
+    Type: String
+    Description: 'parallels-dag table'
+    Default: mlflow-parallels-dag
+  dagExecutionTable:
+    Type: String
+    Description: 'parallels-dag-execution table'
+    Default: parallels-dag-execution
+  customTokensTable: 
+      Type: String
+      Description: parallels-custom-tokens table
+      Default: parallels-custom-tokens
+  kubeClustersTable: 
+      Type: String
+      Description: k8s cluster table
+      Default: parallels-k8s-clusters
+  StaticfilesBucketName:
+      Type: String
+      Description: s3 bucket for static website
+      Default: staticfiles
+      AllowedPattern: '[a-zA-Z][.a-zA-Z0-9_-]*'
+  StaticfilesBucketPrefix:
+    Type: String
+    Description: If specified, the s3 prefix to use in the static-files bucket to copy files into.  If empty, then an appropriate s3 prefix is created internally by default, using the parallels ui version number
+    Default: ""
+  ParallelsCftVersion:
+    Type: String
+    Description: version of mlflow parallels Cft to install
+    Default: REP_VER_PARALLELS_CFT
+    AllowedValues: [REP_VER_PARALLELS_CFT]
+  MlflowParallelsUiVersion:    
+    Type: String
+    Default: REP_VER_PARALLELS_UI
+    AllowedValues: [REP_VER_PARALLELS_UI]
+    Description: Mlflow Parallels UI version to install.  Cannot be modified
+  MlflowParallelsLambdaVersion:
+    Type: String
+    Default: REP_VER_PARALLELS_LAMBDA
+    AllowedValues: [REP_VER_PARALLELS_LAMBDA]
+    Description: Mlflow Parallels Lambda version to install.  Cannot be modified
+  UseBoundaryPolicy:
+    Type: String
+    Description: 'Should this stack apply the specified boundary policy to the IAM role created for the InfinStor service?'
+    AllowedValues: [true, false]
+    Default: false
+  BoundaryPolicyARN:
+    Type: String
+    Description: 'ARN of the boundary policy to use for the IAM Role created for the InfinStor service. Leave empty if UseBoundaryPolicy above is false'
+    Default: ''
+  RootUserEmail:
+    Type: String
+  EksRoleArn:    
+    Type: String
+    Description: Role ARN to use to access EKS cluster.
+  EksRoleExtId:    
+    Type: String
+    Description: ExternalID to be used along with EKS Role to access EKS cluster
+  EksRegion:    
+    Type: String
+    Description: the region where the EKS cluster is located.
+  ecrType:
+    Type: String
+    Description: either private or public
+    AllowedValues: [ 'private', 'public' ]
+  ecrRegion:
+    Type: String
+    Description: the region where ECR is located
+  ecrRole:
+    Type: String
+    Description: The IAM role to be used to access the ECR
+  ecrRoleExt:
+    Type: String
+    Description: The externalID for the ECR IAM Role
+  GkeLocationType:  
+    Type: String
+    Description: 'the type of Gke cluster: either zonal or regional'
+    AllowedValues: [zonal,regional]
+  GkeLocation:  
+    Type: String
+    Description: the zone name or region name where the cluster is located.
+  GkeCredentials:  
+    Type: String
+    Description: the service account private key, which will be used to access the gke cluster
+  GkeProject:  
+    Type: String
+    Description: the Gke project    
+  AdditionalImports:
+    Type: String
+    Description: Use ; to separate imports
+    Default: import infinstor_mlflow_plugin; import boto3
+  AdditionalPackages: 
+    Type: String
+    Description: additional packages to be installed in the image for the working container.  
+    Default: infinstor_mlflow_plugin,infinstor
+Mappings:
+  MlflowServerTypeMap:
+    infinstor:
+      ParallelsUiBuildPrefix: builds/ui/mlflow-noproxy-parallels-ui
+    opensource:
+      ParallelsUiBuildPrefix: builds/ui/opensource-parallels-ui
+    azure:
+      ParallelsUiBuildPrefix: builds/ui/opensource-parallels-ui
+    databricks:
+      ParallelsUiBuildPrefix: builds/ui/opensource-parallels-ui
+Conditions:
+  EmptyBoundaryPolicyArn: !Equals [!Ref BoundaryPolicyARN, ""]
+  EmptyStaticfilesBucketPrefix: !Equals [!Ref StaticfilesBucketPrefix, ""]
+Rules:
+  CognitoUserPoolIdValRule:
+    RuleCondition: !Not [ !Equals [!Ref CognitoUserPoolId, ''] ]
+    Assertions:
+    - Assert: !Not [ !Equals [ !Ref CliClientId, ''] ]
+      AssertDescription: if CognitoUserPoolId is specified, CliClientId must be specified (not empty) 
+    - Assert: !Not [ !Equals [ !Ref MlflowuiClientId, ''] ]
+      AssertDescription: if CognitoUserPoolId is specified, MlflowuiClientId must be specified (not empty) 
+    - Assert:  !Equals [ !Ref MlflowServerType, 'infinstor'] 
+      AssertDescription: if CognitoUserPoolId is specified, then mlflow server type must be Infinstor
+  StaticfilesBucketNameRule:
+    RuleCondition: !Equals [!Ref MlflowServerType, 'infinstor']
+    Assertions:
+    - Assert: !Not [ !Equals [ !Ref StaticfilesBucketName, ''] ]
+      AssertDescription: if mlflow server type is infinstor, then StaticfilesBucketName must be specified (not empty) 
+    - Assert: !Not [ !Equals [ !Ref StaticfilesBucketPrefix, ''] ]
+      AssertDescription: if mlflow server type is infinstor, then StaticfilesBucketPrefix must be specified (not empty) 
+  BoundaryPolicyRule:
+    RuleCondition: !Equals [!Ref UseBoundaryPolicy, 'true']
+    Assertions:
+    - Assert: !Not [ !Equals [ !Ref BoundaryPolicyARN, ''] ]
+      AssertDescription: BoundaryPolicyARN must not be empty if useBoundaryPolicy is true
+Resources:
+  certs:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/certs-cft.json
+      Parameters:
+        MlflowParallelsDomain: !Ref MlflowParallelsDomain
+        Route53HostedZoneId: !Ref Route53HostedZoneId
+        MlflowParallelsUiDnsName: !Ref MlflowParallelsUiDnsName
+        MlflowParallelsUiCertArn: !Ref MlflowParallelsUiCertArn
+        MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
+        MlflowServerType: !Ref MlflowServerType
+  cognito:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: certs
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/mlflow-parallels-cognito-user-pool-cft.json
+      Parameters:
+        MlflowParallelsDomain: !Ref MlflowParallelsDomain
+        MlflowServerType: !Ref MlflowServerType
+        UseBoundaryPolicy: !Ref UseBoundaryPolicy
+        BoundaryPolicyARN: !If [ EmptyBoundaryPolicyArn, Unused, !Ref BoundaryPolicyARN ]
+        MlflowParallelsUiDnsName: !Ref MlflowParallelsUiDnsName
+        MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
+        CognitoUserPoolId: !Ref CognitoUserPoolId
+        CliClientId: !Ref CliClientId
+        MlflowuiClientId: !Ref MlflowuiClientId
+  mlflowParallelsLambda:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: cognito
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/mlflow-parallels-lambdas-cft.json
+      Parameters:
+        MlflowParallelsDomain: !Ref MlflowParallelsDomain
+        MlflowParallelsLambdaVersion: !Ref MlflowParallelsLambdaVersion
+        MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
+        MlflowServerType: !Ref MlflowServerType
+        ServiceConfTable: !Ref ServiceConfTable
+        SubscribersTable: !Ref SubscribersTable
+        XformsTable: !Ref XformsTable
+        PeriodicRunsTable: !Ref PeriodicRunsTable
+        dagTable: !Ref dagTable
+        dagExecutionTable: !Ref dagExecutionTable
+        customTokensTable: !Ref customTokensTable
+        kubeClustersTable: !Ref kubeClustersTable
+        UseBoundaryPolicy: !Ref UseBoundaryPolicy
+        BoundaryPolicyARN: !Ref BoundaryPolicyARN
+  staticfiles:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: mlflowParallelsLambda
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/staticfiles-cft.yaml
+      Parameters:
+        MlflowParallelsDomain: !Ref MlflowParallelsDomain
+        MlflowServerType: !Ref MlflowServerType
+        MlflowParallelsUiVersion: !Ref MlflowParallelsUiVersion
+        MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
+        MlflowParallelsUiDnsName: !Ref MlflowParallelsUiDnsName
+        StaticfilesBucketName: !Ref StaticfilesBucketName
+        StaticfilesBucketPrefix: 
+          Fn::If: 
+          - EmptyStaticfilesBucketPrefix 
+          - Fn::Sub:
+            - '${parallels_ui_build_prefix}/${parllels_ui_version}' 
+            - parallels_ui_build_prefix : !FindInMap [MlflowServerTypeMap, !Ref MlflowServerType, ParallelsUiBuildPrefix]
+              parllels_ui_version: !Ref MlflowParallelsUiVersion
+          - !Ref StaticfilesBucketPrefix
+        MlflowParallelsUiBuildLocation: 
+          Fn::Sub:
+            - '${parallels_ui_build_prefix}' 
+            - parallels_ui_build_prefix : !FindInMap [MlflowServerTypeMap, !Ref MlflowServerType, ParallelsUiBuildPrefix]
+  serviceconf:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: staticfiles
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/serviceconf-cft.yaml
+      Parameters:
+        MlflowParallelsDomain: !Ref MlflowParallelsDomain
+        MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
+        MlflowParallelsUiDnsName: !Ref MlflowParallelsUiDnsName
+        ServiceConfTable: !Ref ServiceConfTable
+  SingleTenant:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: serviceconf
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/single-tenant-cft.yaml
+      Parameters:
+        RootUserEmail:         !Ref RootUserEmail
+        MlflowParallelsDomain: !Ref MlflowParallelsDomain
+        MlflowServerType:      !Ref MlflowServerType
+        SubscribersTable:      !Ref SubscribersTable
+        UseBoundaryPolicy:     !Ref UseBoundaryPolicy
+        BoundaryPolicyARN:     !Ref BoundaryPolicyARN
+        EksRoleArn:            !Ref EksRoleArn
+        EksRoleExtId:          !Ref EksRoleExtId
+        EksRegion:             !Ref EksRegion
+        ecrType:               !Ref ecrType
+        ecrRegion:             !Ref ecrRegion
+        ecrRole:               !Ref ecrRole
+        ecrRoleExt:            !Ref ecrRoleExt
+        GkeLocationType:       !Ref GkeLocationType
+        GkeLocation:           !Ref GkeLocation
+        GkeCredentials:        !Ref GkeCredentials
+        GkeProject:            !Ref GkeProject        
+        AdditionalImports:     !Ref AdditionalImports
+        AdditionalPackages:    !Ref AdditionalPackages
+Outputs:
+  MlflowParallelsDomain:
+    Description: Domain name for mlflow-parallels stack
+    Value: !Ref MlflowParallelsDomain
+    Export:
+      Name: mlflow-parallels-cft:MlflowParallelsDomain
+  MlflowParallelsUiVersion:
+    Description: version of Mlflow UI 
+    Value: !Ref MlflowParallelsUiVersion
+    Export:
+      Name: mlflow-parallels-cft:MlflowParallelsUiVersion
+  MlflowParallelsLambdaVersion:
+    Description: version of Mlflow parallels lambda 
+    Value: !Ref MlflowParallelsLambdaVersion
+    Export:
+      Name: mlflow-parallels-cft:MlflowParallelsLambdaVersion
+  ParallelsCftVersion:
+    Description: version of Mlflow parallels CFT
+    Value: !Ref ParallelsCftVersion
+    Export:
+      Name: "mlflow-parallels-cft:ParallelsCftVersion"
+
