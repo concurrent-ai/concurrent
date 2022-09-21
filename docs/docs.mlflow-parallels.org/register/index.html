@@ -1,88 +1,256 @@
-<!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html>
   <head>
-    <meta charset="UTF-8">
-    <link rel="stylesheet" href="style.css">
-    <!-- Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-   </head>
-   <title> Concurrent for MLflow | Get Started </title>
-<body>
-  <nav>
-    <div class="nav-content">
-      <div class="imgcontainer">
-        <a href="https://concurrent-ai.org/"><img src="MLflow_Parallels_Logo.png" alt="MLflow Parallels" class="logo"></a>
-      </div>
-    </div>
-  </nav>
-  <div class="container">
-    <div class="forms">
-        <div class="form-content">
-    <div class="signup-form">
-      <div class="title">Get started with Concurrent for MLflow</div>
-      <div class="subtitle">Try out predefined or custom DAGs now.
-          <a href="https://docs.concurrent-ai.org/files/free/">Need help?</a></div>
-    <form action="https://api.concurrent-ai.org/addsecondaryuser" method="POST" id="signupform">
-        <input type="hidden" name="fromwhere" id="fromwhere" value="docs.concurrent-ai.org">
-        <div class="input-boxes">
-          <div class="input-box">
-            <i class="fas fa-user"></i>
-            <input type="text" name="newuser" id="newuser" placeholder="Username" required>
-          </div>
-          <div class="input-box">
-            <i class="fas fa-envelope"></i>
-            <input type="text" name="email" id="email" placeholder="Email address" required>
-          </div>
-          <div class="button input-box">
-            <input type="submit" value="Verify email address">
-          </div>
-          <div class="text sign-up-text">Already have an account?
-            <a href="https://mlflowui.concurrent-ai.org/">Sign in</a></div>
-        </div>
-        <input type="hidden" name="code" id="code" value="scode1">
-      </form>
-    </div>
-    </div>
-    </div>
-  </div>
-  <footer>
-    <div class="footer">
-      <div class="copyright">© Copyright 2022 Concurrent for MLflow Project</div>
-    </div>
-  </footer>
-  <script>
-    window.addEventListener("load", () => {
-      function sendData() {
-        const xhr = new XMLHttpRequest();
-
-        // Define what happens on successful data submission
-        xhr.addEventListener("load", (event) => {
-          alert(event.target.responseText);
-          location.replace("https://mlflowui.concurrent-ai.org");
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery-validation@1.19.3/dist/jquery.validate.min.js"></script>
+    <script src="https://unpkg.com/sweetalert/dist/sweetalert.min.js"></script>
+    <script>
+    $(document).ready(function(){
+      $("#register-btn").click(function(e){
+        e.preventDefault();    
+        $("#register-btn").addClass('btn-dis');
+        var form = $(this).closest('form');
+        form.validate({
+          rules: {
+            newuser: {
+              required: true,
+            },
+            email: {
+              required: true,
+              email: true
+            },
+          },
+          messages: {
+            newuser: "Missing. Please enter an username",
+            email:{
+              required : "Missing. Please enter your email address",
+              email : "Please enter a valid email address",
+            },
+          }
         });
-
-        // Define what happens in case of error
-        xhr.addEventListener("error", (event) => {
-          alert('Oops! Something went wrong.');
-        });
-
-        var nu = encodeURIComponent(document.getElementById("newuser").value);
-        var em = encodeURIComponent(document.getElementById("email").value);
-
-        xhr.open("POST", "https://api.concurrent-ai.org/addsecondaryuser");
-        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-        xhr.send("newuser=" + nu + "&" + "email=" + em);
-      }
-
-      const form = document.getElementById("signupform");
-
-      // Add 'submit' event handler
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        sendData();
+        var paramObj = {};
+        const formData = new FormData(document.querySelector('form'))
+        for (var pair of formData.entries()) {
+          paramObj[pair[0]] = pair[1];
+        }
+        console.log('paramObj', paramObj)
+        if (form.valid()) {
+          $("#loading").removeClass('hide');
+          console.log('paramObj', paramObj);
+          var addUser = $.ajax('https://api.concurrent-ai.org/addsecondaryuser', {
+            type: 'POST',
+            data: paramObj,
+            jsonp: false,
+            success: function(resultData) { 
+              console.log('success', resultData ); 
+              if(resultData.responseText == 'Successfully created user') {
+                showSuccessResult();
+              } else if(resultData.responseText == 'Error User Exists') {
+                showErrorResult('User name already exists.');
+              } else {
+                showErrorResult(resultData.responseText);
+              }
+            },
+            error:function(resultData) { 
+              console.log('error', resultData.responseText );
+              if(resultData.responseText == 'Successfully created user') {
+                showSuccessResult();
+              } else if(resultData.responseText == 'Error User Exists') {
+                showErrorResult('User name already exists.');
+              } else {
+                showErrorResult(resultData.responseText);
+              }
+            }
+          });
+        } else {
+          $("#register-btn").removeClass('btn-dis');
+        }
       });
     });
-  </script>
-</body>
+    function showSuccessResult() {
+      $("#loading").addClass('hide');
+      $("#register-btn").removeClass('btn-dis');
+      swal({
+        text: "Successfully created user!",
+        icon: "success",
+        buttons: false
+      }).then((value) => {
+        location.replace("https://mlflowui.concurrent-ai.org/")
+      });
+    }
+    function showErrorResult(responseText) {
+      $("#loading").addClass('hide');
+      $("#register-btn").removeClass('btn-dis');
+      swal({
+        text: responseText,
+        icon: "error",
+        buttons: false
+      });
+    }
+    </script>
+    <style>
+        body {
+          font-family: 'Inter', sans-serif;
+          font-size: 14px;
+        }
+        input[type=text], input[type=password] {
+          width: 100%;
+          padding: 12px 20px;
+          margin: 8px 0;
+          display: inline-block;
+          border: 1px solid #ccc;
+          box-sizing: border-box;
+          border-radius: 4px;
+        }
+        button {
+          background-color: #2374bb;
+          color: white;
+          padding: 14px 20px;
+          margin: 8px 0;
+          border: none;
+          cursor: pointer;
+          width: 100%;
+          border-radius: 4px;
+          font-size: 16px;
+          font-weight: bold;
+        }
+        button:hover {
+          opacity: 0.8;
+        }
+        .imgcontainer {
+          text-align: center;
+          padding: 30px;
+        }
+        img.logo {
+          height: 3rem;
+        }
+        .container {
+          padding: 6px;
+          margin: 0 auto;
+          width: 400px;
+          padding-top: 30px;
+        }
+        .copyright {
+          text-align: center;
+          font-size: 88%;
+          color: #a3a3a3;
+          padding-top: 30px;
+        }
+        .existingaccount {
+          text-align: center;
+        }
+        .hide {
+          display: none !important;
+        }
+        a {
+          color: #2374bb;
+        }
+        h1 {
+          text-align: left;
+          font-size: 24;
+          font-weight: bold;
+        }
+        p {
+          font-size: 14;
+        }
+        #loading {
+          width:10px;
+          height: 10px;
+          border: 3px solid rgba(255,255,255,.3);
+          border-radius: 50%;
+          border-top-color: #fff;
+          animation: spin 1s ease-in-out infinite;
+          -webkit-animation: spin 1s ease-in-out infinite;
+          float: right;
+        }
+        .btn-dis {
+          cursor: not-allowed;
+          pointer-events: none;
+          opacity: 0.7;
+        }
+        @keyframes spin {
+          to { -webkit-transform: rotate(360deg); }
+        }
+        @-webkit-keyframes spin {
+          to { -webkit-transform: rotate(360deg); }
+        }
+        
+        input[type="radio"]{
+          margin-top: 16px;
+          margin-left: 56px; 
+        }  
+        
+        input[id="option1"]:checked ~ .reveal1 {
+          opacity: 1;
+          max-height: 180px;
+          overflow: visible;
+        }  
+          
+        .reveal1 {
+          opacity: 0;
+          max-height: 0;
+          overflow: hidden;
+          transition: 0.5s;
+        }	  
+        
+        input[id="option2"]:checked ~ .reveal2 {
+          opacity: 1;
+          max-height: 180px;
+          overflow: visible;
+        }  
+          
+        .reveal2 {
+          opacity: 0;
+          max-height: 0;
+          overflow: hidden;
+          transition: 0.5s;
+        }	  
+
+        input.error {
+          border-color: red !important;
+        }
+        .error1 {
+          color: red;
+        }
+        label.error {
+          color: red;
+        }
+        .p-5{
+          padding: 5px;
+        }
+        .p-bot-5 {
+          padding-bottom: 5px;
+        }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <div>
+        <form name="register">
+          <div class="imgcontainer">
+            <a href="https://concurrent-ai.org/"><img src="https://docs.concurrent-ai.org/register/concurrent-logo.png" alt="InfinStor" class="logo"></a>
+          </div>
+          <h1>Get started with MLflow Parallels</h1>
+          <p>Try out predefined or custom DAGs now.  <a href="https://docs.concurrent-ai.org">Need help?</a></p>
+          <div style="padding-top: 20px;">
+            <div class="p-bot-5">
+              <label for="newuser"><b>Username</b></label>
+              <input type="text" name="newuser" id="newuser" placeholder="Username">
+            </div>
+            <div class="p-bot-5">
+              <label for="email"><b>Email</b></label>
+              <input type="text" name="email" id="email" placeholder="Email address">
+            </div>	 
+            <button id="register-btn" >Sign Up<div id="loading" class="hide"></div> </button>
+          </div>
+        </form>
+      </div>
+      <div class = existingaccount> Already have an account?
+        <a href="https://mlflowui.concurrent-ai.org/"> Sign in </a>
+      </div>
+      <div class = copyright>
+        © Copyright 2022 MLflow Parallels Project
+      </div>
+    </div>
+  </body>
 </html>
