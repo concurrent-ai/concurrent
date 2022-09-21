@@ -258,7 +258,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         body = dict()
         body['backend_type'] = backend_type
         body['MLFLOW_TRACKING_URI'] = os.getenv('MLFLOW_TRACKING_URI')
-        body['MLFLOW_PARALLELS_URI'] = os.getenv('MLFLOW_PARALLELS_URI')
+        body['MLFLOW_CONCURRENT_URI'] = os.getenv('MLFLOW_CONCURRENT_URI')
         body['params'] = params
         body['run_id'] = run_id
         body['experiment_id'] = str(experiment_id)
@@ -506,7 +506,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                 + ', image_digest=' + str(image_digest) + ', command=' + str(command)\
                 + ', env_vars=' + str(env_vars) + ', input_data_spec=' + str(input_data_spec)\
                 + ', kube_context=' + str(kube_context) + ', job_template=' + str(job_template))
-        env_vars['MLFLOW_PARALLELS_URI'] = os.getenv('MLFLOW_PARALLELS_URI')
+        env_vars['MLFLOW_CONCURRENT_URI'] = os.getenv('MLFLOW_CONCURRENT_URI')
         job_template = mlflow.projects.kubernetes._get_kubernetes_job_definition(
             project_name, image_tag, image_digest, _get_run_command(command), env_vars, job_template
         )
