@@ -124,7 +124,7 @@ def get_token_file_obj(mode:str, exit_on_error=True):
     else if PARALLELS_TOKEN_FILE_DIR is set
         return $PARALLELS_TOKEN_FILE_DIR/token file object
     else 
-         return ~/.mlflow-parallels/token file object or ~/.mlflow-parallels/token 
+         return ~/.concurrent/token file object or ~/.concurrent/token
 
     _extended_summary_
     
@@ -155,7 +155,7 @@ def get_token_file_obj(mode:str, exit_on_error=True):
             fh = open(tokfile, mode)
     else:
         if 'MLFLOW_CONCURRENT_URI' in os.environ:
-            tokfile = os.path.join(os.path.expanduser("~"), ".mlflow-parallels", "token")
+            tokfile = os.path.join(os.path.expanduser("~"), ".concurrent", "token")
             if mode == 'w': os.makedirs(os.path.dirname(tokfile), exist_ok=True)
             # if we are attempting to read the token file, ensure that the token file exists
             if mode == 'r' and not os.path.exists(tokfile):
@@ -163,7 +163,7 @@ def get_token_file_obj(mode:str, exit_on_error=True):
             else: 
                 fh = open(tokfile, mode)
         else:
-            tokfile = os.path.join(os.path.expanduser("~"), ".mlflow-parallels", "token")
+            tokfile = os.path.join(os.path.expanduser("~"), ".concurrent", "token")
             if mode == 'w': os.makedirs(os.path.dirname(tokfile), exist_ok=True)
             # if we are attempting to read the token file, ensure that the token file exists
             if mode == 'r' and not os.path.exists(tokfile):
