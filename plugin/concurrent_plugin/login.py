@@ -154,12 +154,12 @@ def get_token_file_obj(mode:str, exit_on_error=True):
         else: 
             fh = open(tokfile, mode)
     else:
-        if 'MLFLOW_PARALLELS_URI' in os.environ:
+        if 'MLFLOW_CONCURRENT_URI' in os.environ:
             tokfile = os.path.join(os.path.expanduser("~"), ".mlflow-parallels", "token")
             if mode == 'w': os.makedirs(os.path.dirname(tokfile), exist_ok=True)
             # if we are attempting to read the token file, ensure that the token file exists
             if mode == 'r' and not os.path.exists(tokfile):
-                print(f"Unable to read token file {tokfile} when MLFLOW_PARALLELS_URI={os.environ['MLFLOW_PARALLELS_URI']}.  run login_parallels cli command to login or place a valid token file as {tokfile}")
+                print(f"Unable to read token file {tokfile} when MLFLOW_CONCURRENT_URI={os.environ['MLFLOW_CONCURRENT_URI']}.  run login_parallels cli command to login or place a valid token file as {tokfile}")
             else: 
                 fh = open(tokfile, mode)
         else:
@@ -280,12 +280,12 @@ def get_token(client_id, region, force_renew):
         return token
 
 def get_env_var():
-    muri = os.getenv('MLFLOW_PARALLELS_URI')
+    muri = os.getenv('MLFLOW_CONCURRENT_URI')
     if not muri:
-        raise Exception('Please set environment variable MLFLOW_PARALLELS_URI and try again')
+        raise Exception('Please set environment variable MLFLOW_CONCURRENT_URI and try again')
     pmuri = urlparse(muri)
     if (pmuri.scheme.lower() != 'https'):
-        raise Exception("Error: MLFLOW_PARALLELS_URI must be set to https://<mlflow_parallels_server>:<mlflow_parallels_port>/")
+        raise Exception("Error: MLFLOW_CONCURRENT_URI must be set to https://<mlflow_parallels_server>:<mlflow_parallels_port>/")
     return muri
 
 def get_conf():
