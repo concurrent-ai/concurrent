@@ -530,7 +530,7 @@ def setup_secrets(core_api_instance, job_namespace, tokfile_contents, credsfile_
 
   return \
     [
-      kubernetes_client.V1VolumeMount(mount_path='/root/.mlflow-parallels', name='parallels-token-file'),
+      kubernetes_client.V1VolumeMount(mount_path='/root/.concurrent', name='parallels-token-file'),
       kubernetes_client.V1VolumeMount(mount_path='/root/.aws', name='aws-creds-file'),
       kubernetes_client.V1VolumeMount(mount_path='/root/.gce', name='gce-key-file'),
       kubernetes_client.V1VolumeMount(mount_path='/root/.taskinfo', name='taskinfo-file')

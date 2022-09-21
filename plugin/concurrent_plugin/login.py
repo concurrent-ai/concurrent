@@ -150,7 +150,7 @@ def get_token_file_obj(mode:str, exit_on_error=True):
         if mode == 'w': os.makedirs(os.path.dirname(tokfile), exist_ok=True)
         # if we are attempting to read the token file, ensure that the token file exists
         if mode == 'r' and not os.path.exists(tokfile):
-            print(f"Unable to read token file {tokfile} when PARALLELS_TOKEN_FILE_DIR={os.environ['PARALLELS_TOKEN_FILE_DIR']}.  run login_parallels cli command to login or place a valid token file as {tokfile}")
+            print(f"Unable to read token file {tokfile} when PARALLELS_TOKEN_FILE_DIR={os.environ['PARALLELS_TOKEN_FILE_DIR']}.  run login_concurrent cli command to login or place a valid token file as {tokfile}")
         else: 
             fh = open(tokfile, mode)
     else:
@@ -167,7 +167,7 @@ def get_token_file_obj(mode:str, exit_on_error=True):
             if mode == 'w': os.makedirs(os.path.dirname(tokfile), exist_ok=True)
             # if we are attempting to read the token file, ensure that the token file exists
             if mode == 'r' and not os.path.exists(tokfile):
-                print(f"Unable to read token file {tokfile}.  run login_parallels cli command to login or place a valid token file as {tokfile}")
+                print(f"Unable to read token file {tokfile}.  run login_concurrent cli command to login or place a valid token file as {tokfile}")
             else:
                 fh = open(tokfile, mode)
     
@@ -265,7 +265,7 @@ def get_token(client_id, region, force_renew):
         return token
 
     if (force_renew == True):
-        print("Forcing renewal of parallels token")
+        print("Forcing renewal of concurrent token")
         renew_token(region, refresh_token, client_id)
         token, refresh_token, token_time, client_id, token_type, id_token = read_token_file(region)
         return token
@@ -285,7 +285,7 @@ def get_env_var():
         raise Exception('Please set environment variable MLFLOW_CONCURRENT_URI and try again')
     pmuri = urlparse(muri)
     if (pmuri.scheme.lower() != 'https'):
-        raise Exception("Error: MLFLOW_CONCURRENT_URI must be set to https://<mlflow_parallels_server>:<mlflow_parallels_port>/")
+        raise Exception("Error: MLFLOW_CONCURRENT_URI must be set to https://<concurrent_server>:<mlflow_concurrent_port>/")
     return muri
 
 def get_conf():

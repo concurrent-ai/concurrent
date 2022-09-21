@@ -226,7 +226,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
 
 
         project = load_project(work_dir)
-        tracking.MlflowClient().set_tag(active_run.info.run_id, MLFLOW_PROJECT_BACKEND, "mlflow-parallels")
+        tracking.MlflowClient().set_tag(active_run.info.run_id, MLFLOW_PROJECT_BACKEND, "concurrent")
 
         backend_type = backend_config.get('backend-type')
         if backend_type == 'eks' or backend_type == 'gke':
@@ -254,7 +254,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
 
     def run_eks_on_backend(self, run_id, backend_type, bucket_name, path_in_bucket, work_dir, project_uri, entry_point, params,
             version, backend_config, tracking_store_uri, experiment_id, project, active_run):
-        upload_objects(run_id, bucket_name, '.mlflow-parallels/project_files', work_dir)
+        upload_objects(run_id, bucket_name, '.concurrent/project_files', work_dir)
         body = dict()
         body['backend_type'] = backend_type
         body['MLFLOW_TRACKING_URI'] = os.getenv('MLFLOW_TRACKING_URI')
@@ -552,11 +552,11 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             core_api_instance.create_namespaced_secret(namespace=job_namespace, body=sec2)
 
         volume_mounts = [
-                    kubernetes.client.V1VolumeMount(mount_path='/root/.mlflow-parallels', name='parallels-token-file'),
+                    kubernetes.client.V1VolumeMount(mount_path='/root/.concurrent', name='parallels-token-file'),
                     kubernetes.client.V1VolumeMount(mount_path='/root/.aws', name='aws-creds-file')
                 ]
         if input_data_spec:
-            volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/root/.mlflow-parallels-data', name=input_spec_name))
+            volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/root/.concurrent-data', name=input_spec_name))
         job_template["spec"]["template"]["spec"]["containers"][0]["volumeMounts"] = volume_mounts
 
         job_template["spec"]["template"]["spec"]["volumes"] = [

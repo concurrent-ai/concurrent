@@ -302,8 +302,8 @@ def _log_metadata(local_path, artifact_path, **kwargs):
     os.makedirs(os.path.dirname(metadata_tmp_local), exist_ok=True)
     with open(metadata_tmp_local, "w") as fh:
         json.dump(all_metadata, fh)
-    print("Log metadata: ", metadata_tmp_local, ".mlflow-parallels/metadata")
-    mlflow.log_artifact(metadata_tmp_local, ".mlflow-parallels/metadata")
+    print("Log metadata: ", metadata_tmp_local, ".concurrent/metadata")
+    mlflow.log_artifact(metadata_tmp_local, ".concurrent/metadata")
 
 
 def concurrent_log_artifact(local_path, artifact_path, **kwargs):
@@ -322,7 +322,7 @@ def concurrent_log_artifacts(local_dir, artifact_path, **kwargs):
 
 def _load_mlflow_artifacts_metadata(bucket, prefix, arr):
     client = boto3.client('s3')
-    remote_folder = os.path.join(prefix, ".mlflow-parallels/metadata/")
+    remote_folder = os.path.join(prefix, ".concurrent/metadata/")
     paginator = client.get_paginator('list_objects_v2')
     page_iterator = paginator.paginate(Bucket=bucket, Prefix=remote_folder, Delimiter="/")
     all_metadata = []
