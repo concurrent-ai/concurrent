@@ -7,7 +7,7 @@ import mlflow
 import os
 import json
 import pandas as pd
-from parallels_plugin.infinfs import infinmount
+from concurrent_plugin.infinfs import infinmount
 from urllib.parse import urlparse
 import multiprocessing
 import glob
@@ -306,14 +306,14 @@ def _log_metadata(local_path, artifact_path, **kwargs):
     mlflow.log_artifact(metadata_tmp_local, ".mlflow-parallels/metadata")
 
 
-def parallels_log_artifact(local_path, artifact_path, **kwargs):
+def concurrent_log_artifact(local_path, artifact_path, **kwargs):
     ##kwargs are treated as metadata.
     _log_metadata(local_path, artifact_path, **kwargs)
     print("Log data output: ", local_path, artifact_path)
     mlflow.log_artifact(local_path, artifact_path)
 
 
-def parallels_log_artifacts(local_dir, artifact_path, **kwargs):
+def concurrent_log_artifacts(local_dir, artifact_path, **kwargs):
     ##kwargs are treated as metadata.
     _log_metadata(local_dir, artifact_path, **kwargs)
     print("Log data output: ", local_dir, artifact_path)
