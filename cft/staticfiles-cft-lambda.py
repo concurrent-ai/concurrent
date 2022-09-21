@@ -116,9 +116,9 @@ def create_or_update_sc_js_file(user_pool_id:str, cli_client_id:str, mlflowui_cl
 def copy_parallels_ui(mlflow_parallels_ui_build_location:str, mlflow_parallels_ui_version:str, http:urllib3.PoolManager, s3_client:S3Client, the_bucket:str, staticfilesBucketPrefix:str):
     build_loc_with_ver:str = f'{mlflow_parallels_ui_build_location}/{mlflow_parallels_ui_version}'
     build_zip:str = 'build.zip'
-    r:urllib3.response.HTTPResponse = http.request('GET', f'https://parallelsdist.s3.amazonaws.com/{build_loc_with_ver}/{build_zip}')
+    r:urllib3.response.HTTPResponse = http.request('GET', f'https://concurrentdist.s3.amazonaws.com/{build_loc_with_ver}/{build_zip}')
     if (r.status != 200):
-      estr = f'Download of https://parallelsdist.s3.amazonaws.com/{build_loc_with_ver}/{build_zip} failed. http status={r.status};headers={r.getheaders()};body={r.data}'
+      estr = f'Download of https://concurrentdist.s3.amazonaws.com/{build_loc_with_ver}/{build_zip} failed. http status={r.status};headers={r.getheaders()};body={r.data}'
       print(estr)
       raise ValueError(estr)
     
