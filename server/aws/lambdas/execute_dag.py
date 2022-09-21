@@ -159,7 +159,7 @@ def execute_dag(event, context):
         dag_utils.create_dag_execution_record(cognito_username, dag_id, dag_execution_id, dag_execution_status, dag_json, auth_info)
 
         dag_detail_artifact = {'dag_json': dag_json, 'dag_execution_id': dag_execution_id}
-        log_mlflow_artifact(auth_info, parent_run_id, dag_detail_artifact, '.mlflow-parallels', 'dag_details.json.bin')
+        log_mlflow_artifact(auth_info, parent_run_id, dag_detail_artifact, '.concurrent', 'dag_details.json.bin')
         lock_key, lock_lease_time = acquire_idle_row_lock(cognito_username, dag_execution_id)
 
     if httpOperation:

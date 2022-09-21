@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 import infinstor
 from infinstor.infinfs.infinfs import InfinFS
 
-INPUT_SPEC_CONFIG = '/root/.mlflow-parallels-data/inputdataspec'
+INPUT_SPEC_CONFIG = '/root/.concurrent-data/inputdataspec'
 
 fuse_debug_handle = None
 fuse_debug_file = "/tmp/fuse_debug.log"
