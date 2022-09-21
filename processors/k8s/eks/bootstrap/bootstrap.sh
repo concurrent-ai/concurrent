@@ -465,7 +465,7 @@ if [ $CREATE_ENV_IMAGE == "yes" ] ; then
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt update" >> Dockerfile)
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt install -y libfuse-dev" >> Dockerfile)
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install --ignore-installed PyYAML" >> Dockerfile)
-  (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install parallels_plugin" >> Dockerfile)
+  (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install concurrent_plugin" >> Dockerfile)
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install boto3" >> Dockerfile)
   if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
     for i in $(echo ${ADDITIONAL_PACKAGES} | tr "," "\n")
@@ -518,7 +518,7 @@ export REPOSITORY_URI
 export MLFLOW_PROJECT_DIR
 export BOOTSTRAP_LOG_FILE
 
-echo "MLFLOW_PARALLELS_URI is " $MLFLOW_PARALLELS_URI
+echo "MLFLOW_CONCURRENT_URI is " $MLFLOW_CONCURRENT_URI
 echo "MLFLOW_TRACKING_URI is " $MLFLOW_TRACKING_URI
 echo "MLFLOW_RUN_ID is " $MLFLOW_RUN_ID
 echo "ENV_REPO_URI is " $ENV_REPO_URI

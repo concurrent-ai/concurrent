@@ -45,8 +45,8 @@ def extract_run_params(body):
                 run_params['MLFLOW_TRACKING_URI'] = obss[1]
             elif obss[0] == 'MLFLOW_TRACKING_TOKEN':
                 run_params['MLFLOW_TRACKING_TOKEN'] = obss[1]
-            elif obss[0] == 'MLFLOW_PARALLELS_URI':
-                run_params['MLFLOW_PARALLELS_URI'] = obss[1]
+            elif obss[0] == 'MLFLOW_CONCURRENT_URI':
+                run_params['MLFLOW_CONCURRENT_URI'] = obss[1]
             elif obss[0] == 'MLFLOW_EXPERIMENT_ID':
                 run_params['experiment_id'] = obss[1]
     if not run_params:
@@ -129,7 +129,7 @@ def execute_dag(event, context):
         auth_info = {
                 'mlflow_tracking_uri' : run_params.get('MLFLOW_TRACKING_URI'),
                 'mlflow_tracking_token': run_params.get('MLFLOW_TRACKING_TOKEN'),
-                'mlflow_parallels_uri': run_params.get('MLFLOW_PARALLELS_URI'),
+                'mlflow_concurrent_uri': run_params.get('MLFLOW_CONCURRENT_URI'),
                 'custom_token': custom_token,
                 'cognito_client_id': service_conf['cognitoClientId']['S']
                 }
@@ -718,7 +718,7 @@ def launch_bootstrap_run_project(
     body = dict()
     body['MLFLOW_TRACKING_URI'] = auth_info.get('mlflow_tracking_uri')
     body['MLFLOW_TRACKING_TOKEN'] = auth_info.get('mlflow_tracking_token')
-    body['MLFLOW_PARALLELS_URI'] = auth_info.get('mlflow_parallels_uri')
+    body['MLFLOW_CONCURRENT_URI'] = auth_info.get('mlflow_concurrent_uri')
     body['project_files_bucket'] = bucket_name
     body['project_files_path_in_bucket'] = path_in_bucket
     body['run_id'] = parent_run_id

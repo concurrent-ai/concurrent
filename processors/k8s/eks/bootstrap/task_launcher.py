@@ -193,7 +193,7 @@ def launch_dag_controller():
         logger.info('Not a dag execution, skip dag controller')
         return
     infinstor_token = read_token('/root/.mlflow-parallels/token')
-    mlflow_parallels_uri = os.environ['MLFLOW_PARALLELS_URI']
+    mlflow_parallels_uri = os.environ['MLFLOW_CONCURRENT_URI']
     dag_execution_id = os.environ['DAG_EXECUTION_ID']
     dagid = os.environ['DAGID']
     periodic_run_name = os.environ.get('PERIODIC_RUN_NAME')
@@ -350,7 +350,7 @@ def main(run_id_list, input_data_specs, parent_run_id):
 
 
 
-        mlflow_cmd = ['mlflow', 'run', '--backend', 'parallels-backend', '--backend-config', k8s_backend_config_file,
+        mlflow_cmd = ['mlflow', 'run', '--backend', 'concurrent-backend', '--backend-config', k8s_backend_config_file,
                       '.']
         if 'PROJECT_PARAMS' in os.environ:
             params = json.loads(base64.b64decode(os.getenv('PROJECT_PARAMS')).decode('utf-8'))
