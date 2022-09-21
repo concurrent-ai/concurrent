@@ -79,8 +79,8 @@ Parameters:
   ParallelsCftVersion:
     Type: String
     Description: version of mlflow parallels Cft to install
-    Default: 1.0.2
-    AllowedValues: [1.0.2]
+    Default: 1.0.3
+    AllowedValues: [1.0.3]
   MlflowParallelsUiVersion:    
     Type: String
     Default: 1.0.1
@@ -88,8 +88,8 @@ Parameters:
     Description: Mlflow Parallels UI version to install.  Cannot be modified
   MlflowParallelsLambdaVersion:
     Type: String
-    Default: 1.0.2
-    AllowedValues: [1.0.2]
+    Default: 1.0.3
+    AllowedValues: [1.0.3]
     Description: Mlflow Parallels Lambda version to install.  Cannot be modified
   UseBoundaryPolicy:
     Type: String
@@ -184,7 +184,7 @@ Resources:
   certs:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/certs-cft.json
+      TemplateURL: !Sub https://s3.amazonaws.com/concurrentdist/cft/parallels-cft/${ParallelsCftVersion}/certs-cft.json
       Parameters:
         MlflowParallelsDomain: !Ref MlflowParallelsDomain
         Route53HostedZoneId: !Ref Route53HostedZoneId
@@ -196,7 +196,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DependsOn: certs
     Properties:
-      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/mlflow-parallels-cognito-user-pool-cft.json
+      TemplateURL: !Sub https://s3.amazonaws.com/concurrentdist/cft/parallels-cft/${ParallelsCftVersion}/mlflow-parallels-cognito-user-pool-cft.json
       Parameters:
         MlflowParallelsDomain: !Ref MlflowParallelsDomain
         MlflowServerType: !Ref MlflowServerType
@@ -211,7 +211,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DependsOn: cognito
     Properties:
-      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/mlflow-parallels-lambdas-cft.json
+      TemplateURL: !Sub https://s3.amazonaws.com/concurrentdist/cft/parallels-cft/${ParallelsCftVersion}/mlflow-parallels-lambdas-cft.json
       Parameters:
         MlflowParallelsDomain: !Ref MlflowParallelsDomain
         MlflowParallelsLambdaVersion: !Ref MlflowParallelsLambdaVersion
@@ -231,7 +231,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DependsOn: mlflowParallelsLambda
     Properties:
-      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/staticfiles-cft.yaml
+      TemplateURL: !Sub https://s3.amazonaws.com/concurrentdist/cft/parallels-cft/${ParallelsCftVersion}/staticfiles-cft.yaml
       Parameters:
         MlflowParallelsDomain: !Ref MlflowParallelsDomain
         MlflowServerType: !Ref MlflowServerType
@@ -255,7 +255,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DependsOn: staticfiles
     Properties:
-      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/serviceconf-cft.yaml
+      TemplateURL: !Sub https://s3.amazonaws.com/concurrentdist/cft/parallels-cft/${ParallelsCftVersion}/serviceconf-cft.yaml
       Parameters:
         MlflowParallelsDomain: !Ref MlflowParallelsDomain
         MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
@@ -265,7 +265,7 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DependsOn: serviceconf
     Properties:
-      TemplateURL: !Sub https://s3.amazonaws.com/parallelsdist/cft/parallels-cft/${ParallelsCftVersion}/single-tenant-cft.yaml
+      TemplateURL: !Sub https://s3.amazonaws.com/concurrentdist/cft/parallels-cft/${ParallelsCftVersion}/single-tenant-cft.yaml
       Parameters:
         RootUserEmail:         !Ref RootUserEmail
         MlflowParallelsDomain: !Ref MlflowParallelsDomain
