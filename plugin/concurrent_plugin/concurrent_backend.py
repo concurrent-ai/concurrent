@@ -46,7 +46,7 @@ import mlflow.projects.kubernetes
 from mlflow.projects.kubernetes import KubernetesSubmittedRun, _get_run_command, _load_kube_context
 import kubernetes
 from kubernetes.config.config_exception import ConfigException
-from parallels_plugin.login import get_conf, get_token, get_token_file_obj, get_env_var
+from concurrent_plugin.login import get_conf, get_token, get_token_file_obj, get_env_var
 import kubernetes
 from kubernetes.config.config_exception import ConfigException
 
@@ -166,12 +166,12 @@ def upload_objects(run_id, bucket_name, path_in_bucket, local_path):
     except Exception as err:
         _logger.info(str(err))
 
-class PluginParallelsProjectBackend(AbstractBackend):
+class PluginConcurrentProjectBackend(AbstractBackend):
     def run(self, project_uri, entry_point, params,
             version, backend_config, tracking_store_uri, experiment_id):
 
         if (verbose):
-            _logger.info("PluginParallelsProjectBackend: Entered. project_uri=" + str(project_uri)\
+            _logger.info("PluginConcurrentProjectBackend: Entered. project_uri=" + str(project_uri)\
                 + ", entry_point=" + str(entry_point)\
                 + ", params=" + str(params)\
                 + ", version=" + str(version)\
@@ -365,7 +365,7 @@ class PluginParallelsProjectBackend(AbstractBackend):
         kube_job_template_path = backend_config.get('kube-job-template-path')
         input_data_spec = backend_config.get('INPUT_DATA_SPEC')
         if (verbose):
-            _logger.info("PluginParallelsProjectBackend.run_eks_on_local: kube-context=" + str(kube_context)\
+            _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: kube-context=" + str(kube_context)\
                 + ", repository-uri=" + str(repository_uri)\
                 + ", git-commit=" + str(git_commit)\
                 + ", kube-job-template-path=" + str(kube_job_template_path)\
@@ -411,20 +411,20 @@ class PluginParallelsProjectBackend(AbstractBackend):
             try:
                 image = docker_client.images.pull(repository_uri, tag=git_commit[:7])
             except docker.errors.ImageNotFound as inf:
-                _logger.info("PluginParallelsProjectBackend.run_eks_on_local: Docker img "
+                _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: Docker img "
                         + repository_uri + ", tag=" + git_commit[:7] + " not found. Building...")
             except docker.errors.APIError as apie:
-                _logger.info("PluginParallelsProjectBackend.run_eks_on_local: Error " + str(apie)
+                _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: Error " + str(apie)
                         + " while pulling " + repository_uri + ", tag=" + git_commit[:7])
             else:
-                _logger.info("PluginParallelsProjectBackend.run_eks_on_local: image=" + str(image))
-                _logger.info("PluginParallelsProjectBackend.run_eks_on_local: Docker img found "
+                _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: image=" + str(image))
+                _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: Docker img found "
                         + repository_uri + ", tag=" + git_commit[:7] + ". Reusing...")
                 image_digest = docker_client.images.get_registry_data(image.tags[0]).id
-                _logger.info("PluginParallelsProjectBackend.run_eks_on_local: image_digest=" + image_digest)
+                _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: image_digest=" + image_digest)
                 do_build = False
         if do_build:
-            _logger.info("PluginParallelsProjectBackend.run_eks_on_local: Building "
+            _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: Building "
                     + repository_uri)
             image = self.build_docker_image(
                 work_dir=work_dir,

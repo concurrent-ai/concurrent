@@ -192,7 +192,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     cmap.data['CERT_AUTH'] = cert_auth
     if cluster_arn:
         cmap.data['CLUSTER_ARN'] = cluster_arn
-    cmap.data['MLFLOW_PARALLELS_URI'] = item['MLFLOW_PARALLELS_URI']
+    cmap.data['MLFLOW_CONCURRENT_URI'] = item['MLFLOW_CONCURRENT_URI']
     cmap.data['MLFLOW_TRACKING_URI'] = item['MLFLOW_TRACKING_URI']
     cmap.data['MLFLOW_RUN_ID'] = run_id
     cmap.data['NAMESPACE'] = namespace
