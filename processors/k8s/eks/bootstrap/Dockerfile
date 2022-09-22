@@ -44,7 +44,7 @@ RUN install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 
 ARG IGNORECACHE=1
 RUN echo "$IGNORECACHE"
-RUN python3 -m pip install --no-cache-dir parallels_plugin
+RUN python3 -m pip install --no-cache-dir concurrent_plugin
 
 #### RUN python3 -m pip install --no-cache-dir infinstor_mlflow_plugin
 # To test with a modified infinstor_mlflow_plugin without pushing to pypi,
