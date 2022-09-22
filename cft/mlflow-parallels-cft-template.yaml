@@ -8,7 +8,7 @@ Parameters:
     Type: String
   MlflowParallelsDnsName:
     Type: String
-    Default: parallels
+    Default: concurrent
   MlflowParallelsUiDnsName:
     Type: String
     Default: parallelsui
@@ -110,6 +110,7 @@ Parameters:
     Description: the region where the EKS cluster is located.
   ecrType:
     Type: String
+    Default: private
     Description: either private or public
     AllowedValues: [ 'private', 'public' ]
   ecrRegion:
