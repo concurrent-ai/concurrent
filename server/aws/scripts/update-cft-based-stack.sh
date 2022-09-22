@@ -35,7 +35,7 @@ result = client.list_certificates()
 if ('CertificateSummaryList' in result):
     certs = result['CertificateSummaryList']
     for cert in certs:
-        if (cert['DomainName'] == "$DNS_HOST.$SRVC" or cert['DomainName'] == "$SRVC" or cert['DomainName'] == "*.$SRVC"):
+        if (cert['DomainName'] == "$DNS_HOST.$SRVC" or cert['DomainName'] == "*.$SRVC"):
             print(cert['CertificateArn'])
             sys.exit(0)
 sys.exit(255)
