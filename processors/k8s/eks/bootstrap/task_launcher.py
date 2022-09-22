@@ -11,7 +11,7 @@ from mlflow.projects.utils import load_project, MLFLOW_DOCKER_WORKDIR_PATH
 from mlflow.projects import kubernetes as kb
 
 import docker
-
+#pylint: disable=logging-not-lazy
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
