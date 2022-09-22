@@ -11,7 +11,7 @@ Parameters:
     Type: String
   MlflowParallelsDnsName:
     Type: String
-    Default: parallels
+    Default: concurrent
   MlflowParallelsUiDnsName:
     Type: String
     Default: parallelsui
@@ -79,8 +79,8 @@ Parameters:
   ParallelsCftVersion:
     Type: String
     Description: version of mlflow parallels Cft to install
-    Default: 1.0.3
-    AllowedValues: [1.0.3]
+    Default: 1.0.5
+    AllowedValues: [1.0.5]
   MlflowParallelsUiVersion:    
     Type: String
     Default: 1.0.1
@@ -88,8 +88,8 @@ Parameters:
     Description: Mlflow Parallels UI version to install.  Cannot be modified
   MlflowParallelsLambdaVersion:
     Type: String
-    Default: 1.0.3
-    AllowedValues: [1.0.3]
+    Default: 1.0.4
+    AllowedValues: [1.0.4]
     Description: Mlflow Parallels Lambda version to install.  Cannot be modified
   UseBoundaryPolicy:
     Type: String
@@ -113,6 +113,7 @@ Parameters:
     Description: the region where the EKS cluster is located.
   ecrType:
     Type: String
+    Default: private
     Description: either private or public
     AllowedValues: [ 'private', 'public' ]
   ecrRegion:
