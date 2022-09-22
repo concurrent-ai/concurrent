@@ -107,7 +107,7 @@ def upload_logs_for_pod(run_id, pod_name, tmp_log_file):
         logger.warning("Failed to fetch logs for {}, {}: {}".format(run_id, pod_name, ex))
         return
     client = MlflowClient()
-    client.log_artifact(run_id, tmp_log_file, artifact_path='.mlflow-parallels/logs')
+    client.log_artifact(run_id, tmp_log_file, artifact_path='.concurrent/logs')
 
 
 def update_mlflow_run(run_id, status):
@@ -130,7 +130,7 @@ def log_describe_pod(pod_name, run_id):
         return
     else:
         client = MlflowClient()
-        client.log_artifact(run_id, describe_file, artifact_path='.mlflow-parallels/logs')
+        client.log_artifact(run_id, describe_file, artifact_path='.concurrent/logs')
 
 def fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods):
     pods_status_cmd = ['kubectl', 'get', 'pod',
@@ -192,7 +192,7 @@ def launch_dag_controller():
     if 'DAG_EXECUTION_ID' not in os.environ:
         logger.info('Not a dag execution, skip dag controller')
         return
-    infinstor_token = read_token('/root/.mlflow-parallels/token')
+    infinstor_token = read_token('/root/.concurrent/token')
     mlflow_parallels_uri = os.environ['MLFLOW_CONCURRENT_URI']
     dag_execution_id = os.environ['DAG_EXECUTION_ID']
     dagid = os.environ['DAGID']
