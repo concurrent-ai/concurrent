@@ -1,4 +1,4 @@
-site_name: Documentation
+site_name: Concurrent for MLflow Docs
 copyright: (c) Copyright 2022 The Concurrent AI Project. All Rights Reserved.
 nav:
         - Home: 'index.md'
@@ -33,6 +33,7 @@ extra:
 theme:
         name: material
         logo: https://docs.concurrent-ai.org/images/concurrent-logo.png
+        favicon: favicon.ico
         palette:
                 primary: blue
                 accent: orange
