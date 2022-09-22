@@ -1,3 +1,5 @@
+[![](https://docs.concurrent-ai.org/images/concurrent-banner.png?raw=true)](https://docs.concurrent-ai.org/images/concurrent-banner.png?raw=true)
+
 **Concurrent for MLflow** is an **Apache Licensed** open source project for running MLflow projects, in parallel, in **Kubernetes**. It enhances MLflow with two important capabilities:
 
 - Effortlessly run MLflow Projects in Kubernetes, without the hassle of dealing with docker
