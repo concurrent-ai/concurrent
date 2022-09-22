@@ -39,9 +39,9 @@ def check_if_source_dirs_exist(component_enabled:str, component_dirname):
         logging.info(f"can't find directory {component_dirname} to build component {component_dirname} with version {component_enabled}.  Setup the directory and try again..")
         exit(1)
 
-check_if_source_dirs_exist(args.parallels_lambda_version, "./mlflow-parallels" )
+check_if_source_dirs_exist(args.parallels_lambda_version, "./concurrent" )
 check_if_source_dirs_exist(args.parallels_ui_version, "./mlflow-noproxy")
-check_if_source_dirs_exist(args.parallels_cft_version, "./mlflow-parallels")
+check_if_source_dirs_exist(args.parallels_cft_version, "./concurrent")
 
 def _get_versions_from_parallels_yaml(parallels_yaml_template_fname:str) -> Tuple[str,str,str]:
     """returns the versions of the components specified in mlflow-parallels-cft.yaml. see below
@@ -62,7 +62,7 @@ def _get_versions_from_parallels_yaml(parallels_yaml_template_fname:str) -> Tupl
         
     return (l_parallels_yaml_cft_version, l_parallels_yaml_parallels_lambda_version, l_parallels_yaml_parallels_ui_version)
 
-parallels_yaml_cft_version, parallels_yaml_parallels_lambda_version, parallels_yaml_parallels_ui_version = _get_versions_from_parallels_yaml('mlflow-parallels/cft/mlflow-parallels-cft.yaml')
+parallels_yaml_cft_version, parallels_yaml_parallels_lambda_version, parallels_yaml_parallels_ui_version = _get_versions_from_parallels_yaml('concurrent/cft/mlflow-parallels-cft.yaml')
 logging.info(f"Current versions in mlflow-parallels-cft.yaml before building: parallels_yaml_cft_version={parallels_yaml_cft_version}, parallels_yaml_parallels_lambda_version={parallels_yaml_parallels_lambda_version}, parallels_yaml_parallels_ui_version={parallels_yaml_parallels_ui_version}")
 
 # https://amoffat.github.io/sh/sections/default_arguments.html: Many times, you want to override the default arguments of all commands launched through sh.
@@ -82,9 +82,9 @@ def check_parallels_aws_credentials():
     global parallels_aws_credentials_check
     if not parallels_aws_credentials_check:
         try:
-            shcmd("aws", "s3", "ls", "s3://parallelsdist/")
+            shcmd("aws", "s3", "ls", "s3://concurrentdist/")
         except Exception as e:
-            logging.error("Unable to access bucket s3://parallelsdist.  setup ~/.aws/credenitals's default profile to point to mlflow-parallels AWS account and try again..",exc_info=e)
+            logging.error("Unable to access bucket s3://concurrentdist.  setup ~/.aws/credenitals's default profile to point to concurrent AWS account and try again..",exc_info=e)
             exit(1)
     
     parallels_aws_credentials_check = True
@@ -131,11 +131,11 @@ def _show_git_log_check_if_build(git_repo_dir:str, sub_path:str, last_version:st
 # get the version specified in the command line
 parallels_lambda_version = args.parallels_lambda_version
 # if not specified in the command line, get from the user
-if not parallels_lambda_version: parallels_lambda_version = _show_git_log_check_if_build("mlflow-parallels", "server/aws (parallels lambda)", parallels_yaml_parallels_lambda_version)
+if not parallels_lambda_version: parallels_lambda_version = _show_git_log_check_if_build("concurrent", "server/aws (parallels lambda)", parallels_yaml_parallels_lambda_version)
 # if we need to publish mlflow lambda
 if parallels_lambda_version:
     # pushd cd infinstor-mlflow/server
-    with sh2.pushd("mlflow-parallels"):
+    with sh2.pushd("concurrent"):
         logging.info(f'****** building {os.getcwd()}')
         
         # Setup ~/.aws/credentials with credentials for infinstordist
@@ -165,13 +165,13 @@ if parallels_lambda_version:
         shcmd("aws", "s3", "cp",  f"s3://scratch-bucket-xyzzy-2/{s3_template_yaml}",  "/tmp/template.yaml")       
         input(f"copied {s3_template_yaml} to /tmp/template.yaml..: press any key to continue..")
 
-        _check_and_tag_git_code('mlflow-parallels', parallels_lambda_version)
+        _check_and_tag_git_code('concurrent', parallels_lambda_version)
         
         choice:str = input(f"""
-**** Sign into the aws console (https://console.aws.amazon.com) as mlflow-parallels@infinstor.com and browse to 'Serverless Application Repository'
-**** Choose mlflow-parallels-lambda and click on 'Publish new version'
+**** Sign into the aws console (https://console.aws.amazon.com) as concurrent@infinstor.com and browse to 'Serverless Application Repository'
+**** Choose concurrent-lambda and click on 'Publish new version'
 **** Enter {parallels_lambda_version} for the 'Semantic Version'.  
-**** Specify 'https://mlflow-parallels.org' for the source code URL.
+**** Specify 'https://concurrent-ai.org' for the source code URL.
 **** Upload /tmp/template.yaml for SAM template, then hit 'Publish Version'
 **** 
 **** publish this application in multiple AWS regions if needed (us-east-1 and ap-south-1 say)
@@ -181,7 +181,7 @@ if parallels_lambda_version:
 
         # don't need to edit the version manually.  we generate it further below.
         # choice:str = input(f"""
-# **** edit parallels CFT (mlflow-parallels/cft/mlflow-parallels-cft.yaml) to specify MLflow lamba version as {parallels_lambda_version}.  
+# **** edit parallels CFT (concurrent/cft/mlflow-parallels-cft.yaml) to specify MLflow lamba version as {parallels_lambda_version}.  
 # **** Look for the entry 'Parameters/MlflowParallelsLambdaVersion/Default' and 'Parameters/MlflowParallelsLambdaVersion/AllowedValues' update it to {parallels_lambda_version}
 # **** 
 # **** continue: yes/no? """)  
@@ -211,7 +211,7 @@ if parallels_ui_version:
     # see https://death.andgravity.com/yaml-unknown-tag
     #
     # don't need to edit the version manually.  we generate it further below.
-    # choice:str = input(f"""**** Edit mlflow-parallels/cft/mlflow-parallels-cft.yaml and update Parameters/MlflowParallelsUiVersion/Default and Parameters/MlflowParallelsUiVersion/AllowedValues to the new version {parallels_ui_version}.. After editing, enter yes to continue..  continue: yes/no? """)  
+    # choice:str = input(f"""**** Edit concurrent/cft/mlflow-parallels-cft.yaml and update Parameters/MlflowParallelsUiVersion/Default and Parameters/MlflowParallelsUiVersion/AllowedValues to the new version {parallels_ui_version}.. After editing, enter yes to continue..  continue: yes/no? """)  
     # if not choice == "yes": exit(1)
 else:
     # use the last version specified in mlflow-parallels-cft.yaml since we did not build a new version above
@@ -221,17 +221,17 @@ else:
 # get the version specified in the command line
 parallels_cft_version = args.parallels_cft_version
 # if not specified in the command line, get from the user
-if not parallels_cft_version: parallels_cft_version = _show_git_log_check_if_build("mlflow-parallels", "cft (parallels-cft)", parallels_yaml_cft_version)
+if not parallels_cft_version: parallels_cft_version = _show_git_log_check_if_build("concurrent", "cft (parallels-cft)", parallels_yaml_cft_version)
 if parallels_cft_version:
     # Finally, update the root stack CFT version (the root stack version must be updated for updates to any of the nested stacks)
     # This is accomplished by running './create-new-root-stack-version.sh 2.1.12'
     # Note that the root stack version is different from the nested stack versions, which were set above..
-    with sh2.pushd("mlflow-parallels"):
+    with sh2.pushd("concurrent"):
         logging.info(f'****** buildling {os.getcwd()}')
         
         check_parallels_aws_credentials()
         
-        # Run mlflow-parallels/cft/create-new-root-stack-version.sh from the cft dir e.g.
+        # Run concurrent/cft/create-new-root-stack-version.sh from the cft dir e.g.
         # ./create-new-root-stack-version.sh 2.2.13
         # This will generate a infinstor.yaml from mlflow-parallels-cft.yaml, create a git tag 2.2.13, and copy the yaml/json up to the s3 bucket
         # Now, you can create a stack from 2.2.13 and the correct json/yaml files will be pulled down from the s3 bucket.
@@ -239,12 +239,12 @@ if parallels_cft_version:
 
         # committing and tagging needs to happen after the new CFT version is created since we also need to check the generated mlflow-parallels-cft.yaml file.
         choice:str = input(f"""
-**** do a 'git commit' of needed files in mlflow-parallels.git.  This is to commit the modified mlflow-parallels/cft/mlflow-parallels-cft.yaml and other files. 
-**** use this git commit message: parallels cft={parallels_cft_version} parallels lambda={parallels_lambda_version} mlflow-noproxy-parallels-ui={parallels_ui_version}.  
+**** do a 'git commit' of needed files in concurrent.git.  This is to commit the auto-generated concurrent/cft/mlflow-parallels-cft.yaml and other files. 
+**** use this git commit message: concurrent cft={parallels_cft_version} concurrent lambda={parallels_lambda_version} mlflow-noproxy-parallels-ui={parallels_ui_version}
 **** Press any key after doing this 'git commit': """)  
         
         # Edit any of the json/yaml files for the root or substacks
         # Check it in (unfortunately, this is not testable without checking in)
-        _check_and_tag_git_code("mlflow-parallels", parallels_cft_version)
+        _check_and_tag_git_code("concurrent", parallels_cft_version)
         
 
