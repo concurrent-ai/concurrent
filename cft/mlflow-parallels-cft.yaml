@@ -79,12 +79,12 @@ Parameters:
   ParallelsCftVersion:
     Type: String
     Description: version of mlflow parallels Cft to install
-    Default: 1.0.6
-    AllowedValues: [1.0.6]
+    Default: 1.0.7
+    AllowedValues: [1.0.7]
   MlflowParallelsUiVersion:    
     Type: String
-    Default: 1.0.2
-    AllowedValues: [1.0.2]
+    Default: 1.0.3
+    AllowedValues: [1.0.3]
     Description: Mlflow Parallels UI version to install.  Cannot be modified
   MlflowParallelsLambdaVersion:
     Type: String
