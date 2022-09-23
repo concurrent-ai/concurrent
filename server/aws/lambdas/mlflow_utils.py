@@ -25,8 +25,8 @@ import subprocess
 
 def setup_for_subprocess(auth_info):
     modified_env = dict(os.environ)
-    if 'mlflow_parallels_uri' in auth_info and auth_info['mlflow_parallels_uri']:
-        modified_env['MLFLOW_PARALLELS_URI'] = auth_info['mlflow_parallels_uri']
+    if 'mlflow_concurrent_uri' in auth_info and auth_info['mlflow_concurrent_uri']:
+        modified_env['MLFLOW_CONCURRENT_URI'] = auth_info['mlflow_concurrent_uri']
     if 'mlflow_tracking_uri' in auth_info and auth_info['mlflow_tracking_uri']:
         modified_env['MLFLOW_TRACKING_URI'] = auth_info['mlflow_tracking_uri']
     if 'mlflow_tracking_token' in auth_info and auth_info['mlflow_tracking_token']:
@@ -35,8 +35,8 @@ def setup_for_subprocess(auth_info):
     tmphome = tempfile.mkdtemp()
     modified_env['HOME'] = tmphome
     if 'custom_token' in auth_info and auth_info['custom_token']:
-        os.makedirs(os.path.join(tmphome, ".mlflow-parallels"), exist_ok=True)
-        with open(os.path.join(tmphome, ".mlflow-parallels", "token"), 'w') as fl:
+        os.makedirs(os.path.join(tmphome, ".concurrent"), exist_ok=True)
+        with open(os.path.join(tmphome, ".concurrent", "token"), 'w') as fl:
             fl.write('Token=' + auth_info['custom_token'] + '\n')
             fl.write('ClientId=' + auth_info['cognito_client_id'] + '\n')
     return modified_env
