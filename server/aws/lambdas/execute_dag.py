@@ -47,6 +47,8 @@ def extract_run_params(body):
                 run_params['MLFLOW_TRACKING_TOKEN'] = obss[1]
             elif obss[0] == 'MLFLOW_CONCURRENT_URI':
                 run_params['MLFLOW_CONCURRENT_URI'] = obss[1]
+            elif obss[0] == 'MLFLOW_PARALLELS_URI':
+                run_params['MLFLOW_PARALLELS_URI'] = obss[1]
             elif obss[0] == 'MLFLOW_EXPERIMENT_ID':
                 run_params['experiment_id'] = obss[1]
     if not run_params:
@@ -129,7 +131,7 @@ def execute_dag(event, context):
         auth_info = {
                 'mlflow_tracking_uri' : run_params.get('MLFLOW_TRACKING_URI'),
                 'mlflow_tracking_token': run_params.get('MLFLOW_TRACKING_TOKEN'),
-                'mlflow_concurrent_uri': run_params.get('MLFLOW_CONCURRENT_URI'),
+                'mlflow_concurrent_uri': run_params.get('MLFLOW_CONCURRENT_URI') or run_params.get('MLFLOW_PARALLELS_URI'),
                 'custom_token': custom_token,
                 'cognito_client_id': service_conf['cognitoClientId']['S']
                 }

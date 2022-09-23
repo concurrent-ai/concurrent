@@ -117,7 +117,7 @@ pip list
 echo "End bootstrap Container Pip Packages="
 
 ##
-## Begin mlflow-parallels code
+## Begin concurrent code
 ##
 
 BOOTSTRAP_LOG_FILE="/tmp/bootstrap-log-${ORIGINAL_NODE_ID}.txt"
@@ -290,7 +290,7 @@ import mlflow
 from mlflow.tracking import MlflowClient
 
 run_id = os.getenv('MLFLOW_RUN_ID')
-spath = '.mlflow-parallels/project_files'
+spath = '.concurrent/project_files'
 
 client = MlflowClient()
 client.download_artifacts(run_id, spath, '/tmp/workdir')
@@ -343,7 +343,7 @@ ENDPY
 fail_exit() {
   update_mlflow_run ${PARENT_RUN_ID} "FAILED" 
   kubectl logs "${MY_POD_NAME}" > ${BOOTSTRAP_LOG_FILE}
-  log_mlflow_artifact ${PARENT_RUN_ID} ${BOOTSTRAP_LOG_FILE} '.mlflow-parallels/logs'
+  log_mlflow_artifact ${PARENT_RUN_ID} ${BOOTSTRAP_LOG_FILE} '.concurrent/logs'
   exit 255
 }
 
@@ -355,7 +355,7 @@ if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
   done
 fi
 
-mkdir -p /tmp/workdir/.mlflow-parallels/project_files
+mkdir -p /tmp/workdir/.concurrent/project_files
 
 if [ x"$XFORMNAME" != "x" ] ; then
   echo "Running xform"
@@ -371,7 +371,7 @@ if [ x"$XFORMNAME" != "x" ] ; then
   fi
 else
   echo "Using project files from mlflow artifacts"
-  USE_SUBDIR=".mlflow-parallels/project_files/"
+  USE_SUBDIR=".concurrent/project_files/"
   download_project_files
   if [ $? != 0 ] ; then
     echo "Error downloading project files"
@@ -465,7 +465,7 @@ if [ $CREATE_ENV_IMAGE == "yes" ] ; then
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt update" >> Dockerfile)
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt install -y libfuse-dev" >> Dockerfile)
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install --ignore-installed PyYAML" >> Dockerfile)
-  (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install concurrent_plugin" >> Dockerfile)
+  (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install concurrent-plugin" >> Dockerfile)
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install boto3" >> Dockerfile)
   if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
     for i in $(echo ${ADDITIONAL_PACKAGES} | tr "," "\n")
@@ -486,7 +486,7 @@ fi
 
 MLFLOW_PROJECT_DIR=/tmp/workdir/${USE_SUBDIR}
 
-log_mlflow_artifact ${PARENT_RUN_ID} ${MLFLOW_PROJECT_DIR} '.mlflow-parallels/project_files'
+log_mlflow_artifact ${PARENT_RUN_ID} ${MLFLOW_PROJECT_DIR} '.concurrent/project_files'
 
 # Next, repository for full image, i.e. MLproject env base plus project code/data
 USER_NAME_MUNGED=`echo ${COGNITO_USERNAME}|sed -e 's/@/-/g'`
