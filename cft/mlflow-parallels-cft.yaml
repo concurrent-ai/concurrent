@@ -67,6 +67,10 @@ Parameters:
       Type: String
       Description: k8s cluster table
       Default: parallels-k8s-clusters
+  storageCredentialsTable:
+      Type: String
+      Description: 'concurrent-storage-credentials table'
+      Default: concurrent-storage-credentials
   StaticfilesBucketName:
       Type: String
       Description: s3 bucket for static website
@@ -226,6 +230,7 @@ Resources:
         dagExecutionTable: !Ref dagExecutionTable
         customTokensTable: !Ref customTokensTable
         kubeClustersTable: !Ref kubeClustersTable
+        kubeClustersTable: !Ref storageCredentialsTable
         UseBoundaryPolicy: !Ref UseBoundaryPolicy
         BoundaryPolicyARN: !Ref BoundaryPolicyARN
   staticfiles:
