@@ -816,6 +816,64 @@ Resources:
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
           STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
+  adduserbucket: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: storage_credentials.get_user_buckets
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/concurrent/adduserbucket
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
+  removeuserbucket: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: storage_credentials.remove_user_bucket
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/concurrent/removeuserbucket
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
    
 Outputs:
   MlflowParallelsApiId:

@@ -100,3 +100,75 @@ def query_storage_credentials(cognito_username, bucket):
                 creds_list.append(creds)
         return creds_list
 
+
+def add_user_bucket(event, context):
+    logger.info('## ENVIRONMENT VARIABLES')
+    logger.info(os.environ)
+    logger.info('## EVENT')
+    logger.info(event)
+    logger.info("Received event: " + json.dumps(event, indent=2))
+
+    operation = event['httpMethod']
+    if (operation != 'POST'):
+        return respond(ValueError('Unsupported method ' + str(operation)))
+
+    cognito_username, groups = get_cognito_user(event)
+
+    body = event['body']
+    item = json.loads(body)
+
+    bucket = item['bucket']
+    iam_role = item['iam_role']
+    external_id = item['external_id']
+
+    storage_type = 'aws-s3' ##TODO: Support other storage types
+    record = {
+        'username': {'S': cognito_username},
+        'bucket': {'S': bucket},
+        'iam_role': {'S': iam_role},
+        'external_id': {'S': external_id},
+        'storage_type': {'S': storage_type},
+    }
+
+    ddb_client = boto3.client('dynamodb')
+    try:
+        ddb_client.put_item(TableName=STORAGE_CREDENTIALS_TABLE, Item=record)
+    except Exception as ex:
+        logger.warning("Failed to add bucket: " + str(ex))
+        return respond("Failed to add bucket", dict())
+
+    return respond(None, dict())
+
+
+def remove_user_bucket(event, context):
+    logger.info('## ENVIRONMENT VARIABLES')
+    logger.info(os.environ)
+    logger.info('## EVENT')
+    logger.info(event)
+    logger.info("Received event: " + json.dumps(event, indent=2))
+
+    operation = event['httpMethod']
+    if (operation != 'POST'):
+        return respond(ValueError('Unsupported method ' + str(operation)))
+
+    cognito_username, groups = get_cognito_user(event)
+
+    body = event['body']
+    item = json.loads(body)
+
+    bucket = item['bucket']
+    ddb_client = boto3.client('dynamodb')
+
+    key = {
+        'username': {'S': cognito_username},
+        'bucket': {'S': bucket}
+    }
+    try:
+        ddb_client.delete_item(TableName=STORAGE_CREDENTIALS_TABLE, Key=key)
+    except Exception as ex:
+        logger.warning("remove_user_bucket failed: " + str(ex))
+        return respond("Remove failed", dict())
+
+    return respond(None, dict())
+
+

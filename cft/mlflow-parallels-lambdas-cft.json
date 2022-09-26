@@ -52,6 +52,10 @@
       "Type": "String",
       "Description": "k8s cluster table"
     },
+    "storageCredentialsTable": {
+      "Type": "String",
+      "Description": "concurrent storage credentials"
+    },
     "UseBoundaryPolicy" : {
       "Description" : "Should this stack apply the specified boundary policy to the IAM role created for the mlflow-parallels service?",
       "AllowedValues" : ["true", "false"],
@@ -276,6 +280,33 @@
         "BillingMode": "PAY_PER_REQUEST"
       }
     },
+    "StorageCredentialsTableResource": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "TableName": {"Ref": "storageCredentialsTable"},
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "username",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "bucket",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "username",
+            "KeyType": "HASH"
+          },
+          {
+            "AttributeName": "bucket",
+            "KeyType": "RANGE"
+          }
+        ],
+        "BillingMode": "PAY_PER_REQUEST"
+      }
+    },
     "QueueMessageTokens": {
       "Type": "AWS::DynamoDB::Table",
       "Condition": "isNotInfinstorMlflowServerType",
@@ -314,6 +345,7 @@
           "SubscribersTable": { "Ref": "SubscribersTable" },
           "dagexecutionTable": { "Ref": "dagExecutionTable"},
           "kubeClustersTable": { "Ref": "kubeClustersTable"},
+          "storageCredentialsTable": { "Ref": "storageCredentialsTable"},
           "UseBoundaryPolicy": { "Ref": "UseBoundaryPolicy" },
           "BoundaryPolicyARN": { "Ref": "BoundaryPolicyARN" },
           "CustomTokensTable": { "Ref": "customTokensTable"}
