@@ -819,7 +819,7 @@ Resources:
   adduserbucket: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
-      Handler: storage_credentials.get_user_buckets
+      Handler: storage_credentials.add_user_bucket
       CodeUri: lambdas/.
       Description: >-
        mlflow parallels server 
