@@ -83,8 +83,8 @@ Parameters:
   ParallelsCftVersion:
     Type: String
     Description: version of mlflow parallels Cft to install
-    Default: 1.0.9
-    AllowedValues: [1.0.9]
+    Default: 1.0.10
+    AllowedValues: [1.0.10]
   MlflowParallelsUiVersion:    
     Type: String
     Default: 1.0.3
@@ -230,7 +230,7 @@ Resources:
         dagExecutionTable: !Ref dagExecutionTable
         customTokensTable: !Ref customTokensTable
         kubeClustersTable: !Ref kubeClustersTable
-        kubeClustersTable: !Ref storageCredentialsTable
+        storageCredentialsTable: !Ref storageCredentialsTable
         UseBoundaryPolicy: !Ref UseBoundaryPolicy
         BoundaryPolicyARN: !Ref BoundaryPolicyARN
   staticfiles:
