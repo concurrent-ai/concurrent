@@ -13,7 +13,8 @@ nav:
         - 'Admin':
                 - 'Install Control Plane':
                         - 'Introduction': 'files/install-intro.md'
-                        - 'AWS': 'files/install-parallels.md'
+                        - 'AWS Install': 'files/install-parallels.md'
+                        - 'AWS Update': 'files/aws-update.md'
                 - 'Prepare k8s':
                         - 'Introduction': 'files/prepare-k8s-intro.md'
                         - 'EKS':
