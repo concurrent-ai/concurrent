@@ -256,6 +256,10 @@ def _perform_mount_for_mount_spec(df, mount_spec, mount_path):
 
 
 def get_local_paths(df):
+    if 'FileName' not in df.columns:
+        print('Empty dataframe')
+        return []
+
     if 'storage_specs' in df.attrs:
         mount_specs = df.attrs['storage_specs']
     else:
