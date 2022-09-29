@@ -25,6 +25,9 @@ nav:
                                 - 'Add k8s Role': 'files/add-k8s-role.md'
                                 - 'Create Docker-In-Docker Service': 'files/create-dind.md'
                         - 'Add new k8s namespace': 'files/add-namespace.md'
+        - 'Use':
+                - 'MLproject': 'files/use-mlproject.md'
+                - 'Data': 'files/use-data.md'
 
 extra:
         analytics:
