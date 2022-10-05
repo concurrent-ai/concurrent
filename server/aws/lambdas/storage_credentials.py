@@ -75,9 +75,10 @@ def query_storage_credentials(cognito_username, bucket):
             item = response['Item']
             creds = {
                 'bucket' : bucket,
-                'external_id': item['external_id']['S'],
                 'iam_role': item['iam_role']['S']
             }
+            if 'external_id' in item:
+                creds['external_id'] = item['external_id']['S']
             return creds
         return [creds]
     else:
@@ -94,9 +95,10 @@ def query_storage_credentials(cognito_username, bucket):
             for item in response['Items']:
                 creds = {
                     'bucket': item['bucket']['S'],
-                    'external_id': item['external_id']['S'],
                     'iam_role': item['iam_role']['S']
                 }
+                if 'external_id' in item:
+                    creds['external_id'] = item['external_id']['S']
                 creds_list.append(creds)
         return creds_list
 
@@ -126,9 +128,10 @@ def add_user_bucket(event, context):
         'username': {'S': cognito_username},
         'bucket': {'S': bucket},
         'iam_role': {'S': iam_role},
-        'external_id': {'S': external_id},
         'storage_type': {'S': storage_type},
     }
+    if 'external_id' in item:
+        record['external_id']['S'] = external_id
 
     ddb_client = boto3.client('dynamodb')
     try:
