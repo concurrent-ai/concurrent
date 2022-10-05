@@ -132,6 +132,42 @@ def log_describe_pod(pod_name, run_id):
         client = MlflowClient()
         client.log_artifact(run_id, describe_file, artifact_path='.concurrent/logs')
 
+def log_pip_requirements(base_image, run_id, build_logs):
+    try:
+        start_looking = False
+        for l1 in list(list(build_logs)):
+            line = None
+            if 'stream' in l1:
+                line = l1['stream']
+            elif 'aux' in l1:
+                line = l1['aux']
+            if not line:
+                continue
+            if start_looking:
+                pl = None
+                try:
+                    pl = json.loads(line)
+                except Exception as ex1:
+                    pl = None
+                if pl:
+                    reqs = ''
+                    for one_entry in pl:
+                        if 'name' in one_entry and 'version' in one_entry:
+                            logger.info('Package=' + str(one_entry['name']) + ', version=' + str(one_entry['version']))
+                            reqs = reqs + one_entry['name'] + '==' + one_entry['version'] + '\n'
+                    if reqs:
+                        fpath = '/tmp/requirements-' + base_image + '.txt'
+                        with open(fpath, 'w') as fp:
+                            fp.write(reqs)
+                        client = MlflowClient()
+                        client.log_artifact(run_id, fpath, artifact_path='.concurrent/logs')
+                        logger.info('build_log: successfully wrote requirements.txt')
+                        break
+            if 'Running pip list' in line:
+                start_looking = True
+    except Exception as ex2:
+        logger.info("Caught exception while trying to extract pip package list. Not fatal" + str(ex2))
+
 def fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods):
     pods_status_cmd = ['kubectl', 'get', 'pod',
                        "-o=jsonpath={range .items[*]}{.metadata.name}{\"\\t\"}{.status.phase}{\"\\n\"}{end}"]
@@ -206,7 +242,7 @@ def launch_dag_controller():
     print("DAG Controller response: ", response)
 
 
-def build_docker_image(work_dir, repository_uri, base_image, git_commit):
+def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_commit):
         """
         Build a docker image containing the project in `work_dir`, using the base image.
         """
@@ -218,7 +254,7 @@ def build_docker_image(work_dir, repository_uri, base_image, git_commit):
         version_string = ":" + git_commit[:7] if git_commit else ""
         image_uri = repository_uri + version_string
         dockerfile = (
-            "FROM {imagename}\n COPY {build_context_path}/ {workdir}\n WORKDIR {workdir}\n"
+            "FROM {imagename}\n COPY {build_context_path}/ {workdir}\n WORKDIR {workdir}\n RUN echo 'Running pip list'\n RUN echo $(pip list --format json)"
         ).format(
             imagename=base_image,
             build_context_path=_PROJECT_TAR_ARCHIVE_NAME,
@@ -231,7 +267,7 @@ def build_docker_image(work_dir, repository_uri, base_image, git_commit):
         with open(build_ctx_path, "rb") as docker_build_ctx:
             logger.info("=== Building docker image %s ===", image_uri)
             client = docker.from_env()
-            image, _ = client.images.build(
+            image, build_logs = client.images.build(
                 tag=image_uri,
                 forcerm=True,
                 dockerfile=os.path.join(_PROJECT_TAR_ARCHIVE_NAME, _GENERATED_DOCKERFILE_NAME),
@@ -239,6 +275,7 @@ def build_docker_image(work_dir, repository_uri, base_image, git_commit):
                 custom_context=True,
                 encoding="gzip",
             )
+            log_pip_requirements(base_image, parent_run_id, build_logs)
         try:
             os.remove(build_ctx_path)
         except Exception:
@@ -248,7 +285,7 @@ def build_docker_image(work_dir, repository_uri, base_image, git_commit):
         return image
 
 
-def get_docker_image():
+def get_docker_image(parent_run_id):
     git_commit = os.environ.get('GIT_COMMIT')
     repository_uri = os.environ['REPOSITORY_URI']
     do_build = True
@@ -280,6 +317,7 @@ def get_docker_image():
         project = load_project(work_dir)
         logger.info('Task launcher, base image = ' + str(project.docker_env.get("image")))
         image = build_docker_image(
+            parent_run_id=parent_run_id,
             work_dir=work_dir,
             repository_uri=repository_uri,
             base_image=project.docker_env.get("image"),
@@ -326,7 +364,7 @@ def launch_mlflow_commands(cmd_list):
 
 def main(run_id_list, input_data_specs, parent_run_id):
 
-    image, image_digest = get_docker_image()
+    image, image_digest = get_docker_image(parent_run_id)
 
     mlflow_cmd_list = []
     for run_id, input_spec in zip(run_id_list, input_data_specs):
