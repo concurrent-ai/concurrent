@@ -253,6 +253,10 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         gpu_count = item['resources.requests.nvidia.com/gpu']
         if int(gpu_count) > 0:
             cmap.data['RESOURCES_REQUESTS_NVIDIA_COM_GPU'] = gpu_count
+    elif 'resources.requests.gpu' in item:
+        gpu_count = item['resources.requests.gpu']
+        if int(gpu_count) > 0:
+            cmap.data['RESOURCES_REQUESTS_NVIDIA_COM_GPU'] = gpu_count
     if 'params' in item:
         print('params=' + str(item['params']))
         cmap.data['PROJECT_PARAMS'] = base64.b64encode(json.dumps(item['params']).encode('utf-8'), altchars=None).decode('utf-8')

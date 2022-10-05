@@ -73,10 +73,15 @@ def get_presigned_url(event, context):
         params = {'Bucket': bucket, 'Key': path}
 
     sts_client = boto3.client('sts')
-    assumed_role_object = sts_client.assume_role(
-        RoleArn=creds['iam_role'],
-        ExternalId=creds['external_id'],
-        RoleSessionName=str(uuid.uuid4()))
+    if 'external_id' in creds:
+        assumed_role_object = sts_client.assume_role(
+            RoleArn=creds['iam_role'],
+            ExternalId=creds['external_id'],
+            RoleSessionName=str(uuid.uuid4()))
+    else:
+        assumed_role_object = sts_client.assume_role(
+            RoleArn=creds['iam_role'],
+            RoleSessionName=str(uuid.uuid4()))
 
     credentials = assumed_role_object['Credentials']
     client = boto3.client("s3",
