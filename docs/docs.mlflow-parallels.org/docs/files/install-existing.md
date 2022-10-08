@@ -59,9 +59,13 @@ configmap/aws-auth patched
 
 ```
 
-## Step 3: Create a k8s role for running jobs and bind this role to a k8s ServiceAccount
+## Step 3: k8s roles
 
-**Create a k8s role for running jobs**
+Concurrent uses two roles in each namespace - one high privilege role for system components and one low privilege role for user code
+
+### High privlege role
+
+This role is used by system components
 
 Download the yaml file k8s-role-for-parallels.yaml from [here](https://docs.concurrent-ai.org/scripts/k8s-role-for-parallels.yaml "Download k8s-role-for-parallels.yaml"). Apply this yaml file to your cluster
 
@@ -87,6 +91,27 @@ kubectl apply -f k8s-service-role.yaml
 serviceaccount/k8s-serviceaccount-for-parallels-parallelsns created
 rolebinding.rbac.authorization.k8s.io/k8s-service-account-binding-parallelsns created
 
+```
+
+### Low privlege role
+
+User code runs in this low privilege role
+
+Download the yaml file user-role.yaml from [here](https://docs.concurrent-ai.org/scripts/user-role.yaml "Download user-role.yaml"). Apply this yaml file to your cluster
+
+Next, edit the user-role.yaml file to change the namespace from parallelsns to the new namespace being created 
+
+```
+sed -e 's/parallelsns/newnsforconcurrent/g' user-role.yaml > user-role-new.yaml
+```
+
+Finally, apply to the k8s cluster
+
+```
+kubectl apply -f user-role-new.yaml 
+clusterrole.rbac.authorization.k8s.io/k8s-role-for-users-newnsforconcurrent created
+serviceaccount/k8s-serviceaccount-for-users-newnsforconcurrent created
+rolebinding.rbac.authorization.k8s.io/k8s-serviceaccount-for-users-newnsforconcurrent-binding created
 ```
 
 ## Step 4: Create a Docker in Docker service for the default namespace
