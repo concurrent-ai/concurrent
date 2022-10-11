@@ -58,6 +58,10 @@ def add_kube_cluster(event, context):
         role = item['role']
         role_ext = item['role_ext']
         region = item['region']
+        ecr_role = item['ecr_role']
+        ecr_role_ext = item['ecr_role_ext']
+        ecr_type = item['ecr_type']
+        ecr_region = item['ecr_region']
         record = {
             'username': {'S': cognito_username},
             'cluster_name': {'S': cluster_name},
@@ -65,7 +69,11 @@ def add_kube_cluster(event, context):
             'cluster_type': {'S': cluster_type},
             'eks_role': {'S': role},
             'eks_role_ext': {'S': role_ext},
-            'eks_region': {'S': region}
+            'eks_region': {'S': region},
+            'ecr_role': {'S': ecr_role},
+            'ecr_role_ext': {'S': ecr_role_ext},
+            'ecr_type': {'S': ecr_type},
+            'ecr_region': {'S': ecr_region}
         }
     else:
         return respond("Invalid Cluster Type", dict())
@@ -141,6 +149,10 @@ def query_kube_clusters(cognito_username):
                 c_info['eks_role'] = item['eks_role']['S']
                 c_info['eks_role_ext'] = item['eks_role_ext']['S']
                 c_info['eks_region'] = item['eks_region']['S']
+                c_info['ecr_role'] = item['ecr_role']['S']
+                c_info['ecr_role_ext'] = item['ecr_role_ext']['S']
+                c_info['ecr_type'] = item['ecr_type']['S']
+                c_info['ecr_region'] = item['ecr_region']['S']
             else:
                 logger.warning("Invalid cluster definition")
                 ##Ignore this record

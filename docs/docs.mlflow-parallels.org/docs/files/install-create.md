@@ -6,7 +6,7 @@ Note - you will incur AWS charges for this EKS cluster.
 
 # Create EKS Cluster
 
-To create a fresh EKS cluster for use with Concurrent for MLflow, [click here](https://console.aws.amazon.com/cloudformation/home?region=us-east-2#/stacks/new?stackName=EKS-for-Concurrent&templateURL=https://s3.amazonaws.com/docs.concurrent-ai.org/cft/version/0.3/install/create-eks-for-parallels.yaml "Create EKS Cluster using CFT"){:target="\_blank"}. It will take you to your AWS Console's CloudFormation page with a pre-loaded CFT. Screenshots and instructions below.
+To create a fresh EKS cluster for use with Concurrent for MLflow, [click here](https://console.aws.amazon.com/cloudformation/home?region=us-east-2#/stacks/new?stackName=EKS-for-Concurrent&templateURL=https://s3.amazonaws.com/docs.concurrent-ai.org/cft/version/0.4/install/create-eks-for-parallels.yaml "Create EKS Cluster using CFT"){:target="\_blank"}. It will take you to your AWS Console's CloudFormation page with a pre-loaded CFT. Screenshots and instructions below.
 
 **CloudFormation Console - Start**
 

@@ -1,3 +1,3 @@
 def get_version():
-    return 'e1093d1'
+    return 'b39e3a9'
 
