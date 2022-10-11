@@ -92,8 +92,8 @@ Parameters:
     Description: Mlflow Parallels UI version to install.  Cannot be modified
   MlflowParallelsLambdaVersion:
     Type: String
-    Default: 1.0.9
-    AllowedValues: [1.0.9]
+    Default: 1.0.10
+    AllowedValues: [1.0.10]
     Description: Mlflow Parallels Lambda version to install.  Cannot be modified
   UseBoundaryPolicy:
     Type: String
