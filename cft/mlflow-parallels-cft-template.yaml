@@ -227,7 +227,7 @@ Resources:
         dagExecutionTable: !Ref dagExecutionTable
         customTokensTable: !Ref customTokensTable
         kubeClustersTable: !Ref kubeClustersTable
-        kubeClustersTable: !Ref storageCredentialsTable
+        storageCredentialsTable: !Ref storageCredentialsTable
         UseBoundaryPolicy: !Ref UseBoundaryPolicy
         BoundaryPolicyARN: !Ref BoundaryPolicyARN
   staticfiles:
