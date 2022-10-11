@@ -13,5 +13,5 @@ parser.add_argument('--file_name', type=str, required=True)
 args = parser.parse_args()
 
 client = MlflowClient()
-client.log_artifact(args.run_id, args.file_name)
+client.log_artifact(args.run_id, args.file_name, artifact_path=args.path)
 os._exit(os.EX_OK)

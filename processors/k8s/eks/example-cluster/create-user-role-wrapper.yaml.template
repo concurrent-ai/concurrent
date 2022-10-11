@@ -6,4 +6,4 @@ Resources:
     Properties:
       ClusterName: mlflow-parallels
       Namespace: "default"
-      Url: s3://docs.concurrent-ai.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/k8s-service-role-for-parallels.yaml
+      Url: s3://docs.concurrent-ai.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/user-role.yaml

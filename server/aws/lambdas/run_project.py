@@ -351,7 +351,8 @@ def lookup_eks_cluster_config(cognito_username, kube_cluster_name, subs):
     for cl in kube_clusters:
         if cl['cluster_name'] == kube_cluster_name and cl['cluster_type'] == 'EKS':
             logger.info("Found user's cluser " + kube_cluster_name)
-            return cl['eks_region'], cl['eks_role'], cl['eks_role_ext']
+            return cl['eks_region'], cl['eks_role'], cl['eks_role_ext'], cl['ecr_role'], \
+                    cl['ecr_role_ext'], cl['ecr_type'], cl['ecr_region']
 
     logger.info("Use cluster info for subscriber")
     # Fall back to subscriber's cluster
@@ -363,8 +364,18 @@ def lookup_eks_cluster_config(cognito_username, kube_cluster_name, subs):
         eks_role = subs['eksRole']['S']
     if 'eksRoleExt' in subs:
         eks_role_ext = subs['eksRoleExt']['S']
+    if 'ecrRegion' in subs:
+        ecr_region = subs['ecrRegion']['S']
+    else:
+        ecr_region = 'us-east-1'
+    if 'ecrType' in subs:
+        ecr_type = subs['ecrType']['S']
+    if 'ecrRole' in subs:
+        ecr_role = subs['ecrRole']['S']
+    if 'ecrRoleExt' in subs:
+        ecr_role_ext = subs['ecrRoleExt']['S']
 
-    return eks_region, eks_role, eks_role_ext
+    return eks_region, eks_role, eks_role_ext, ecr_role, ecr_role_ext, ecr_type, ecr_region
 
 
 def run_project_eks(cognito_username, context, subs, item, service_conf):
@@ -377,21 +388,10 @@ def run_project_eks(cognito_username, context, subs, item, service_conf):
     eks_secret_access_key = None
     eks_session_token = None
 
-    eks_region, eks_role, eks_role_ext = lookup_eks_cluster_config(cognito_username, kube_cluster_name, subs)
-    ecr_role = None
-    ecr_role_ext = None
-    ecr_type = None
-    ecr_region = None
+    eks_region, eks_role, eks_role_ext, \
+        ecr_role, ecr_role_ext, ecr_type, ecr_region = lookup_eks_cluster_config(cognito_username, kube_cluster_name, subs)
     ecr_aws_account_id = None
 
-    if 'ecrRole' in subs:
-        ecr_role = subs['ecrRole']['S']
-    if 'ecrRoleExt' in subs:
-        ecr_role_ext = subs['ecrRoleExt']['S']
-    if 'ecrType' in subs:
-        ecr_type = subs['ecrType']['S']
-    if 'ecrRegion' in subs:
-        ecr_region = subs['ecrRegion']['S']
     if eks_role and eks_role_ext:
         sts_client = boto3.client('sts')
         assumed_role_object = sts_client.assume_role(
