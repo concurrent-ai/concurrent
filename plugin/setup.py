@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="concurrent-plugin",
-    version="0.3.10",
+    version="0.3.11",
     description="Plugin for Concurrent for MLFlow",
     packages=find_packages(),
     # Require MLflow as a dependency of the plugin, so that plugin users can simply install
