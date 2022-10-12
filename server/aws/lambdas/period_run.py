@@ -64,6 +64,7 @@ def period_run(event, context):
         logger.error("No periodic run found for id "+str(periodic_run_id))
         return respond(ValueError('Could not find periodic run '
                                   + periodic_run_id + ', err=' + status))
+    periodic_run_name = periodic_run['periodic_run_name']
 
     success, status, service_conf = get_service_conf()
     if (success == False):
@@ -83,7 +84,7 @@ def period_run(event, context):
     auth_info = {
             'mlflow_tracking_uri' : periodic_run_info.get('MLFLOW_TRACKING_URI'),
             'mlflow_tracking_token': periodic_run_info.get('MLFLOW_TRACKING_TOKEN'),
-            'mlflow_parallels_uri': periodic_run_info.get('MLFLOW_PARALLELS_URI'),
+            'mlflow_concurrent_uri': periodic_run_info.get('MLFLOW_CONCURRENT_URI'),
             'custom_token': custom_token,
             'cognito_client_id': cognito_client_id
             }
@@ -172,8 +173,6 @@ def launch_dag(cognito_username, periodic_run_name, dagid, experiment_id, auth_i
         frequency, data):
     print('periodic dag execution')
     dag_json = dag_utils.fetch_dag_details(cognito_username, dagid)
-
-    dag_json = execute_dag.update_dag_to_handle_input_partitioners(dag_json)
 
     #dag may already have an experiment id but for periodic run,
     #we use the experiment id assigned to the periodic run
