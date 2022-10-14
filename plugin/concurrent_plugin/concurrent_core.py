@@ -23,8 +23,11 @@ def _list_one_dir(client, bucket, prefix_in, arr):
     for page in page_iterator:
         contents = page.get('Contents')
         if (contents != None):
-            # print('   ' + str(contents))
+            print('Num keys = ' + str(len(contents)))
             for one_content in contents:
+                if one_content['Key'].endswith('/'):
+                    ##Ignore folders
+                    continue
                 if 'Metadata' in one_content:
                     md = json.loads(one_content['Metadata'])
                 else:
@@ -40,7 +43,7 @@ def _list_one_dir(client, bucket, prefix_in, arr):
         if (common_prefixes != None):
             for prefix in common_prefixes:
                 this_prefix = str(prefix['Prefix'])
-                # print('   ' + this_prefix)
+                print('List recursively for  ' + this_prefix)
                 if this_prefix:
                     _list_one_dir(client, bucket, this_prefix, arr)
 
