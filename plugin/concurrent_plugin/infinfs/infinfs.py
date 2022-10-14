@@ -6,31 +6,21 @@ import mlflow
 from fuse import Operations
 from urllib.parse import urlparse
 import sys
-from infinstor.infinfs import infin_download
+from concurrent_plugin.infinfs import infin_download
 import boto3
+import hashlib
+import shutil
 
 ##This import is required
 from infinstor import infin_boto3
 
-verbose = True
-fuse_debug_handle = None
-fuse_debug_file = "/tmp/fuse_debug.log"
 
-def print_unbufferred(*args, **kwargs):
-    global fuse_debug_handle
-    if fuse_debug_handle is None:
-        fuse_debug_handle = open(fuse_debug_file, "a")
+def get_cache_key(mount_spec):
+   return hashlib.md5(json.dumps(mount_spec).encode('utf-8')).hexdigest()
 
-    if verbose:
-        binary_args = []
-        for arg in args:
-            binary_args.append(str(arg).encode('utf-8'))
-        print(*binary_args, file=fuse_debug_handle, **kwargs)
-        fuse_debug_handle.close()
-        fuse_debug_handle = open(fuse_debug_file, "a")
 
 class InfinFS(Operations):
-    def __init__(self, mount_specs):
+    def __init__(self, mount_specs, shadow_path=None, use_cache=True):
         self.mountpoint = mount_specs['mountpoint']
         self.infinstor_time_spec = mount_specs.get('infinstor_time_spec')
         self.prefix = mount_specs.get('prefix')
@@ -40,10 +30,18 @@ class InfinFS(Operations):
         mountdir = os.path.dirname(self.mountpoint)
         mountbasename = os.path.basename(self.mountpoint)
         shadowbasename = ".infin-" + mountbasename + "-shadow"
-        self.shadow_location = mountdir + "/" + shadowbasename
+        cache_key = get_cache_key(mount_specs)
+        if shadow_path:
+            self.shadow_location = os.path.join(shadow_path, cache_key, shadowbasename)
+        else:
+            self.shadow_location = os.path.join(mountdir, cache_key, shadowbasename)
         if not os.path.exists(self.shadow_location):
+            os.makedirs(self.shadow_location)
+        elif not use_cache:
+            shutil.rmtree(self.shadow_location)
             os.mkdir(self.shadow_location)
-        print_unbufferred(self.prefix, self.mountpoint, self.shadow_location, self.bucket)
+        self.s3_client = self.get_s3_client()
+        print(self.prefix, self.mountpoint, self.shadow_location, self.bucket, self.s3_client)
 
     def get_mountpoint(self):
         return self.mountpoint
@@ -88,7 +86,7 @@ class InfinFS(Operations):
         return path
 
     def get_file_type(self, s3_list_response):
-        if 'CommonPrefixes' in s3_list_response:
+        if s3_list_response.get('CommonPrefixes', None):
             return 'directory'
         elif 'Contents' in s3_list_response:
             if len(s3_list_response['Contents']) > 1 \
@@ -104,14 +102,12 @@ class InfinFS(Operations):
 
     def readdir(self, path, fh):
         ##List operation
+        print("Inside readdir ## ", path)
         full_path = self._full_path(path)
         prefix = self.get_remote_path(full_path)
-        if prefix and os.path.isdir(full_path):
-            prefix = prefix + '/'
-        client = self.get_s3_client()
-        print_unbufferred("readdir ## ", self.bucket, prefix)
-        obj_list_response = client.list_objects_v2(Bucket=self.bucket, Prefix=prefix, Delimiter='/')
-        print_unbufferred(obj_list_response)
+        prefix = prefix + '/'
+        obj_list_response = self.get_remote_ls(prefix)
+        print(obj_list_response)
         dirents = ['.', '..']
         if 'Contents' in obj_list_response:
             for key in obj_list_response['Contents']:
@@ -119,6 +115,8 @@ class InfinFS(Operations):
                 rel_path = remote_path[len(prefix):].lstrip('/')
                 if not rel_path or rel_path == '.infinstor':
                     continue
+                local_shadow_path = self.get_shadow_path(os.path.join(full_path, rel_path))
+                self.create_tmp_file(local_shadow_path, int(key['Size']))
                 dirents.append(rel_path)
         if 'CommonPrefixes' in obj_list_response:
             for key in obj_list_response['CommonPrefixes']:
@@ -130,7 +128,7 @@ class InfinFS(Operations):
                 local_shadow_folder = self.get_shadow_path(folder_path)
                 st = self.create_folder(local_shadow_folder)
                 dirents.append(rel_path)
-        print_unbufferred(dirents)
+        print(dirents)
         for r in dirents:
             yield r
 
@@ -143,30 +141,26 @@ class InfinFS(Operations):
         local_shadow_path = self.get_shadow_path(full_path)
         if not os.path.exists(local_shadow_path):
             remote_path = self.get_remote_path(full_path)
-
-            #Check for folder or download
-            client = self.get_s3_client()
-            obj_list_response = client.list_objects_v2(Bucket=self.bucket, Prefix=remote_path, Delimiter='/')
-            ftype = self.get_file_type(obj_list_response)
-            if ftype == 'directory':
-                #This is a folder
-                print_unbufferred(path, "is a folder")
-                self.create_folder(local_shadow_path)
-            elif ftype == 'file':
-                print_unbufferred(path, "is a file")
-                tmp_shadow_file = self.get_temporary_shadow_file(local_shadow_path, ".tmp")
-                infin_download.download_objects(local_shadow_path, tmp_shadow_file, self.bucket,
-                                            remote_path, self.infinstor_time_spec)
-            else:
-                return None
+            tmp_shadow_file = self.get_temporary_shadow_file(local_shadow_path, ".tmp")
+            infin_download.download_objects(local_shadow_path, tmp_shadow_file, self.bucket,
+                                        remote_path, self.infinstor_time_spec, self.s3_client)
         return os.open(local_shadow_path, flags)
 
-    def get_remote_ls(self, local_path):
-        prefix = self.get_remote_path(local_path)
-        print_unbufferred("#get_remote_ls# " + local_path, " Bucket = " + self.bucket + ", prefix = " + prefix)
+    def get_remote_ls(self, prefix):
+        print("#get_remote_ls#  Bucket = " + self.bucket + ", prefix = " + prefix)
         client = self.get_s3_client()
-        obj_list_response = client.list_objects_v2(Bucket=self.bucket, Prefix=prefix, Delimiter='/')
-        print_unbufferred(obj_list_response)
+        paginator = client.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=self.bucket, Prefix=prefix, Delimiter='/')
+
+        contents = []
+        common_prefixes = []
+        for page in pages:
+            if 'Contents' in page:
+                contents.extend(page['Contents'])
+            if 'CommonPrefixes' in page:
+                common_prefixes.extend(page['CommonPrefixes'])
+        obj_list_response = {'Contents': contents, 'CommonPrefixes': common_prefixes}
+        print(obj_list_response)
         return obj_list_response
 
 
@@ -175,26 +169,29 @@ class InfinFS(Operations):
 
     def statfs(self, path):
         stv = os.statvfs(self.shadow_location)
-        return dict((key, getattr(stv, key)) for key in ('f_bavail', 'f_bfree',
+        stat = dict((key, getattr(stv, key)) for key in ('f_bavail', 'f_bfree',
                                                          'f_blocks', 'f_bsize', 'f_favail', 'f_ffree', 'f_files',
                                                          'f_flag',
                                                          'f_frsize', 'f_namemax'))
+        print('statfs #', stat)
+        return stat
 
     def getattr(self, path, fh=None):
-        print_unbufferred("Inside getattr path = " + path)
+        print("Inside getattr path = " + path)
         if path == "/":
             st = os.lstat(self.shadow_location)
             return self.get_attr_from_lstat(st)
         full_path = self._full_path(path)
         local_shadow_path = self.get_shadow_path(full_path)
         temp_shadow_file = self.get_temporary_shadow_file(local_shadow_path, ".tmp")
-        print_unbufferred(full_path, local_shadow_path, temp_shadow_file)
+        print(full_path, local_shadow_path, temp_shadow_file)
         if os.path.exists(local_shadow_path):
             st = os.lstat(local_shadow_path)
         elif os.path.exists(temp_shadow_file):
             st = os.lstat(temp_shadow_file)
         else:
-            list_response = self.get_remote_ls(full_path)
+            remote_prefix = self.get_remote_path(full_path)
+            list_response = self.get_remote_ls(remote_prefix)
             ftype = self.get_file_type(list_response)
             if ftype == "directory":
                 st = self.create_folder(local_shadow_path)
@@ -209,10 +206,12 @@ class InfinFS(Operations):
         stat = dict((key, getattr(st, key)) for key in ('st_atime', 'st_ctime',
                                                         'st_gid', 'st_mode', 'st_mtime', 'st_nlink', 'st_size',
                                                         'st_uid'))
+        print('get_attr_from_lstat #', stat)
         return stat
 
     def create_folder(self, shadow_path):
-        os.makedirs(shadow_path, exist_ok=True)
+        if not os.path.exists(shadow_path):
+            os.makedirs(shadow_path, exist_ok=True)
         return os.lstat(shadow_path)
 
     def get_temporary_shadow_file(self, local_shadow_path, suffix):

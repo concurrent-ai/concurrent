@@ -3,7 +3,7 @@ import json
 import os
 import logging
 import uuid
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote, unquote
 import datetime
 
 from utils import get_cognito_user
@@ -69,8 +69,17 @@ def get_presigned_url(event, context):
 
     if method == 'list_objects_v2':
         params = {'Bucket': bucket, 'Prefix': path, 'Delimiter': '/'}
+        if 'ContinuationToken' in qs:
+            params['ContinuationToken'] = unquote(qs['ContinuationToken'])
     else:
         params = {'Bucket': bucket, 'Key': path}
+        if 'Marker' in qs:
+            params['Marker'] = qs['Marker']
+
+    if 'StartAfter' in qs:
+        params['StartAfter'] = qs['StartAfter']
+    if 'MaxKeys' in qs:
+        params['MaxKeys'] = qs['MaxKeys']
 
     sts_client = boto3.client('sts')
     if 'external_id' in creds:
@@ -91,7 +100,32 @@ def get_presigned_url(event, context):
     )
 
     ps_url = client.generate_presigned_url(method, Params=params, ExpiresIn = (24*60*60))
+
     logger.info('Presigned URL is ' + str(ps_url))
+    ##Handle quoting of continuation token
+    if 'ContinuationToken' in params:
+        url_comps = urlparse(ps_url)
+        query_comps = url_comps.query.split('&')
+        for i in range(len(query_comps)):
+            if query_comps[i].startswith('continuation-token='):
+                ct_quoted = quote(params['ContinuationToken'])
+                query_comps[i] = 'continuation-token=' + ct_quoted
+        query = '&'.join(query_comps)
+        url_comps._replace(query=query)
+        ps_url = url_comps.geturl()
+        logger.info('Updated Presigned URL is ' + str(ps_url))
+
+    if 'Marker' in params:
+        url_comps = urlparse(ps_url)
+        query_comps = url_comps.query.split('&')
+        for i in range(len(query_comps)):
+            if query_comps[i].startswith('marker='):
+                ct_quoted = quote(params['Marker'])
+                query_comps[i] = 'marker=' + ct_quoted
+        query = '&'.join(query_comps)
+        url_comps._replace(query=query)
+        ps_url = url_comps.geturl()
+        logger.info('Updated Presigned URL is ' + str(ps_url))
 
     if (ps_url == None):
         return respond(ValueError('Failed to create presigned URL'))
