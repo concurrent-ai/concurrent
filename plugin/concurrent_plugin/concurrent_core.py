@@ -43,8 +43,13 @@ def _list_one_dir(client, bucket, prefix_in, arr):
         if (common_prefixes != None):
             for prefix in common_prefixes:
                 this_prefix = str(prefix['Prefix'])
-                print('List recursively for  ' + this_prefix)
                 if this_prefix:
+                    if not prefix_in.endswith('/') and this_prefix[len(prefix_in)] != '/':
+                        ## E.g. if two folders abc and abc_x are at the same level
+                        ##     and prefix_in is abc, only abc/ is considered, abc_x is ignored
+                        print(this_prefix + ' is not a subfolder of ' + prefix_in + ', ignoring')
+                        continue
+                    print('List recursively for  ' + this_prefix)
                     _list_one_dir(client, bucket, this_prefix, arr)
 
 

@@ -21,7 +21,6 @@ def download_one_object(local_path, bucket, remote_path, infinstor_time_spec, cl
         s3_client = client
     else:
         s3_client = get_s3_client(infinstor_time_spec)
-    print(s3_client, type(s3_client))
     s3_client.download_file(bucket, remote_path, local_path)
 
 

@@ -6,16 +6,20 @@ import subprocess
 from fuse import FUSE, fuse_exit
 
 ## stdout_redirect is redirect stdout/err to a debug file
-from concurrent_plugin.infinfs import stdout_redirect
+# from concurrent_plugin.infinfs import stdout_redirect
 from concurrent_plugin.infinfs.infinfs import InfinFS
 
+VERBOSE = True
 
 def launch_fuse_infinfs(ifs):
     mountpath = ifs.get_mountpoint()
     if os.path.ismount(mountpath):
         umountp = subprocess.Popen(['umount', '-lf', mountpath], stdout=sys.stdout, stderr=subprocess.STDOUT)
         umountp.wait()
-    FUSE(ifs, mountpath, nothreads=True, foreground=False)
+    if VERBOSE:
+        FUSE(ifs, mountpath, nothreads=True, foreground=True)
+    else:
+        FUSE(ifs, mountpath, nothreads=True, foreground=False)
     print("exiting")
 
 

@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 
 INPUT_SPEC_CONFIG = '/root/.concurrent-data/inputdataspec'
 
+VERBOSE = True
 
 def get_input_spec_json(input_name=None):
     config_path = INPUT_SPEC_CONFIG
@@ -31,7 +32,12 @@ def perform_mount(mountpoint_path, mount_spec_object, use_cache=True, shadow_pat
     mounted_paths_list = []
     mounted_paths_list.append(mountpoint_path)
     mount_spec_str = json.dumps(mount_spec_object)
-    cmd = ['python', '-m', 'concurrent_plugin.infinfs.mount_main', mount_spec_str]
+
+    if VERBOSE:
+        cmd = ['python', '-u', '-m', 'concurrent_plugin.infinfs.mount_main', mount_spec_str]
+    else:
+        cmd = ['python', '-m', 'concurrent_plugin.infinfs.mount_main', mount_spec_str]
+
     if use_cache:
         cmd.append('True')
     else:
