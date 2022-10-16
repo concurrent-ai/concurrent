@@ -89,84 +89,16 @@ def period_run(event, context):
             'cognito_client_id': cognito_client_id
             }
 
-    ##Handle Dags
-    if 'dagid' in periodic_run_info:
-        if 'data' in periodic_run_info:
-            data = periodic_run_info['data']
-        else:
-            data = None
-        print("Periodic execution of dag for dagid " + periodic_run_info['dagid'])
-        launch_dag(cognito_username, periodic_run_name, periodic_run_info['dagid'], experiment_id,
-                auth_info, frequency, data)
-        return
-    else:
+    if not 'dagid' in periodic_run_info:
+        logger.error("dagid required for period runs")
+        return respond(ValueError('Could not find dagid for run ' + periodic_run_id))
+    if 'data' in periodic_run_info:
         data = periodic_run_info['data']
-
-    ##Continue with periodic transform execution
-    transform_list = periodic_run_info['transforms']
-    xformname = transform_list[0]['transform_name']
-    run_target = periodic_run_info['runtarget']
-    input_params = periodic_run_info.get('params')
-    xform_params = dict()
-    if input_params.get('positional'):
-        xform_params['positional'] = input_params['positional']
-    if input_params.get('kwargs'):
-        kv_items = dict()
-        for entry in input_params.get('kwargs'):
-            key = entry['key']
-            val = entry['value']
-            kv_items[key] = val
-        xform_params['kwargs'] = kv_items
-    logger.info("##XFORM_PARAMS##")
-    logger.info(xform_params)
-
-    num_of_xforms = len(transform_list)
-
-    if num_of_xforms > 1:
-        ##Create Parent Run
-        parent_run_name = periodic_run['periodic_run_name']
-        parent_run_id, parent_artifact_uri, parent_run_status, parent_run_lifecycle_stage \
-            = call_create_run(cognito_username, experiment_id, auth_info, parent_run_name)
     else:
-        parent_run_id = None
-
-    ## create run_id
-    run_id, artifact_uri, run_status, run_lifecycle_stage = call_create_run(
-        cognito_username, experiment_id, auth_info, xformname, parent_run_id)
-    dag_detail_artifact = {'dag_json': json.dumps({'testk1': 'testv1'}), 'dag_execution_id': 'blah-blah'}
-
-    instance_type = run_target['instance_type']
-    periodic_run_name = periodic_run['periodic_run_name']
-
-    input_data_spec = None
-    if data['type'] != 'no-input-data':
-        input_data_spec = get_input_data_spec(data, frequency)
-
-    launch_run_project(cognito_username, auth_info, run_id, artifact_uri, xformname,
-        xform_params, experiment_id, frequency, instance_type,
-        input_data_spec, periodic_run_name, None, parent_run_id, 0)
-
-    if num_of_xforms > 1:
-        previous_run_id = run_id
-        index = 1
-        for txform in transform_list[1:]:
-            index = index + 1
-            last_in_chain_of_xforms = 'False'
-            if index == num_of_xforms:
-                ##Set this flag for the last transform
-                ##to ensure parent run is marked as completed
-                last_in_chain_of_xforms = 'True'
-            #Create a new runid
-            txformname = txform['transform_name']
-            run_id, artifact_uri, run_status, run_lifecycle_stage = call_create_run(
-                cognito_username, experiment_id, auth_info, txformname, parent_run_id)
-            input_data_spec = {"type": "mlflow-run-artifacts", "run_id": previous_run_id}
-            input_data_spec_str = get_input_data_spec_string(input_data_spec)
-            launch_run_project(cognito_username, auth_info, run_id, artifact_uri, txformname,
-                               {}, experiment_id, frequency, instance_type,
-                               input_data_spec_str, periodic_run_name, None, parent_run_id,
-                               last_in_chain_of_xforms)
-            previous_run_id = run_id
+        data = None
+    print("Periodic execution of dag for dagid " + periodic_run_info['dagid'])
+    launch_dag(cognito_username, periodic_run_name, periodic_run_info['dagid'], experiment_id,
+                auth_info, frequency, data)
     return
 
 def launch_dag(cognito_username, periodic_run_name, dagid, experiment_id, auth_info,
@@ -223,168 +155,6 @@ def get_path_prefix(node_input):
         raise('No prefix specified')
 
 
-def launch_run_project(
-        cognito_username, auth_info, run_id, artifact_uri, xformname,
-        xform_params, experiment_id, frequency, instance_type,
-        input_data_spec, periodic_run_name, dag_execution_info,
-        xform_path=None, parent_run_id=None, last_in_chain_of_xforms='False',
-        parallelization=None, partition_launch_params = None, k8s_params=None):
-    logger.info("RUN_ID #")
-    logger.info(run_id)
-    logger.info(artifact_uri)
-    pdst = urlparse(artifact_uri)
-    bucket_name = pdst.netloc
-    if (pdst.path[0] == '/'):
-        path_in_bucket = pdst.path[1:]
-    else:
-        path_in_bucket = pdst.path
-
-##    #Store conda env file, and dockerfile into the project directory
-##    success, status, xform_info = get_xform_info(cognito_username, xformname)
-##    if (success == False):
-##        err = "period run: Error {0} in get_xform_info".format(status)
-##        logger.error(err)
-##        return respond(ValueError(err))
-##
-##    logger.info(xform_info)
-##    conda_env = xform_info.get('conda_env')
-##    dockerfile = xform_info.get('dockerfile')
-##    xformcode = xform_info.get('xformcode')
-##
-##    localdir = tempfile.mkdtemp()
-##
-##    xformcode_file = make_short_name(xformname)+".py"
-##    if xformcode:
-##        write_file(localdir, xformcode_file, xformcode['S'])
-##    else:
-##        err = "xform code not found"
-##        logger.error(err)
-##        return respond(err)
-##
-##    if conda_env:
-##        write_file(localdir, "conda.yaml", conda_env['S'])
-##        if not input_data_spec:
-##            write_mlflow_project_file_no_input_spec(localdir, xformcode_file, xform_params)
-##        else:
-##            write_mlflow_project_with_input_spec(localdir, xformname, xform_params)
-##    elif dockerfile:
-##        write_file(localdir, "dockerfile", dockerfile['S'])
-##        ##MLproject is created when docker image is built in rclocal
-##    else:
-##        err = "No conda environment or dockerfile specified"
-##        logger.error(err)
-##        return respond(err)
-##
-##    upload_objects(cognito_username, bucket_name, path_in_bucket + '/.mlflow-parallels/project_files', localdir)
-
-    #Call run-project
-    body = dict()
-    body['MLFLOW_TRACKING_URI'] = auth_info.get('mlflow_tracking_uri')
-    body['MLFLOW_TRACKING_TOKEN'] = auth_info.get('mlflow_tracking_token')
-    body['MLFLOW_PARALLELS_URI'] = auth_info.get('mlflow_parallels_uri')
-    body['project_files_bucket'] = bucket_name
-    body['project_files_path_in_bucket'] = path_in_bucket
-    body['run_id'] = run_id
-    body['experiment_id'] = experiment_id
-    if parent_run_id:
-        body['parent_run_id'] = parent_run_id
-    body['last_in_chain_of_xforms'] = last_in_chain_of_xforms
-    body['instance_type'] = instance_type
-    if periodic_run_name:
-        body['periodic_run_name'] = periodic_run_name
-    if dag_execution_info:
-        body['dagid'] = dag_execution_info['dagid']
-        body['dag_execution_id'] = dag_execution_info['dag_execution_id']
-
-    if parallelization:
-        body['parallelization'] = parallelization
-
-    ddt = calculate_drop_dead_time(frequency)
-    if (ddt):
-        body['drop_dead_time'] = ddt
-    if input_data_spec:
-        body['input_data_spec'] = input_data_spec
-    if xformname:
-        body['xformname'] = xformname
-    if xform_path:
-        body['xform_path'] = xform_path
-
-    params = {}
-    if xform_params.get('kwargs'):
-        params.update(xform_params.get('kwargs'))
-    ##TODO Handle positional arguments
-    body['params'] = params
-
-    if partition_launch_params:
-        body['partition_params'] = partition_launch_params
-
-    if k8s_params:
-        body.update(k8s_params)
-
-    run_project_event = dict()
-    run_project_event['body'] = json.dumps(body)
-    run_project_event['requestContext'] = create_request_context(cognito_username)
-    run_project_event['httpMethod'] = 'POST'
-
-    response = run_project.run_project(run_project_event, None)
-
-    logger.info("Response ##")
-    logger.info(response)
-    return response['body']
-
-def write_file(dir, file_name, content):
-    with open(dir + sep + file_name, "w") as fh:
-        fh.write(content)
-
-def write_mlflow_project_file_no_input_spec(projdir, xformcode_file, xform_params):
-    with open(projdir + sep + 'MLproject', "w") as projfile:
-        projfile.write('Name: run-' + xformcode_file + '\n')
-        projfile.write('conda_env: conda.yaml\n')
-        projfile.write('\n')
-        projfile.write('entry_points:' + '\n')
-        projfile.write('  main:' + '\n')
-        cmd_str = '    command: "python {0}'.format(xformcode_file)
-        if xform_params:
-            positional_args = xform_params.get("positional")
-            if positional_args:
-                for arg in positional_args:
-                    cmd_str = cmd_str + " " + arg
-            kwargs = xform_params.get('kwargs')
-            if kwargs:
-                for key, value in kwargs.items():
-                    cmd_str = cmd_str + " --" + key + "=" + value
-        cmd_str = cmd_str + '"\n'
-        projfile.write(cmd_str)
-
-def write_mlflow_project_with_input_spec(projdir, xformname, xform_params):
-    with open(projdir + sep + 'MLproject', "w") as projfile:
-        kwp = ''
-        kwargs = xform_params.get('kwargs')
-        if kwargs:
-            for key, value in kwargs.items():
-                kwp = kwp + (' --' + key + '={' + key + '}')
-        else:
-            kwargs = dict()
-        projfile.write('Name: run-' + make_short_name(xformname) + '\n')
-        projfile.write('conda_env: conda.yaml\n')
-        projfile.write('\n')
-        projfile.write('entry_points:' + '\n')
-        projfile.write('  main:' + '\n')
-        projfile.write('    parameters:\n')
-        projfile.write('      service: string\n')
-        projfile.write('      input_data_spec: string\n')
-        projfile.write('      xformname: string\n')
-        for key, value in kwargs.items():
-            projfile.write('      ' + key + ': string\n')
-        projfile.write(
-            '    command: "python -c \'from infinstor import mlflow_run; mlflow_run.main()\'\
-                    --input_data_spec={input_data_spec} --service={service}\
-                    --xformname={xformname}' + kwp + '"\n')
-
-def get_input_data_spec(data, frequency):
-    spec = get_input_data_spec_object(data, frequency)
-    return get_input_data_spec_string(spec)
-
 def get_input_data_spec_object(data, frequency):
     input_data_spec = dict()
     input_data_spec['type'] = data['type']
@@ -406,9 +176,6 @@ def get_input_data_spec_object(data, frequency):
     logger.info('input_data_spec#')
     logger.info(input_data_spec)
     return input_data_spec
-
-def get_input_data_spec_string(input_data_spec):
-    return json.dumps(input_data_spec)
 
 def get_current_timestamp():
     ts = time.time()
@@ -444,55 +211,6 @@ def get_last_run_timestamp(ts, frequency, slice=None):
         last_ts = last_period_ts
 
     return datetime.fromtimestamp(last_ts).strftime('%Y%m%d%H%M%S')
-
-
-# drop_dead_time is the utc time in seconds since 1/1/1970 when
-# all xforms for this periodic run must drop dead
-def calculate_drop_dead_time(frequency):
-    dt = datetime.utcnow()
-    if (frequency == 'hourly'):
-        rv = (dt - datetime(1970, 1, 1)).total_seconds()+(60*60)
-        rv_dt = datetime.fromtimestamp(rv)
-        logger.info('calculate_drop_dead_time: hourly. now='
-                + dt.strftime("%m/%d/%Y, %H:%M:%S")
-                + ', drop_dead_time=' + rv_dt.strftime("%m/%d/%Y, %H:%M:%S"))
-        return rv
-    elif (frequency == 'daily'):
-        rv = (dt - datetime(1970, 1, 1)).total_seconds()+(24*60*60)
-        rv_dt = datetime.fromtimestamp(rv)
-        logger.info('calculate_drop_dead_time: daily. now='
-                + dt.strftime("%m/%d/%Y, %H:%M:%S")
-                + ', drop_dead_time=' + rv_dt.strftime("%m/%d/%Y, %H:%M:%S"))
-        return rv
-    elif (frequency == 'weekly'):
-        rv = (dt - datetime(1970, 1, 1)).total_seconds()+(7*24*60*60)
-        rv_dt = datetime.fromtimestamp(rv)
-        logger.info('calculate_drop_dead_time: weekly. now='
-                + dt.strftime("%m/%d/%Y, %H:%M:%S")
-                + ', drop_dead_time=' + rv_dt.strftime("%m/%d/%Y, %H:%M:%S"))
-        return rv
-    elif (frequency == 'monthly'):
-        if (dt.month == 12):
-            newDt = dt.replace(month=1, year=dt.year + 1)
-        else:
-            newDt = dt.replace(month=dt.month + 1)
-        rv = (newDt - datetime(1970, 1, 1)).total_seconds()
-        rv_dt = datetime.fromtimestamp(rv)
-        logger.info('calculate_drop_dead_time: montly. now='
-                + dt.strftime("%m/%d/%Y, %H:%M:%S")
-                + ', drop_dead_time=' + rv_dt.strftime("%m/%d/%Y, %H:%M:%S"))
-        return rv
-    elif (frequency == 'yearly'):
-        newDt = dt.replace(year=dt.year + 1)
-        rv = (newDt - datetime(1970, 1, 1)).total_seconds()
-        rv_dt = datetime.fromtimestamp(rv)
-        logger.info('calculate_drop_dead_time: yearly. now='
-                + dt.strftime("%m/%d/%Y, %H:%M:%S")
-                + ', drop_dead_time=' + rv_dt.strftime("%m/%d/%Y, %H:%M:%S"))
-        return rv
-    else:
-        logger.info('calculate_drop_dead_time: not setting up')
-        return None
 
 # Test
 if __name__ == "__main__":
