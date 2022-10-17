@@ -1,0 +1,32 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-role-for-users-parallelsns
+rules:
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - get
+  - list
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-serviceaccount-for-users-parallelsns
+  namespace: parallelsns
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: k8s-serviceaccount-for-users-parallelsns-binding
+  namespace: parallelsns
+subjects:
+- kind: ServiceAccount
+  name: k8s-serviceaccount-for-users-parallelsns
+  namespace: parallelsns
+roleRef:
+  kind: ClusterRole
+  name: k8s-role-for-users-parallelsns
+  apiGroup: ""

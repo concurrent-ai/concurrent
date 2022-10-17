@@ -14,6 +14,8 @@ import period_run, lock_utils, dag_utils, run_project
 from mlflow_utils import call_create_run, fetch_run_id_info, update_run, create_experiment, log_mlflow_artifact
 import ddb_mlflow_parallels_txns as ddb_txns
 
+from kubernetes.client.exceptions import ApiException
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 DAG_EXECUTION_TABLE = dag_utils.DAG_EXECUTION_TABLE
@@ -244,13 +246,38 @@ def execute_dag(event, context):
                                                     parent_run_id=parent_run_id, last_in_chain_of_xforms='False',
                                                     parallelization=parallelization, k8s_params=k8s_params)
                     futures.append((launch_future, n))
-
                 for f, nid in futures:
                     print("Look for future result for node {}".format(nid))
-                    f.result(timeout=30)
+                    try:
+                        f.result(timeout=30)
+                    except ApiException as apex:
+                        emsg = None
+                        st = -1
+                        if apex.status == 404:
+                            st = 404
+                            logger.warning("404 not found error while submitting bootstrap for " + str(nid))
+                            try:
+                                jsb = json.loads(apex.body)
+                                if jsb['details']['kind'] == 'namespaces':
+                                    emsg = 'Namespace does not exist'
+                                    logger.warning('Namespace does not exist')
+                            except:
+                                emsg = 'Unable to parse error body into json'
+                                logger.warning('Unable to parse error body into json')
+                        if nid in dag_execution_status['nodes']:
+                            logger.warning('Marking run_id ' + dag_execution_status['nodes'][nid]['run_id'] + ' as FAILED')
+                            dag_execution_status['nodes'][nid]['status'] = 'FAILED'
+                            update_run(auth_info, dag_execution_status['nodes'][nid]['run_id'], 'FAILED')
+                            log_mlflow_artifact(auth_info, dag_execution_status['nodes'][nid]['run_id'],
+                                    {"status": apex.status, "message": str(emsg), "body": str(apex.body), "reason": str(apex.reason)},
+                                    '.concurrent/logs', 'run-logs.txt')
+                        else:
+                            logger.warning('Hmm. ' + str(nid) + ' not in dag_execution_status?')
                     lock_lease_time = renew_lock(lock_key, lock_lease_time)
             except Exception as ex:
                 logger.warning("Failure in launching nodes: " + str(ex))
+                import traceback
+                logger.warning(traceback.format_exc())
                 return respond("Node launch failed", dict())
 
         update_dag_run_status(cognito_username, dag_execution_id, dag_execution_status)

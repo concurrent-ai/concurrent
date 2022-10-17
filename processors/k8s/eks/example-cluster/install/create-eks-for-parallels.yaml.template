@@ -562,14 +562,14 @@ Resources:
   iamrole:
     Type: AWS::CloudFormation::Stack
     Properties:
-      TemplateURL: https://s3.amazonaws.com/docs.mlflow-parallels.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/iam-role-for-parallels.yaml
+      TemplateURL: https://s3.amazonaws.com/docs.concurrent-ai.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/iam-role-for-parallels.yaml
       Parameters:
         ParallelsAWSAccount: !Ref ParallelsAWSAccount
   quickstartwrapper:
     Type: AWS::CloudFormation::Stack
     DependsOn: iamrole
     Properties:
-      TemplateURL: https://s3.amazonaws.com/docs.mlflow-parallels.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/quickstart-wrapper.yaml
+      TemplateURL: https://s3.amazonaws.com/docs.concurrent-ai.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/quickstart-wrapper.yaml
       Parameters:
         NodeInstanceType:
           !Ref NodeInstanceType
@@ -579,11 +579,16 @@ Resources:
     Type: AWS::CloudFormation::Stack
     DependsOn: quickstartwrapper
     Properties:
-      TemplateURL: https://s3.amazonaws.com/docs.mlflow-parallels.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/create-k8s-role-wrapper.yaml
+      TemplateURL: https://s3.amazonaws.com/docs.concurrent-ai.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/create-k8s-role-wrapper.yaml
+  createuserrolewrapper:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: quickstartwrapper
+    Properties:
+      TemplateURL: https://s3.amazonaws.com/docs.concurrent-ai.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/create-user-role-wrapper.yaml
   CreateDindService:
     Type: "AWSQS::Kubernetes::Resource"
     DependsOn: createk8srolewrapper
     Properties:
       ClusterName: mlflow-parallels
       Namespace: "default"
-      Url: s3://docs.mlflow-parallels.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/k8s-dind-service.yaml
+      Url: s3://docs.concurrent-ai.org/cft/version/REP_MLFLOW_PARALLELS_STACK_VER/k8s-dind-service.yaml

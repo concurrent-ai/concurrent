@@ -559,6 +559,8 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/root/.concurrent-data', name=input_spec_name))
         job_template["spec"]["template"]["spec"]["containers"][0]["volumeMounts"] = volume_mounts
 
+        job_template["spec"]["template"]["spec"]["serviceAccountName"] = 'k8s-serviceaccount-for-users-' + job_namespace
+
         job_template["spec"]["template"]["spec"]["volumes"] = [
                     kubernetes.client.V1Volume(name="parallels-token-file", secret=kubernetes.client.V1SecretVolumeSource(secret_name=token_secret_name)),
                     kubernetes.client.V1Volume(name="aws-creds-file", secret=kubernetes.client.V1SecretVolumeSource(secret_name=awscreds_secret_name))

@@ -83,17 +83,17 @@ Parameters:
   ParallelsCftVersion:
     Type: String
     Description: version of mlflow parallels Cft to install
-    Default: 1.0.10
-    AllowedValues: [1.0.10]
+    Default: 1.0.13
+    AllowedValues: [1.0.13]
   MlflowParallelsUiVersion:    
     Type: String
-    Default: 1.0.3
-    AllowedValues: [1.0.3]
+    Default: 1.0.4
+    AllowedValues: [1.0.4]
     Description: Mlflow Parallels UI version to install.  Cannot be modified
   MlflowParallelsLambdaVersion:
     Type: String
-    Default: 1.0.9
-    AllowedValues: [1.0.9]
+    Default: 1.0.11
+    AllowedValues: [1.0.11]
     Description: Mlflow Parallels Lambda version to install.  Cannot be modified
   UseBoundaryPolicy:
     Type: String

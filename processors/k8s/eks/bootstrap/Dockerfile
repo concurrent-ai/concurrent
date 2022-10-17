@@ -44,17 +44,13 @@ RUN install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 
 ARG IGNORECACHE=1
 RUN echo "$IGNORECACHE"
-RUN python3 -m pip install --no-cache-dir concurrent_plugin
-
-#### RUN python3 -m pip install --no-cache-dir infinstor_mlflow_plugin
-# To test with a modified infinstor_mlflow_plugin without pushing to pypi,
-# copy the infinstor-mlflow/plugin directory here, modify it, then
+#### RUN python3 -m pip install --no-cache-dir concurrent_plugin
+# To test with a modified concurrent_plugin without pushing to pypi,
+# copy the <concurrent>/plugin directory here, modify it, then
 # comment out the line above and uncomment the two lines below
-## ADD ./plugin /tmp/plugin
-## RUN cd /tmp/plugin && python3 ./setup.py sdist bdist_wheel && pip3 install dist/infinstor_mlflow_plugin-[0-9].[0-9].[0-9]*-py3-none-any.whl
+ADD ./plugin /tmp/plugin
+RUN cd /tmp/plugin && python3 ./setup.py sdist bdist_wheel && pip3 install dist/concurrent_plugin-[0-9].[0-9].[0-9]*-py3-none-any.whl
 
-#### RUN python3 -m pip install --no-cache-dir --upgrade infinstor
-
-RUN pip list
+RUN echo $(pip list)
 VOLUME /var/lib/docker
 CMD /usr/local/bin/bootstrap.sh
