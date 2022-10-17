@@ -1,30 +1,14 @@
-import sys
 import os
-from fuse import FUSE, fuse_exit
 import subprocess
 import time
 import mlflow
-import glob
 import json
 from urllib.parse import urlparse
 
-import infinstor
-from infinstor.infinfs.infinfs import InfinFS
 
 INPUT_SPEC_CONFIG = '/root/.concurrent-data/inputdataspec'
 
-fuse_debug_handle = None
-fuse_debug_file = "/tmp/fuse_debug.log"
-fuse_debug_handle = open(fuse_debug_file, "a")
-
-def launch_fuse_infinfs(ifs):
-    mountpath = ifs.get_mountpoint()
-    if os.path.ismount(mountpath):
-        umountp = subprocess.Popen(['umount', '-lf', mountpath], stdout=sys.stdout, stderr=subprocess.STDOUT)
-        umountp.wait()
-    FUSE(ifs, mountpath, nothreads=True, foreground=False)
-    print("exiting")
-
+VERBOSE = True
 
 def get_input_spec_json(input_name=None):
     config_path = INPUT_SPEC_CONFIG
@@ -44,12 +28,23 @@ def get_input_spec_json(input_name=None):
     return specs
 
 
-def perform_mount(mountpoint_path, mount_spec_object):
+def perform_mount(mountpoint_path, mount_spec_object, use_cache=True, shadow_path=None):
     mounted_paths_list = []
     mounted_paths_list.append(mountpoint_path)
     mount_spec_str = json.dumps(mount_spec_object)
-    fuse_process = subprocess.Popen(['python', os.path.realpath(__file__), mount_spec_str],
-                                    stdout=fuse_debug_handle, stderr=subprocess.STDOUT)
+
+    if VERBOSE:
+        cmd = ['python', '-u', '-m', 'concurrent_plugin.infinfs.mount_main', mount_spec_str]
+    else:
+        cmd = ['python', '-m', 'concurrent_plugin.infinfs.mount_main', mount_spec_str]
+
+    if use_cache:
+        cmd.append('True')
+    else:
+        cmd.append('False')
+    if shadow_path:
+        cmd.append(shadow_path)
+    fuse_process = subprocess.Popen(cmd, stderr=subprocess.STDOUT)
 
     ##Check if mounts are visible
     max_wait_time = 300
@@ -64,15 +59,6 @@ def perform_mount(mountpoint_path, mount_spec_object):
                 max_wait_time = max_wait_time - sleep_time
         print("{0} mounted successfully".format(mp))
 
-
-def infin_log_output(output_dir):
-    if 'INFINSTOR_SERVICE' not in os.environ:
-        print("No action needed")
-        return
-    if mlflow.active_run():
-        infinstor.log_all_artifacts_in_dir(None, None, output_dir, delete_output=False)
-    else:
-        print('No active run')
 
 def get_named_input_spec_map(inputs):
     named_map = dict()
@@ -144,16 +130,3 @@ def load_input_specs(specs, requested_mountpoint):
     os.makedirs(mount_spec_object['mountpoint'], exist_ok=True)
     return mount_spec_object
 
-
-if __name__ == '__main__':
-    mount_spec_str = sys.argv[1]
-    mount_specs = json.loads(mount_spec_str)
-
-    if mount_specs == None:
-        print('Error no input spec found, skipping mount')
-        exit(-1)
-
-    service_name = os.environ.get('INFINSTOR_SERVICE')
-    ifs = InfinFS(mount_specs)
-    launch_fuse_infinfs(ifs)
-    exit(0)
