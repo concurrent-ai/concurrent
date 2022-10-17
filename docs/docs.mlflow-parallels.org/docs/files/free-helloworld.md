@@ -41,7 +41,7 @@ We have chosen a container with 256 Megabytes of RAM and 250 milli CPUs, i.e. on
 
 These are some details that you will need while trying this out:
 
-- Kubernetes Cluster: **concurrent-free**
+- Kubernetes Cluster: **parallels-free**
 - Cluster's Namespace: **parallelsns**
 - GIT Url: **https://github.com/concurrent-ai/concurrent-examples.git**
 - Project Path: **helloworld**
