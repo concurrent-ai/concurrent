@@ -765,9 +765,6 @@ def launch_bootstrap_run_project(
     if parallelization:
         body['parallelization'] = parallelization
 
-    ddt = period_run.calculate_drop_dead_time(frequency)
-    if (ddt):
-        body['drop_dead_time'] = ddt
     if run_input_spec_map:
         body['run_input_spec_map'] = json.dumps(run_input_spec_map)
     if xformname:
