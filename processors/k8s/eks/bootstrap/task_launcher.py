@@ -106,8 +106,12 @@ def upload_logs_for_pod(run_id, pod_name, tmp_log_file):
     except Exception as ex:
         logger.warning("Failed to fetch logs for {}, {}: {}".format(run_id, pod_name, ex))
         return
-    client = MlflowClient()
-    client.log_artifact(run_id, tmp_log_file, artifact_path='.concurrent/logs')
+
+    try:
+        client = MlflowClient()
+        client.log_artifact(run_id, tmp_log_file, artifact_path='.concurrent/logs')
+    except Exception as ex:
+        logger.warning("Failed upload logs for {}, {}: {}".format(run_id, pod_name, ex))
 
 
 def update_mlflow_run(run_id, status):
