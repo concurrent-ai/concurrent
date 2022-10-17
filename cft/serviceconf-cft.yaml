@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Create the required entry in ddb table infinstor-ServiceConf
+Description: Create the ddb serviceConf table and the required entry in table infinstor-ServiceConf
 Parameters:
   MlflowParallelsDomain:
     Type: String
@@ -12,7 +12,20 @@ Parameters:
   ServiceConfTable:
     Type: String
     Description: 'parallels-ServiceConf table'
-Resources: 
+Resources:
+  ServiceConfTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref ServiceConfTable
+      AttributeDefinitions:
+        -
+          AttributeName: "configVersion"
+          AttributeType: "N"
+      KeySchema:
+        -
+          AttributeName: "configVersion"
+          KeyType: "HASH"
+      BillingMode: "PAY_PER_REQUEST"
   DynamoCfnLambdaRole:
       Type: AWS::IAM::Role
       Properties:
