@@ -574,4 +574,5 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         resp = api_instance.create_namespaced_job(namespace=job_namespace, body=job_template, pretty=True)
         _logger.info( resp.kind + " " + resp.metadata.name +" created." )
         tracking.MlflowClient().log_param(active_run.info.run_id, 'kubernetes.job_name', job_name)
+        tracking.MlflowClient().log_param(active_run.info.run_id, 'kubectl.get_pods', 'kubectl -n ' + str(job_namespace) + ' get pods --selector=job-name=' + job_name)
         return KubernetesSubmittedRun(active_run.info.run_id, job_name, job_namespace)
