@@ -106,7 +106,8 @@ def execute_dag(event, context):
 
     if dag_execution_id:
         lock_key, lock_lease_time = acquire_idle_row_lock(cognito_username, dag_execution_id)
-        dag_json, dag_execution_status, auth_info = fetch_dag_execution_info(cognito_username, dag_id, dag_execution_id)
+        dag_exec_record = dag_utils.fetch_dag_execution_info(cognito_username, dag_id, dag_execution_id)
+        dag_json, dag_execution_status, auth_info = dag_exec_record['dag_json'], dag_exec_record['run_status'], dag_exec_record['auth_info']
         parent_run_name = dag_execution_status['parent_run_name']
         parent_run_id = dag_execution_status['parent_run_id']
         if not experiment_id and 'experiment_id' in dag_json:
@@ -160,10 +161,13 @@ def execute_dag(event, context):
         for n in dag_json['nodes']:
             node_statuses[n['id']] = {'status' : 'PENDING'}
         dag_execution_status['nodes'] = node_statuses
-        dag_utils.create_dag_execution_record(cognito_username, dag_id, dag_execution_id, dag_execution_status, dag_json, auth_info)
+        dag_utils.create_dag_execution_record(cognito_username, dag_id, dag_execution_id, dag_execution_status,
+                                              dag_json, parent_run_id, auth_info)
 
         dag_detail_artifact = {'dag_json': dag_json, 'dag_execution_id': dag_execution_id}
         log_mlflow_artifact(auth_info, parent_run_id, dag_detail_artifact, '.concurrent', 'dag_details.json.bin')
+        dag_exec_details_artifact = {'dag_json': dag_json, 'run_status': dag_execution_status}
+        log_mlflow_artifact(auth_info, parent_run_id, dag_exec_details_artifact, '.concurrent', dag_utils.DAG_RUNTIME_ARTIFACT)
         lock_key, lock_lease_time = acquire_idle_row_lock(cognito_username, dag_execution_id)
 
     if httpOperation:
@@ -195,7 +199,8 @@ def execute_dag(event, context):
                                              outgoing_graph, node_dict, edge_dict, dag_execution_status)
         if modified:
             new_dag_json = dag_utils.create_new_dag_json(dag_json, node_dict, edge_dict)
-            update_ddb_dag_exec_info(cognito_username, new_dag_json, dag_execution_id, dag_execution_status)
+            update_dag_exec_runtime_info(cognito_username, auth_info, new_dag_json, dag_execution_id,
+                                         dag_execution_status, parent_run_id)
             ##Evaluate ready to run nodes again
             allDone, ready_to_run = get_ready_to_run_nodes(incoming_dag_graph, node_statuses)
             dag_json = new_dag_json
@@ -280,7 +285,7 @@ def execute_dag(event, context):
                 logger.warning(traceback.format_exc())
                 return respond("Node launch failed", dict())
 
-        update_dag_run_status(cognito_username, dag_execution_id, dag_execution_status)
+        update_dag_run_status(cognito_username, auth_info, dag_execution_id, dag_execution_status, parent_run_id)
         rv = {'status' : 'success', 'dagExecutionId': dag_execution_id, 'parentRunId': parent_run_id}
         if allDone:
             update_run(auth_info, parent_run_id, 'FINISHED')
@@ -311,9 +316,6 @@ def release_row_lock(dag_exec_key):
 def renew_lock(key, lock_lease_time):
     return lock_utils.renew_lock(DAG_EXECUTION_TABLE, key, lock_lease_time)
 
-def fetch_dag_execution_info(cognito_username, dag_id, dag_execution_id):
-    record = dag_utils.get_dag_execution_record(cognito_username, dag_id, dag_execution_id)
-    return record['dag_json'], record['run_status'], record['auth_info']
 
 def create_dag_execution_key(cognito_username, dag_execution_id):
     key = dict()
@@ -325,17 +327,22 @@ def create_dag_execution_key(cognito_username, dag_execution_id):
     key['dag_execution_id'] = rk
     return key
 
-def update_dag_run_status(cognito_username, dag_execution_id, status):
+
+def update_dag_run_status(cognito_username, auth_info, dag_execution_id, status, parent_run_id):
+    try:
+        dag_runtime = dag_utils.fetch_dag_runtime_artifact(auth_info, parent_run_id)
+        dag_runtime['run_status'] = status
+        log_mlflow_artifact(auth_info, parent_run_id, dag_runtime, '.concurrent', dag_utils.DAG_RUNTIME_ARTIFACT)
+    except Exception as ex:
+        print('Failed to update dag execution info', ex)
+        raise ex
+
     client = boto3.client('dynamodb')
     key = create_dag_execution_key(cognito_username, dag_execution_id)
 
-    print('Updating status##')
-    print(status)
-
     now = int(time.time())
-    uxp = 'SET run_status = :st, update_time = :ut'
+    uxp = 'SET update_time = :ut'
     eav = {
-        ":st" : {"S" : json.dumps(status)},
         ":ut" : {"N" : str(now)}
     }
 
@@ -607,26 +614,35 @@ def override_dag_runtime_params_for_recovery(dag_json, dagParamsJsonRuntime, dag
 
     return dag_json
 
-def update_ddb_dag_exec_info(cognito_username, dag_json, dag_execution_id, dag_exec_status):
-    client = boto3.client('dynamodb')
 
-    dag_exec_key = create_dag_execution_key(cognito_username, dag_execution_id)
+def update_dag_exec_runtime_info(cognito_username, auth_info, dag_json, dag_execution_id,
+                                 dag_exec_status, parent_run_id):
+    try:
+        dag_runtime = dag_utils.fetch_dag_runtime_artifact(auth_info, parent_run_id)
+        dag_runtime['dag_json'] = dag_json
+        dag_runtime['run_status'] = dag_exec_status
+        log_mlflow_artifact(auth_info, parent_run_id, dag_runtime, '.concurrent', dag_utils.DAG_RUNTIME_ARTIFACT)
+    except Exception as ex:
+        print('Failed to update dag execution info', ex)
+        raise ex
+
+    client = boto3.client('dynamodb')
+    key = create_dag_execution_key(cognito_username, dag_execution_id)
 
     now = int(time.time())
-    uxp = 'SET dagJson = :ps, run_status = :rs, update_time = :ut'
+    uxp = 'SET update_time = :ut'
     eav = {
-        ":ps": {"S": json.dumps(dag_json)},
-        ":rs": {"S": json.dumps(dag_exec_status)},
-        ":ut": {"N": str(now)}
+        ":ut" : {"N" : str(now)}
     }
 
     try:
-        client.update_item(TableName=DAG_EXECUTION_TABLE, Key=dag_exec_key, UpdateExpression=uxp,
-                           ExpressionAttributeValues=eav)
+        client.update_item(TableName=DAG_EXECUTION_TABLE, Key=key, UpdateExpression=uxp,
+                       ExpressionAttributeValues=eav)
         return True
     except Exception as ex:
-        status_msg = 'caught while updating dag_json' + str(ex)
-        raise Exception(status_msg)
+        status_msg = 'caught while updating dag status' + str(ex)
+        raise(status_msg)
+
 
 
 def perform_node_partitioning(ready_to_run, incoming_edge_graph, outgoing_edge_graph,
@@ -647,6 +663,7 @@ def perform_node_partitioning(ready_to_run, incoming_edge_graph, outgoing_edge_g
             new_node_info = copy.deepcopy(node_info)
             new_node_info['original_node_id'] = node_info['id']
             new_node_info['id'] = node_info['id'] + '-part-' + str(index + 1)
+            new_node_info.pop('parallelization', None)
             new_node_ids.append(new_node_info['id'])
             node_dict[new_node_info['id']] = new_node_info
             dag_execution_status['nodes'][new_node_info['id']] = {'status': 'PENDING'}

@@ -10,6 +10,7 @@ from concurrent_plugin.infinfs import infin_download
 import boto3
 import hashlib
 import shutil
+import tempfile
 
 ##This import is required
 from infinstor import infin_boto3
@@ -29,12 +30,13 @@ class InfinFS(Operations):
         ##Create shadow location
         mountdir = os.path.dirname(self.mountpoint)
         mountbasename = os.path.basename(self.mountpoint)
-        shadowbasename = ".infin-" + mountbasename + "-shadow"
+        shadowbasename = "infin-" + mountbasename + "-shadow"
         cache_key = get_cache_key(mount_specs)
         if shadow_path:
-            self.shadow_location = os.path.join(shadow_path, cache_key, shadowbasename)
+            self.shadow_location = os.path.join(shadow_path, '.concurrent', cache_key, shadowbasename)
         else:
-            self.shadow_location = os.path.join(mountdir, cache_key, shadowbasename)
+            tmpdir = tempfile.mkdtemp()
+            self.shadow_location = os.path.join(tmpdir, '.concurrent', cache_key, shadowbasename)
         if not os.path.exists(self.shadow_location):
             os.makedirs(self.shadow_location)
         elif not use_cache:

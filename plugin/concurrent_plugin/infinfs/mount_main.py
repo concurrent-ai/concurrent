@@ -4,9 +4,6 @@ import json
 import subprocess
 
 from fuse import FUSE, fuse_exit
-
-## stdout_redirect is redirect stdout/err to a debug file
-# from concurrent_plugin.infinfs import stdout_redirect
 from concurrent_plugin.infinfs.infinfs import InfinFS
 
 VERBOSE = True
