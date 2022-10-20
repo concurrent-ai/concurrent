@@ -7,11 +7,13 @@ import os
 import re
 import boto3
 import ddb_mlflow_parallels_queries as ddb_pqrs
+from mlflow_utils import fetch_mlflow_artifact_file
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 DAG_INFO_TABLE = os.environ['DAG_TABLE']
 DAG_EXECUTION_TABLE = os.environ['DAG_EXECUTION_TABLE']
+DAG_RUNTIME_ARTIFACT = 'dag_runtime.json.bin'
 
 def fetch_dag_details(cognito_username, dag_id):
 
@@ -28,7 +30,8 @@ def fetch_dag_details(cognito_username, dag_id):
         raise(msg)
     return dag_info
 
-def create_dag_execution_record(cognito_username, dag_id, dag_execution_id, status, dag_json, auth_info):
+def create_dag_execution_record(cognito_username, dag_id, dag_execution_id, status, dag_json,
+                                parent_run_id, auth_info):
     client = boto3.client('dynamodb')
 
     now = int(time.time())
@@ -36,11 +39,12 @@ def create_dag_execution_record(cognito_username, dag_id, dag_execution_id, stat
         'dag_execution_id' : {'S' : dag_execution_id},
         'username': {'S' : cognito_username},
         'dagid': {'S': dag_id},
-        'run_status': {'S': json.dumps(status)},
+        #'run_status': {'S': json.dumps(status)},
         'locked' : {'S': 'no'},
         'update_time' : {'N': str(now)},
-        'dagJson' : {'S': json.dumps(dag_json)},
+        #'dagJson' : {'S': json.dumps(dag_json)},
         'authInfo' : {'S': json.dumps(auth_info)},
+        'parent_run_id': {'S': parent_run_id},
         'start_time': {'N': str(now)}
     }
 
@@ -101,17 +105,13 @@ def get_dag_execution_record(cognito_username, dag_id, dag_execution_id):
         if dag_id != item['dagid']['S']:
             msg = "Invalid dag execution id " + str(dag_execution_id) + "for dag " + str(dag_id)
             raise(msg)
-        dag_run_status =  json.loads(item['run_status']['S'])
-        print(dag_run_status)
-        dag_json = json.loads(item['dagJson']['S'])
         auth_info = json.loads(item['authInfo']['S'])
         record = {
             'dag_id': dag_id,
             'dag_execution_id': dag_execution_id,
-            'dag_json': dag_json,
             'auth_info': auth_info,
-            'run_status': dag_run_status,
-            'update_time': item['update_time']['N']
+            'update_time': item['update_time']['N'],
+            'parent_run_id': item['parent_run_id']['S']
         }
         if 'start_time' in item:
             record['start_time'] = item['start_time']['N']
@@ -165,3 +165,18 @@ def get_spec_list_from_named_input_map(named_map):
     for key, vals in named_map.items():
         input_list = input_list + vals
     return input_list
+
+
+def fetch_dag_execution_info(cognito_username, dag_id, dag_execution_id):
+    record = get_dag_execution_record(cognito_username, dag_id, dag_execution_id)
+    dag_runtime_info = fetch_dag_runtime_artifact(record['auth_info'], record['parent_run_id'])
+    record['dag_json'] = dag_runtime_info['dag_json']
+    record['run_status'] = dag_runtime_info['run_status']
+    return record
+
+
+def fetch_dag_runtime_artifact(authinfo, parent_run_id):
+    dag_runtime_path = os.path.join('.concurrent', DAG_RUNTIME_ARTIFACT)
+    artifact_content = fetch_mlflow_artifact_file(authinfo, parent_run_id, dag_runtime_path)
+    dag_runtime_info = json.loads(artifact_content.decode('utf-8'))
+    return dag_runtime_info

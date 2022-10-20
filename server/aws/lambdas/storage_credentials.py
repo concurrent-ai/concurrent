@@ -131,7 +131,7 @@ def add_user_bucket(event, context):
         'storage_type': {'S': storage_type},
     }
     if 'external_id' in item:
-        record['external_id']['S'] = external_id
+        record['external_id'] = {'S': item['external_id']}
 
     ddb_client = boto3.client('dynamodb')
     try:

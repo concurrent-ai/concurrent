@@ -1,27 +1,9 @@
 import json
 import sys
 import os
-import io
-import logging
-import time
-from datetime import datetime, timezone
-import re
-from os.path import sep
 import tempfile
-import sysconfig
-
-import boto3
-import requests
-from requests.exceptions import HTTPError
-
-from utils import get_service_conf, create_request_context
-from periodic_run_utils import get_periodic_run_info
-from transform_utils import get_xform_info, make_short_name
-
-import dag_utils, execute_dag
-
-from urllib.parse import urlparse
 import subprocess
+import time
 
 def setup_for_subprocess(auth_info):
     modified_env = dict(os.environ)
@@ -155,3 +137,37 @@ def log_mlflow_artifact(auth_info, run_id, artifact_object, path, file_name):
     proc.wait()
     if proc.returncode != 0:
         print('Error calling log_artifact.py=' + full_out)
+
+
+def download_mlflow_artifact(auth_info, run_id, artifact_path, dst_dir):
+    modified_env = setup_for_subprocess(auth_info)
+    cmd = [sys.executable, os.getcwd() + '/download_artifacts.py',
+           '--run_id', str(run_id), '--path', artifact_path,
+           '--dst_path', dst_dir]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=modified_env)
+    full_out = ''
+    for line in proc.stdout:
+        fline = line.rstrip().decode("utf-8")
+        full_out = full_out + fline + '\n'
+    proc.wait()
+    if proc.returncode != 0:
+        print('Error calling download_artifacts.py=' + full_out)
+
+
+def fetch_mlflow_artifact_file(auth_info, run_id, artifact_path):
+    local_dir = tempfile.mkdtemp()
+    num_attempts = 3
+    while num_attempts > 0:
+        num_attempts -= 1
+        download_mlflow_artifact(auth_info, run_id, artifact_path, local_dir)
+        local_path = os.path.join(local_dir, artifact_path)
+        if os.path.exists(local_path):
+            with open(local_path, 'rb') as inf:
+                content = inf.read()
+            return content
+        else:
+            print('Download failed, retrying {} more times'.format(num_attempts))
+            if num_attempts > 0:
+                time.sleep(10)
+
+
