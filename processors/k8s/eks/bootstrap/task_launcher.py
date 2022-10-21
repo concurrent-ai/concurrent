@@ -3,6 +3,7 @@ import os
 import sys
 import json
 import base64
+import zlib
 import subprocess
 import time
 import requests
@@ -456,8 +457,9 @@ if __name__ == '__main__':
     print("THE TASK LAUNCHER ENV: ", os.environ)
     parent_run_id = os.environ['PARENT_RUN_ID']
     ##read input specs
-    with open('/root/.taskinfo/taskinfo') as infh:
-        run_input_spec_map = json.loads(infh.read())
+    with open('/root/.taskinfo/taskinfo', 'rb') as infh:
+        input_spec_content = infh.read()
+        run_input_spec_map = json.loads(zlib.decompress(input_spec_content).decode('utf-8'))
 
     run_id_list = list(run_input_spec_map.keys())
     input_data_specs = list(run_input_spec_map.values())

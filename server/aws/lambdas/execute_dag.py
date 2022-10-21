@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 import boto3
 from urllib.parse import urlparse, unquote
 import concurrent.futures
+import zlib
+import base64
 
 from utils import get_cognito_user, get_service_conf, create_request_context, get_custom_token
 import period_run, lock_utils, dag_utils, run_project
@@ -244,8 +246,12 @@ def execute_dag(event, context):
                         dag_execution_status['nodes'][n] = run_info
 
                     print("Submit bootstrap for node {} to the executor".format(orig_node))
+                    ##Compress and encode run_input_spec_map
+                    run_input_spec_map_encoded = base64.b64encode(zlib.compress(
+                        json.dumps(run_input_spec_map).encode('utf-8'))).decode('utf-8')
+
                     launch_future = executor.submit(launch_bootstrap_run_project, cognito_username, orig_node, auth_info,
-                                                    run_input_spec_map, artifact_uri, xformname, xform_params,
+                                                    run_input_spec_map_encoded, artifact_uri, xformname, xform_params,
                                                     experiment_id, frequency, instance_type,
                                                     periodic_run_name, dag_execution_info, xform_path=xform_path,
                                                     parent_run_id=parent_run_id, last_in_chain_of_xforms='False',
@@ -783,7 +789,7 @@ def launch_bootstrap_run_project(
         body['parallelization'] = parallelization
 
     if run_input_spec_map:
-        body['run_input_spec_map'] = json.dumps(run_input_spec_map)
+        body['run_input_spec_map'] = run_input_spec_map
     if xformname:
         body['xformname'] = xformname
     if xform_path:

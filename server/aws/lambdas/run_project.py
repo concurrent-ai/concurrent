@@ -7,6 +7,7 @@ import tempfile
 import uuid
 import time
 import base64
+import zlib
 from google.cloud import container_v1
 import google.auth
 import google.auth.transport.requests
@@ -204,15 +205,17 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     if ecr_aws_account_id:
         cmap.data['ECR_AWS_ACCOUNT_ID'] = ecr_aws_account_id
 
-    if 'input_data_spec' in item:
+    if 'run_input_spec_map' in item:
+        ## Passed by execute_dag, already encoded
+        run_input_spec_map_encoded = item['run_input_spec_map']
+    elif 'input_data_spec' in item:
         run_input_spec_map = {run_id: json.loads(item['input_data_spec'])}
-    elif 'run_input_spec_map' in item:
-        run_input_spec_map = json.loads(item['run_input_spec_map'])
+        run_input_spec_map_encoded = base64.b64encode(zlib.compress(
+            json.dumps(run_input_spec_map).encode('utf-8'))).decode('utf-8')
     else:
         run_input_spec_map = {run_id: []}
-
-    run_input_spec_map_encoded = base64.b64encode(json.dumps(run_input_spec_map).encode('utf-8'),
-                                                  altchars=None).decode('utf-8')
+        run_input_spec_map_encoded = base64.b64encode(zlib.compress(
+            json.dumps(run_input_spec_map).encode('utf-8'))).decode('utf-8')
 
     if 'xformname' in item:
         cmap.data['XFORMNAME'] = item['xformname']
