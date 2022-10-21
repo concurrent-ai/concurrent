@@ -458,7 +458,7 @@ def run_project_eks(cognito_username, context, subs, item, service_conf):
             fh.write('          value: "' + eks_session_token + '"\n')
         fh.write('        - name: "EKS_CLUSTER_NAME"\n')
         fh.write('          value: "' + kube_cluster_name + '"\n')
-    print(open(os.path.join(cdir, 'config')).read())
+    logger.debug(open(os.path.join(cdir, 'config')).read())
     con = type.__call__(Configuration)
     # con.debug = True
     config.load_kube_config(config_file=os.path.join(cdir, 'config'), client_configuration=con)
