@@ -244,6 +244,7 @@ def execute_dag(event, context):
                         run_info = {'run_id': run_id, 'status': run_status, 'artifact_uri': artifact_uri,
                                     'lifecycle_stage': run_lifecycle_stage}
                         dag_execution_status['nodes'][n] = run_info
+                        lock_lease_time = renew_lock(lock_key, lock_lease_time)
 
                     print("Submit bootstrap for node {} to the executor".format(orig_node))
                     ##Compress and encode run_input_spec_map
@@ -258,7 +259,7 @@ def execute_dag(event, context):
                                                     parallelization=parallelization, k8s_params=k8s_params)
                     futures.append((launch_future, n))
                 for f, nid in futures:
-                    print("Look for future result for node {}".format(nid))
+                    logger.debug("Look for future result for node {}".format(nid))
                     try:
                         f.result(timeout=30)
                     except ApiException as apex:
@@ -289,6 +290,7 @@ def execute_dag(event, context):
                 logger.warning("Failure in launching nodes: " + str(ex))
                 import traceback
                 logger.warning(traceback.format_exc())
+                release_row_lock(lock_key)
                 return respond("Node launch failed", dict())
 
         update_dag_run_status(cognito_username, auth_info, dag_execution_id, dag_execution_status, parent_run_id)
@@ -395,8 +397,8 @@ def fetch_node_status(cognito_username, auth_info, node_details, previous_status
             status = node_run_info['status']
             if run_id and status == "RUNNING":
                 run_info = fetch_run_id_info(auth_info, run_id)
-                print('RUN INFO for '+run_id)
-                print(run_info)
+                logger.debug('RUN INFO for '+run_id)
+                logger.debug(str(run_info))
                 node_statuses[node].update(run_info)
                 lock_lease_time = renew_lock(lock_key, lock_lease_time)
     return node_statuses, lock_lease_time
@@ -515,7 +517,7 @@ def get_input_data_spec(node, node_details, node_statuses, dag_graph):
         if 'partition_keygen' in input:
             spec['partition_keygen'] = input['partition_keygen']
 
-    print("input_data_spec_string = " + str(input_specs))
+    logger.debug("input_data_spec_string = " + str(input_specs))
     return input_specs
 
 
@@ -756,9 +758,9 @@ def launch_bootstrap_run_project(
         periodic_run_name, dag_execution_info,
         xform_path=None, parent_run_id=None, last_in_chain_of_xforms='False',
         parallelization=None, k8s_params=None):
-    logger.info("RUN_ID -> INPUT_SPEC #")
-    logger.info(str(run_input_spec_map))
-    logger.info(artifact_uri)
+    logger.debug("RUN_ID -> INPUT_SPEC #")
+    logger.debug(str(run_input_spec_map))
+    logger.debug(artifact_uri)
     pdst = urlparse(artifact_uri)
     bucket_name = pdst.netloc
     if (pdst.path[0] == '/'):
@@ -811,6 +813,6 @@ def launch_bootstrap_run_project(
 
     response = run_project.run_project(run_project_event, None)
 
-    logger.info("Response ##")
-    logger.info(response)
+    logger.debug("Response ##")
+    logger.debug(str(response))
     return response['body']

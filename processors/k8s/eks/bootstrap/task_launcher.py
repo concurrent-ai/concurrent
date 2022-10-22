@@ -131,11 +131,11 @@ def log_describe_pod(pod_name, run_id):
         desc_content = subprocess.check_output(describe_cmd)
         with open(describe_file, "w") as fh:
             fh.write(desc_content.decode('utf-8'))
-    except Exception as ex:
-        return
-    else:
         client = MlflowClient()
         client.log_artifact(run_id, describe_file, artifact_path='.concurrent/logs')
+    except Exception as ex:
+        logger.warning('Failed to log describe pod, try again later', ex)
+        return
 
 def log_pip_requirements(base_image, run_id, build_logs):
     try:

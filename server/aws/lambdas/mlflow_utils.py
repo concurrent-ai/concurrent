@@ -4,6 +4,10 @@ import os
 import tempfile
 import subprocess
 import time
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 def setup_for_subprocess(auth_info):
     modified_env = dict(os.environ)
@@ -60,7 +64,7 @@ def call_create_run(cognito_username, experiment_id, auth_info, run_name=None,
         artifact_uri = run['artifact_uri']
         status = run['status']
         lifecycle_stage = run['lifecycle_stage']
-        print('call_create_run: returning run_id=' +str(run_id)
+        logger.debug('call_create_run: returning run_id=' +str(run_id)
                 +', artifact_uri=' +str(artifact_uri) +', status=' +str(status)
                 +', lifecycle_stage=' +str(lifecycle_stage))
         return run_id, artifact_uri, status, lifecycle_stage
@@ -97,7 +101,7 @@ def fetch_run_id_info(auth_info, run_id):
         return None
     else:
         run = json.loads(full_out)
-        print('fetch_run_id_info: returning run_id=' +str(run['run_id'])
+        logger.debug('fetch_run_id_info: returning run_id=' +str(run['run_id'])
                 +', artifact_uri=' +str(run['artifact_uri']) +', status=' +str(run['status'])
                 +', lifecycle_stage=' +str(run['lifecycle_stage']))
         return run
