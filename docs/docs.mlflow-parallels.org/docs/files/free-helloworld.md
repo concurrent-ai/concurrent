@@ -11,17 +11,17 @@ Here is a screen capture video:
 
 ### Login to the UI
 
-Concurrent for MLflow Free Service UI is available at **https://mlflowui.concurrent-ai.org/**: [click here](https://mlflowui.concurrent-ai.org/ "Concurrent for MLflow Free Service UI"){:target="\_blank"} (This will open a new tab). Perform the steps described below to create and run a simple Parallel.
+Concurrent for MLflow Free Service UI is available at **https://mlflowui.concurrent-ai.org/**: [click here](https://mlflowui.concurrent-ai.org/ "Concurrent for MLflow Free Service UI"){:target="\_blank"} (This will open a new tab). Perform the steps described below to create and run a simple Concurrent.
 
 ### Click Concurrent tab
 
 [![](https://docs.concurrent-ai.org/images/helloworld/hw1.png?raw=true)](https://docs.concurrent-ai.org/images/helloworld/hw1.png?raw=true)
 
-### Click 'Create Parallel' button
+### Click 'Create Concurrent' button
 
 [![](https://docs.concurrent-ai.org/images/helloworld/hw2.png?raw=true)](https://docs.concurrent-ai.org/images/helloworld/hw2.png?raw=true)
 
-Give the parallel a name, **helloworld-test1** in this example. Note that the Parallel name has to be unique among all users in the Enterprise. This is necessary in order to allow for sharing of Concurrent. It is useful to attach your username to the Parallel's name. After successful creation of the Parallel, you will be taken to a page with a list of Concurrent that you have created or have access to. Click on the newly created Parallel (helloworld-test1 in this example) and you will be taken to the page for the specific Parallel. In this page, click on the **Create Template** button as shown below
+Give the parallel a name, **helloworld-test1** in this example. Note that the Concurrent name has to be unique among all users in the Enterprise. This is necessary in order to allow for sharing of Concurrent. It is useful to attach your username to the Concurrent's name. After successful creation of the Concurrent, you will be taken to a page with a list of Concurrent that you have created or have access to. Click on the newly created Concurrent (helloworld-test1 in this example) and you will be taken to the page for the specific Concurrent. In this page, click on the **Create Template** button as shown below
 
 [![](https://docs.concurrent-ai.org/images/helloworld/hw3.png?raw=true)](https://docs.concurrent-ai.org/images/helloworld/hw3.png?raw=true)
 
@@ -50,6 +50,6 @@ Click Add and then save the template. For this simple example, we will not be us
 
 ### Run DAG
 
-Once you have saved the template using the **Save Template** button, you are ready to run the Parallel. From the detail page for the Parallel, press the **Run Template** button. You are presented with an opportunity to modify any of the parameters stored in the template. For this example, you do not need to modify anything - just press the **Run Template** button. Once the template run starts up, you will be taken to the MLflow experiments tab where you can follow the progress of the run.
+Once you have saved the template using the **Save Template** button, you are ready to run the Concurrent. From the detail page for the Concurrent, press the **Run Template** button. You are presented with an opportunity to modify any of the parameters stored in the template. For this example, you do not need to modify anything - just press the **Run Template** button. Once the template run starts up, you will be taken to the MLflow experiments tab where you can follow the progress of the run.
 
 [![](https://docs.concurrent-ai.org/images/helloworld/hw5.png?raw=true)](https://docs.concurrent-ai.org/images/helloworld/hw5.png?raw=true)
