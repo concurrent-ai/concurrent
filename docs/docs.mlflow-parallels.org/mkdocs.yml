@@ -29,7 +29,8 @@ nav:
         - 'Use':
                 - 'MLproject': 'files/use-mlproject.md'
                 - 'Data': 'files/use-data.md'
-                - 'Examples': 'files/examples.md'
+                - 'Examples':
+                        'helloworld': 'files/examples-helloworld.md'
 
 extra:
         analytics:
