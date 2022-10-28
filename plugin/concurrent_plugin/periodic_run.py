@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser(epilog='Example: python -m concurrent_plugin.pe
 parser.add_argument('operation', type=str, choices=['get', 'add', 'delete'])
 parser.add_argument('periodic_run_name', type=str)
 parser.add_argument('--schedule', type=str, required=False, help='format is a_b_c_d_e_f where a=minutes(0-59), b=hour(0-23), c=day_of_month(1-31), d=month(1-12), e=day_of_week(0-7, 0 is Sunday)')
-parser.add_argument('--schedule_type', type=str, required=False, choices=['monthly', 'once', 'yearly', 'weekly'])
+parser.add_argument('--schedule_type', type=str, required=False, choices=['once', 'hourly', 'daily', 'weekly', 'monthly', 'yearly'])
 parser.add_argument('--experiment_id', type=int, required=False)
 parser.add_argument('--dagid', type=str, required=False)
 
