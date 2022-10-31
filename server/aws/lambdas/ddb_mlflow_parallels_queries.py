@@ -268,6 +268,8 @@ def _extract_parallel_info(db_item, parallel_id=None):
     parallel_info['dagName'] = db_item['parallel_name']['S']
     parallel_info['dagJson'] = db_item['parallel_json']['S']
     parallel_info['parallel_json'] = db_item['parallel_json']['S']
+    parallel_info['creation_time'] = db_item['creation_time']['S']
+    parallel_info['update_time'] = db_item['update_time']['S']
     if 'description' in db_item:
         parallel_info['description'] = db_item['description']['S']
     if 'experiment_id' in db_item:
