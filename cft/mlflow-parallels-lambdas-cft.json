@@ -69,6 +69,7 @@
   "Mappings" : {
     "RegionMap" : {
       "us-east-1"        : {"SAR" : "arn:aws:serverlessrepo:us-east-1:658890369129:applications/concurrent-lambda"}
+      "ap-south-1"        : {"SAR" : "arn:aws:serverlessrepo:ap-south-1:658890369129:applications/concurrent-lambda"}
     }
   },
   "Conditions": {
