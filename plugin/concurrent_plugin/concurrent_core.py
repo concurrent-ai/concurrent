@@ -68,7 +68,7 @@ def _get_artifact_info_from_run(run_info, input_spec=None):
 
 
 def _load_input_spec(input_spec):
-    if input_spec['type'] == 'infinsnap' or input_spec['type'] == 'infinslice':
+    if 'time_spec' in input_spec:
         time_spec = input_spec.get('time_spec')
         bucket = input_spec['bucketname']
         prefix = input_spec['prefix']
