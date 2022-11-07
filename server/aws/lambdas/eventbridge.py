@@ -97,6 +97,44 @@ def delete_one_pr(pr, cognito_username):
             + ' during put_item'
         print(msg)
 
+def list_periodicruns(event, context):
+    logger.info('## ENVIRONMENT VARIABLES')
+    logger.info(os.environ)
+    logger.info('## EVENT')
+    logger.info(event)
+    logger.info("Received event: " + json.dumps(event, indent=2))
+
+    operation = event['httpMethod']
+    if (operation != 'GET'):
+        return respond(ValueError('Unsupported method ' + str(operation)))
+
+    cognito_username, groups = get_cognito_user(event)
+    success, status, subs = get_subscriber_info(cognito_username) 
+
+    ddb_client = boto3.client("dynamodb")
+    try:
+        resp = ddb_client.query(
+                TableName=os.environ['PERIODIC_RUNS_TABLE'],
+                KeyConditionExpression='username = :un',
+                ExpressionAttributeValues={':un': {'S': cognito_username}}
+                )
+    except ClientError as e:
+        msg = 'While listing ddb entries, caught ' + e.resp['Error']['Message']
+        print(msg)
+    if 'Items' in resp:
+        print(resp['Items'])
+        runs = []
+        for run in resp['Items']:
+            periodic_run_json = json.loads(run['periodicRunJson']['S'])
+            runs.append({'name': run['periodicRunName']['S'],
+                            'type': periodic_run_json['period']['type'],
+                            'period': periodic_run_json['period']['value'],
+                            'dagid': periodic_run_json['dagid'],
+                            'experiment_id': periodic_run_json['experiment_id']})
+        return respond(None, {'periodicRuns': runs})
+    else:
+        return respond(None, {})
+
 def add_mod_periodicrun(event, context):
     logger.info('## ENVIRONMENT VARIABLES')
     logger.info(os.environ)
