@@ -250,3 +250,7 @@ def extract_url_kv_params(body):
         if len(obss) == 2:
             items[obss[0]] = obss[1]
     return items
+
+
+def is_user_admin(cognito_username):
+    return False
