@@ -4,7 +4,7 @@ import os
 import io
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import re
 from os.path import sep
 import tempfile
@@ -88,10 +88,44 @@ def period_run(event, context):
     dag_event['MLFLOW_TRACKING_TOKEN'] = periodic_run_info.get('MLFLOW_TRACKING_TOKEN')
     dag_event['MLFLOW_CONCURRENT_URI'] = periodic_run_info.get('MLFLOW_CONCURRENT_URI')
 
-    if 'data' in periodic_run_info:
-        data = periodic_run_info['data']
-    else:
-        data = [{'type': 'no-input-data'}]
-    dag_event['input'] = data
+    period_type = periodic_run_info['period']['type']
+    if period_type != 'once':
+        munged_dag = munge_input_data(cognito_username, dag_event['dagid'], period_type)
+        if munged_dag:
+            dag_event['dagParamsJson'] = munged_dag
+
     print("Periodic execution of dag for dagid " + periodic_run_info['dagid'])
     return execute_dag.execute_dag(dag_event, None)
+
+def munge_input_data(cognito_username, dag_id, period_type):
+    modified = False
+    dag_json = dag_utils.fetch_dag_json(cognito_username, dag_id)
+    for node in dag_json['node']:
+        if not 'input' in node:
+            continue
+        for inp in node['input']:
+            if not 'time_spec' in inp:
+                continue
+            if len(inp['time_spec']) == 33:
+                now = datetime.now()
+                if period_type == 'hourly':
+                    inp['time_spec'] = execute_dag.infinslice(now - timedelta(hours=1), now)
+                    modified = True
+                elif period_type == 'daily':
+                    inp['time_spec'] = execute_dag.infinslice(now - timedelta(days=1), now)
+                    modified = True
+                elif period_type == 'weekly':
+                    inp['time_spec'] = execute_dag.infinslice(now - timedelta(days=7), now)
+                    modified = True
+                elif period_type == 'monthly':
+                    inp['time_spec'] = execute_dag.infinslice(now - timedelta(months=1), now)
+                    modified = True
+                elif period_type == 'yearly':
+                    inp['time_spec'] = execute_dag.infinslice(now - timedelta(years=1), now)
+                    modified = True
+    if modified:
+        print('munge_input_data: mungeable input found. DAG inputs were munged')
+        return json.dumps(dag_json)
+    else:
+        print('munge_input_data: no mungeable input found. DAG unmodified')
+        return None

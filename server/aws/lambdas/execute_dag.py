@@ -744,6 +744,16 @@ def infinsnap(snaptime=datetime.now()):
     snaptime = snaptime.astimezone(timezone.utc)
     return snaptime.strftime('tm%Y%m%d%H%M%S')
 
+def infinslice(start_time:datetime, end_time:datetime):
+    # add timezone info to naive start_time
+    if (start_time.tzinfo == None or start_time.tzinfo.utcoffset(start_time) == None):
+        start_time = start_time.replace(tzinfo=datetime.now(timezone.utc).astimezone().tzinfo)
+    start_time = start_time.astimezone(timezone.utc)
+    # add timezone info to naive end_time
+    if (end_time.tzinfo == None or end_time.tzinfo.utcoffset(end_time) == None):
+        end_time = end_time.replace(tzinfo=datetime.now(timezone.utc).astimezone().tzinfo)
+    end_time = end_time.astimezone(timezone.utc)
+    return start_time.strftime('tm%Y%m%d%H%M%S') + '-' + end_time.strftime('tm%Y%m%d%H%M%S')
 
 def get_matching_input(input_list, name):
     for input in input_list:

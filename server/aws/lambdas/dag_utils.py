@@ -180,3 +180,11 @@ def fetch_dag_runtime_artifact(authinfo, parent_run_id):
     artifact_content = fetch_mlflow_artifact_file(authinfo, parent_run_id, dag_runtime_path)
     dag_runtime_info = json.loads(artifact_content.decode('utf-8'))
     return dag_runtime_info
+
+def fetch_dag_json(cognito_username, dag_id):
+    parallel_info = ddb_pqrs.get_parallel_by_id(cognito_username, dag_id)
+    if parallel_info:
+        return json.loads(parallel_info['parallel_json'])
+    else:
+        msg = 'Could not find dag '+str(dag_id) + ", for user "+cognito_username
+        raise(msg)
