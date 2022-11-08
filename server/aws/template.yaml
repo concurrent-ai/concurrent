@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: 'AWS::Serverless-2016-10-31'
 Description: >-
-  MLflow Parallels Server Using AWS Lambda and DDB
+  Concurrent Server Using AWS Lambda and DDB
 
 Parameters:
   PoolIdParameter:
@@ -185,7 +185,7 @@ Resources:
       Handler: run_project.run_project
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -294,7 +294,7 @@ Resources:
       Handler: eventbridge.add_mod_periodicrun
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -322,7 +322,7 @@ Resources:
       Handler: eventbridge.del_periodicrun
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -350,7 +350,7 @@ Resources:
       Handler: eventbridge.list_periodicruns
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -378,7 +378,7 @@ Resources:
       Handler: period_run.period_run
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -406,7 +406,7 @@ Resources:
       Handler: list_dag.list_dag
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -434,7 +434,7 @@ Resources:
       Handler: execute_dag.execute_dag
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -462,7 +462,7 @@ Resources:
       Handler: get_dag_execution.get_dag_execution
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -490,7 +490,7 @@ Resources:
       Handler: cruds_parallel.create_or_update_parallel
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -518,7 +518,7 @@ Resources:
       Handler: cruds_parallel.create_or_update_parallel
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -546,7 +546,7 @@ Resources:
       Handler: cruds_parallel.delete_parallel
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -574,7 +574,7 @@ Resources:
       Handler: cruds_parallel.rename_parallel
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -602,7 +602,7 @@ Resources:
       Handler: get_parallel.get_parallel
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -630,7 +630,7 @@ Resources:
       Handler: search_parallels.search_parallels
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -658,7 +658,7 @@ Resources:
       Handler: set_parallel_tag.set_parallel_tag
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -686,7 +686,7 @@ Resources:
       Handler: set_parallel_tag.remove_parallel_tag
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -714,7 +714,7 @@ Resources:
       Handler: kube_clusters.add_kube_cluster
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -742,7 +742,7 @@ Resources:
       Handler: kube_clusters.remove_kube_cluster
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -770,7 +770,7 @@ Resources:
       Handler: kube_clusters.get_kube_clusters
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -798,7 +798,7 @@ Resources:
       Handler: storage_credentials.get_user_buckets
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -827,7 +827,7 @@ Resources:
       Handler: get_presigned_url.get_presigned_url
       CodeUri: lambdas/.
       Description: >-
-       mlflow concurrent server 
+       mlflow concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -856,7 +856,7 @@ Resources:
       Handler: storage_credentials.add_user_bucket
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -885,7 +885,7 @@ Resources:
       Handler: storage_credentials.remove_user_bucket
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -914,7 +914,7 @@ Resources:
       Handler: parallel_authorization.get_parallel_authorization
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
@@ -943,7 +943,7 @@ Resources:
       Handler: parallel_authorization.add_parallel_authorization
       CodeUri: lambdas/.
       Description: >-
-       mlflow parallels server 
+       concurrent server
       Role: !GetAtt MLflowLambdaRole.Arn
       Layers:
         - !Ref libs
