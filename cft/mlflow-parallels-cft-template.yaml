@@ -63,7 +63,7 @@ Parameters:
   kubeClustersTable: 
       Type: String
       Description: k8s cluster table
-      Default: parallels-k8s-clusters
+      Default: concurrent-k8s-clusters
   storageCredentialsTable:
       Type: String
       Description: 'concurrent-storage-credentials table'

@@ -260,11 +260,11 @@
         "TableName": {"Ref": "kubeClustersTable"},
         "AttributeDefinitions": [
           {
-            "AttributeName": "username",
+            "AttributeName": "hash_key",
             "AttributeType": "S"
           },
           {
-            "AttributeName": "cluster_name",
+            "AttributeName": "range_key",
             "AttributeType": "S"
           }
         ],

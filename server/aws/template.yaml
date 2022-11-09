@@ -43,8 +43,8 @@ Parameters:
     Default: parallels-dag-execution
   kubeClustersTable:
     Type: String
-    Description: 'parallels-k8s-clusters table'
-    Default: parallels-k8s-clusters
+    Description: 'concurrent-k8s-clusters table'
+    Default: concurrent-k8s-clusters
   storageCredentialsTable:
     Type: String
     Description: 'concurrent-storage-credentials table'
