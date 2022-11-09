@@ -134,6 +134,10 @@ def get_subscriber_info(cognito_username):
     if (ext_oauth == True):
         print("get_subscriber_info: Service is configured for external oauth")
         success, status, subs = lookup_subscriber_by_name('root')
+        if cognito_username == 'root':
+            subs['isSecondaryUser'] = False
+        else:
+            subs['isSecondaryUser'] = True
         if success:
             subscriber_info_cache[cognito_username] = (success, status, subs)
         return success, status, subs
@@ -171,11 +175,13 @@ def get_subscriber_info(cognito_username):
 
     if (customerId == None or len(customerId) == 0):
         success, status, subs = lookup_subscriber_by_name(cognito_username)
+        subs['isSecondaryUser'] = False
         if success:
             subscriber_info_cache[cognito_username] = (success, status, subs)
         return success, status, subs
     else:
         success, status, subs = lookup_subscriber_by_customer_id(customerId)
+        subs['isSecondaryUser'] = True
         if success:
             add_cognito_user_specific_configs(subs, cognito_username)
             subscriber_info_cache[cognito_username] = (success, status, subs)
@@ -250,3 +256,11 @@ def extract_url_kv_params(body):
         if len(obss) == 2:
             items[obss[0]] = obss[1]
     return items
+
+
+def is_user_admin(cognito_username):
+    success, status, subs = get_subscriber_info(cognito_username)
+    if 'isSecondaryUser' in subs:
+        return not subs['isSecondaryUser']
+    else:
+        return False

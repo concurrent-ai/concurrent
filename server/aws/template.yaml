@@ -723,7 +723,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref ParallelsMlflowApi
-            Path: /2.0/mlflow/parallels/addkubecluster
+            Path: /2.0/mlflow/concurrent/addkubecluster
             Method: ANY
       Environment:
         Variables:
@@ -751,7 +751,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref ParallelsMlflowApi
-            Path: /2.0/mlflow/parallels/removekubecluster
+            Path: /2.0/mlflow/concurrent/removekubecluster
             Method: ANY
       Environment:
         Variables:
@@ -779,7 +779,63 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref ParallelsMlflowApi
-            Path: /2.0/mlflow/parallels/getkubeclusters
+            Path: /2.0/mlflow/concurrent/getkubeclusters
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  addclusteraccess: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: kube_clusters.add_cluster_access
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/concurrent/addclusteraccess
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  removeclusteraccess: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: kube_clusters.remove_cluster_access
+      CodeUri: lambdas/.
+      Description: >-
+       mlflow parallels server 
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/concurrent/removeclusteraccess
             Method: ANY
       Environment:
         Variables:
