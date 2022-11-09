@@ -405,8 +405,20 @@ def get_kube_clusters(event, context):
         user_cluster = query_clusters_info_by_owner(cognito_username)
         cluster_list.extend(user_cluster)
         ## User and group access
+        user_access = query_cluster_access_records('user')
+        group_access = query_cluster_access_records('group')
+        access_grouped_by_cluster = {}
+        for principal_type, principal, cluster_name, namespace in user_access + group_access:
+            if (cluster_name, namespace) not in access_grouped_by_cluster:
+                access_grouped_by_cluster[(cluster_name, namespace)] = []
+            access_grouped_by_cluster[(cluster_name, namespace)]\
+                .append({'principal_name': principal, 'principal_type': principal_type})
+
         for cl in cluster_list:
-            pass
+            cl_name = cl['cluster_name']
+            ns = cl['namespace']
+            if (cl_name, ns) in access_grouped_by_cluster:
+                cl['cluser_access'] = access_grouped_by_cluster[(cl_name, ns)]
     else:
         ##Get clusters that this user has access to
         cluster_list = query_user_accessible_clusters(cognito_username, groups)

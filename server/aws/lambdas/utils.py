@@ -261,6 +261,6 @@ def extract_url_kv_params(body):
 def is_user_admin(cognito_username):
     success, status, subs = get_subscriber_info(cognito_username)
     if 'isSecondaryUser' in subs:
-        return subs['isSecondaryUser']
+        return not subs['isSecondaryUser']
     else:
         return False
