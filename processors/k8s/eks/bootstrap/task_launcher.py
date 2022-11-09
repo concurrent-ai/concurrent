@@ -90,12 +90,22 @@ def generate_backend_config_json(backend_conf_file, input_spec, run_id, k8s_job_
 
 
 def get_mlflow_param(run_id, pname):
-    client = MlflowClient()
-    run = client.get_run(run_id)
-    if pname in run.data.params:
-        return run.data.params[pname]
-    else:
-        return None
+    attempts_left = max_attempts = 4
+    while attempts_left > 0:
+        attempts_left -= 1
+        try:
+            client = MlflowClient()
+            run = client.get_run(run_id)
+            if pname in run.data.params:
+                return run.data.params[pname]
+            else:
+                return None
+        except Exception as ex:
+            print(f'Exception in mlflow call, retry {attempts_left} more times')
+            if attempts_left > 0:
+                ##wait before retrying
+                time.sleep(10 * 2 ** (max_attempts - attempts_left))
+    print(f'Failed to get mlflow param {pname} from run {run_id}')
 
 
 def upload_logs_for_pod(run_id, pod_name, tmp_log_file):
