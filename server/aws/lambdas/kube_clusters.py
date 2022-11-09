@@ -159,7 +159,7 @@ def query_cluster_access_records(principal_type):
     if 'Items' in response:
         for item in response['Items']:
             principal_type, principal, cluster_name, namespace = parse_access_range_key(item['range_key']['S'])
-            cluster_access_records.append(principal_type, principal, cluster_name, namespace)
+            cluster_access_records.append((principal_type, principal, cluster_name, namespace))
 
     return cluster_access_records
 
@@ -213,10 +213,12 @@ def remove_kube_cluster(event, context):
     for principal_type, principal, cl_name, ns in user_access_records:
         if cluster_name == cl_name and namespace == ns:
             delete_access_txn = {
-                'TableName': KUBE_CLUSTERS_TABLE,
-                'Key': {
-                    'hash_key' : {'S': get_cluster_access_hash_key()},
-                    'range_key' : {'S': get_cluster_access_range_key(principal_type, principal, cl_name, ns)}
+                'Delete':  {
+                    'TableName': KUBE_CLUSTERS_TABLE,
+                    'Key': {
+                        'hash_key' : {'S': get_cluster_access_hash_key()},
+                        'range_key' : {'S': get_cluster_access_range_key(principal_type, principal, cl_name, ns)}
+                    }
                 }
             }
             delete_txns.append(delete_access_txn)
@@ -224,15 +226,17 @@ def remove_kube_cluster(event, context):
     for principal_type, principal, cl_name, ns in group_access_records:
         if cluster_name == cl_name and namespace == ns:
             delete_access_txn = {
-                'TableName': KUBE_CLUSTERS_TABLE,
-                'Key': {
-                    'hash_key' : {'S': get_cluster_access_hash_key()},
-                    'range_key' : {'S': get_cluster_access_range_key(principal_type, principal, cl_name, ns)}
+                'Delete': {
+                    'TableName': KUBE_CLUSTERS_TABLE,
+                    'Key': {
+                        'hash_key' : {'S': get_cluster_access_hash_key()},
+                        'range_key' : {'S': get_cluster_access_range_key(principal_type, principal, cl_name, ns)}
+                    }
                 }
             }
             delete_txns.append(delete_access_txn)
 
-
+    print(delete_txns)
     ddb_client = boto3.client('dynamodb')
     for i in range(len(delete_txns) // 100 + 1):
         txns_to_delete = delete_txns[100*i: min(len(delete_txns), 100*(i+1))]
@@ -247,7 +251,11 @@ def remove_kube_cluster(event, context):
 
 def parse_access_range_key(range_key):
     fields = range_key.split('/')
-    return fields
+    if fields[0] == 'u':
+        principal_type = 'user'
+    else:
+        principal_type = 'group'
+    return principal_type, fields[1], fields[2], fields[3]
 
 
 def get_cluster_name_from_info_range_key(range_key):
@@ -396,6 +404,9 @@ def get_kube_clusters(event, context):
         cluster_list = query_clusters_info_by_owner('admin')
         user_cluster = query_clusters_info_by_owner(cognito_username)
         cluster_list.extend(user_cluster)
+        ## User and group access
+        for cl in cluster_list:
+            pass
     else:
         ##Get clusters that this user has access to
         cluster_list = query_user_accessible_clusters(cognito_username, groups)

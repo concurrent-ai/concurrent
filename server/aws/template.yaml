@@ -723,7 +723,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref ParallelsMlflowApi
-            Path: /2.0/mlflow/parallels/addkubecluster
+            Path: /2.0/mlflow/concurrent/addkubecluster
             Method: ANY
       Environment:
         Variables:
@@ -751,7 +751,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref ParallelsMlflowApi
-            Path: /2.0/mlflow/parallels/removekubecluster
+            Path: /2.0/mlflow/concurrent/removekubecluster
             Method: ANY
       Environment:
         Variables:
@@ -779,7 +779,7 @@ Resources:
           Type: Api
           Properties:
             RestApiId: !Ref ParallelsMlflowApi
-            Path: /2.0/mlflow/parallels/getkubeclusters
+            Path: /2.0/mlflow/concurrent/getkubeclusters
             Method: ANY
       Environment:
         Variables:
