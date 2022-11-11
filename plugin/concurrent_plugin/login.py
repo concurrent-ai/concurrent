@@ -159,7 +159,7 @@ def get_token_file_obj(mode:str, exit_on_error=True):
             if mode == 'w': os.makedirs(os.path.dirname(tokfile), exist_ok=True)
             # if we are attempting to read the token file, ensure that the token file exists
             if mode == 'r' and not os.path.exists(tokfile):
-                print(f"Unable to read token file {tokfile} when MLFLOW_CONCURRENT_URI={os.environ['MLFLOW_CONCURRENT_URI']}.  run login_parallels cli command to login or place a valid token file as {tokfile}")
+                print(f"Unable to read token file {tokfile} when MLFLOW_CONCURRENT_URI={os.environ['MLFLOW_CONCURRENT_URI']}.  run login_concurrent cli command to login or place a valid token file as {tokfile}")
             else: 
                 fh = open(tokfile, mode)
         else:

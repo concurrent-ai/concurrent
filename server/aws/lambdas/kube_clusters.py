@@ -309,6 +309,12 @@ def get_cluster_info_details(db_row):
         c_info['ecr_role_ext'] = item['ecr_role_ext']['S']
         c_info['ecr_type'] = item['ecr_type']['S']
         c_info['ecr_region'] = item['ecr_region']['S']
+    elif c_info['cluster_type'] == 'HPE':
+        # keep keynames here consistent with the names in parallels-subscribers table
+        c_info['hpeKubeConfig'] = item['hpeKubeConfig']['S']
+        # TODO: can this be replaced with cluster_name above.. or kube_context in the runProject request's body?
+        c_info['hpeKubeConfigContext'] = item['hpeKubeConfigContext']['S']
+        c_info['hpeContainerRegistry'] = item['hpeContainerRegistry']['S']
     else:
         logger.warning("Invalid cluster definition")
         c_info = None

@@ -20,6 +20,8 @@ import configparser
 import base64
 import uuid
 
+# pylint: disable=logging-not-lazy
+
 from mlflow.projects.backend.abstract_backend import AbstractBackend
 import mlflow.tracking as tracking
 from mlflow.entities import RunStatus
@@ -168,7 +170,7 @@ def upload_objects(run_id, bucket_name, path_in_bucket, local_path):
 
 class PluginConcurrentProjectBackend(AbstractBackend):
     def run(self, project_uri, entry_point, params,
-            version, backend_config, tracking_store_uri, experiment_id):
+            version, backend_config, tracking_uri, experiment_id):
 
         if (verbose):
             _logger.info("PluginConcurrentProjectBackend: Entered. project_uri=" + str(project_uri)\
@@ -177,7 +179,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                 + ", version=" + str(version)\
                 + ", backend_config=" + str(backend_config)\
                 + ", experiment_id=" + str(experiment_id)\
-                + ", tracking_store_uri=" + str(tracking_store_uri))
+                + ", tracking_store_uri=" + str(tracking_uri))
 
         work_dir = fetch_and_validate_project(project_uri, version, entry_point, params)
         if 'run-id' in backend_config:
@@ -229,9 +231,9 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         tracking.MlflowClient().set_tag(active_run.info.run_id, MLFLOW_PROJECT_BACKEND, "concurrent")
 
         backend_type = backend_config.get('backend-type')
-        if backend_type == 'eks' or backend_type == 'gke':
+        if backend_type == 'eks' or backend_type == 'gke' or backend_type == 'HPE':
             return self.run_eks(run_id, backend_type, bucket_name, path_in_bucket, work_dir, project_uri, entry_point,
-                    params, version, backend_config, tracking_store_uri, experiment_id, project, active_run)
+                    params, version, backend_config, tracking_uri, experiment_id, project, active_run)
         else:
             _logger.info('Error. unknown backend type ' + backend_type)
             self.fail_run(run_id)
@@ -254,6 +256,33 @@ class PluginConcurrentProjectBackend(AbstractBackend):
 
     def run_eks_on_backend(self, run_id, backend_type, bucket_name, path_in_bucket, work_dir, project_uri, entry_point, params,
             version, backend_config, tracking_store_uri, experiment_id, project, active_run):
+        """
+        _summary_
+
+        _extended_summary_
+
+        Args:
+            run_id (_type_): _description_
+            backend_type (_type_): _description_
+            bucket_name (_type_): _description_
+            path_in_bucket (_type_): _description_
+            work_dir (_type_): _description_
+            project_uri (_type_): _description_
+            entry_point (_type_): _description_
+            params (_type_): _description_
+            version (_type_): _description_ 
+            backend_config (_type_): {"backend-type": "HPE", "kube-context": "unused", "kube-namespace": "parallelsns", "resources.requests.memory": "1024Mi", "kube-client-location": "backend"}
+            tracking_store_uri (_type_): _description_
+            experiment_id (_type_): _description_
+            project (_type_): _description_
+            active_run (_type_): _description_
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            _type_: _description_
+        """
         upload_objects(run_id, bucket_name, '.concurrent/project_files', work_dir)
         body = dict()
         body['backend_type'] = backend_type
