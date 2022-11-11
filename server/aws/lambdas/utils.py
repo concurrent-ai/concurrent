@@ -264,3 +264,8 @@ def is_user_admin(cognito_username):
         return not subs['isSecondaryUser']
     else:
         return False
+
+
+def get_subscriber_name(cognito_username):
+    success, status, subs = get_subscriber_info(cognito_username)
+    return subs['userName']['S']
