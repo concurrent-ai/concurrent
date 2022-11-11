@@ -2,6 +2,10 @@
 
 export DOCKER_HOST="tcp://docker-dind:2375"
 
+logit() {
+    echo "[${USER}][`date`] - ${*}" # >> ${LOG_FILE}
+}
+
 if [ x"$DOCKER_HOST" == "x" ] ; then
     ##
     ## Begin Code lifted from stackexchange that provides docker-in-docker functionality
@@ -18,15 +22,15 @@ if [ x"$DOCKER_HOST" == "x" ] ; then
 
     mountpoint -q $CGROUP ||
         mount -n -t tmpfs -o uid=0,gid=0,mode=0755 cgroup $CGROUP || {
-            echo "Could not make a tmpfs mount. Did you use --privileged?"
+            logit "Could not make a tmpfs mount. Did you use --privileged?"
             exit 1
         }
 
     if [ -d /sys/kernel/security ] && ! mountpoint -q /sys/kernel/security
     then
         mount -t securityfs none /sys/kernel/security || {
-            echo "Could not mount /sys/kernel/security."
-            echo "AppArmor detection and --privileged mode might break."
+            logit "Could not mount /sys/kernel/security."
+            logit "AppArmor detection and --privileged mode might break."
         }
     fi
 
@@ -347,6 +351,10 @@ fail_exit() {
   exit 255
 }
 
+echo "MLFLOW_TRACKING_URI = " $MLFLOW_TRACKING_URI
+# if tracking uri is not set, then error
+[ -z "$MLFLOW_TRACKING_URI" ] && echo "Error: MLFLOW_TRACKING_URI is not set.  " && fail_exit
+
 if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
   for i in $(echo ${ADDITIONAL_PACKAGES} | tr "," "\n")
   do
@@ -378,10 +386,6 @@ else
     fail_exit
   fi
 fi
-
-echo "MLFLOW_TRACKING_URI = " $MLFLOW_TRACKING_URI
-# if tracking uri is not set, then error
-[ -z "$MLFLOW_TRACKING_URI" ] && echo "Error: MLFLOW_TRACKING_URI is not set.  " && fail_exit
 
 /bin/rm -f /root/.docker/config.json
 if [ ${BACKEND_TYPE} == "gke" ] ; then
