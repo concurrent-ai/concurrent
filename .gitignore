@@ -4,3 +4,4 @@ server/aws/requirements.txt
 .idea
 __pycache__
 plugin/dist
+plugin/concurrent_plugin.egg-info
