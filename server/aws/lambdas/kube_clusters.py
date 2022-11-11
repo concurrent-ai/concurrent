@@ -6,7 +6,7 @@ import boto3
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-from utils import get_cognito_user, is_user_admin
+from utils import get_cognito_user, is_user_admin, get_subscriber_name
 
 #KUBE_CLUSTERS_TABLE = os.environ['KUBE_CLUSTERS_TABLE']
 KUBE_CLUSTERS_TABLE = "concurrent-k8s-clusters"
@@ -86,7 +86,7 @@ def add_kube_cluster(event, context):
     hash_key = get_cluster_info_hash_key()
 
     if is_admin:
-        owner = 'admin'
+        owner = get_subscriber_name(cognito_username)
     else:
         owner = cognito_username
 
@@ -186,7 +186,7 @@ def remove_kube_cluster(event, context):
         if 'owner' in item:
             owner = item['owner']
         else:
-            owner = 'admin'
+            owner = get_subscriber_name(cognito_username)
     else:
         owner = cognito_username
 
@@ -358,7 +358,7 @@ def query_clusters_info_by_owner(owner):
     return cluster_list
 
 
-def query_user_accessible_clusters(cognito_username, groups):
+def query_user_accessible_clusters(cognito_username, groups, is_admin):
     cluster_list = []
     hash_key = get_cluster_access_hash_key()
     range_key_prefix = get_cluster_access_range_key_prefix('user', cognito_username)
@@ -374,9 +374,19 @@ def query_user_accessible_clusters(cognito_username, groups):
     ## Get cluster info
     cluster_info_list = []
     for cl_name, ns in cluster_list:
-        cluster_info = query_cluster_info(cl_name, ns, 'admin')
+        owner = get_subscriber_name(cognito_username)
+        cluster_info = query_cluster_info(cl_name, ns, owner)
         if cluster_info:
-            cluster_info_list.append(cluster_info)
+            if is_admin:
+                cluster_info_list.append(cluster_info)
+            else:
+                ## For non-admin don't send all the information
+                c_info = {}
+                c_info['cluster_name'] = cluster_info['cluster_name']
+                c_info['namespace'] = cluster_info['namespace']
+                c_info['cluster_type'] = cluster_info['cluster_type']
+                c_info['owner'] = cluster_info['owner']
+                cluster_info_list.append(c_info)
 
     ## Get user's own clusters
     user_clusters = query_clusters_info_by_owner(cognito_username)
@@ -401,9 +411,11 @@ def get_kube_clusters(event, context):
 
     if is_admin:
         ##Fetch all admin controlled clusters
-        cluster_list = query_clusters_info_by_owner('admin')
-        user_cluster = query_clusters_info_by_owner(cognito_username)
-        cluster_list.extend(user_cluster)
+        subscriber = get_subscriber_name(cognito_username)
+        cluster_list = query_clusters_info_by_owner(subscriber)
+        if subscriber != cognito_username:
+            user_cluster = query_clusters_info_by_owner(cognito_username)
+            cluster_list.extend(user_cluster)
         ## User and group access
         user_access = query_cluster_access_records('user')
         group_access = query_cluster_access_records('group')
@@ -421,7 +433,7 @@ def get_kube_clusters(event, context):
                 cl['cluser_access'] = access_grouped_by_cluster[(cl_name, ns)]
     else:
         ##Get clusters that this user has access to
-        cluster_list = query_user_accessible_clusters(cognito_username, groups)
+        cluster_list = query_user_accessible_clusters(cognito_username, groups, is_admin)
 
     if cluster_list:
         return respond(None, {'kube_clusters': cluster_list})
@@ -453,7 +465,7 @@ def add_cluster_access(event, context):
     cluster_name = item['cluster_name']
     namespace = item['namespace']
 
-    cluster_info = query_cluster_info(cluster_name, namespace, 'admin')
+    cluster_info = query_cluster_info(cluster_name, namespace, get_subscriber_name(cognito_username))
 
     ## It may be a user cluster, admin cannot grant access to a cluster owned by another user
     ## Currently, grant/revoke access on user clusters is not supported
@@ -514,7 +526,7 @@ def remove_cluster_access(event, context):
 
     ## It may be a user cluster, admin cannot revoke access to a cluster owned by another user
     ## Currently, grant/revoke access on user clusters is not supported
-    cluster_info = query_cluster_info(cluster_name, namespace, 'admin')
+    cluster_info = query_cluster_info(cluster_name, namespace, get_subscriber_name(cognito_username))
     if not cluster_info:
         print(f'No admin cluster found for name {cluster_name} and namespace {namespace}')
         return respond(f'No admin cluster found for name {cluster_name} and namespace {namespace}', None)
