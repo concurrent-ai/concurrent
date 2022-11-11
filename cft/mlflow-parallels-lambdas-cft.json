@@ -270,11 +270,11 @@
         ],
         "KeySchema": [
           {
-            "AttributeName": "username",
+            "AttributeName": "hash_key",
             "KeyType": "HASH"
           },
           {
-            "AttributeName": "cluster_name",
+            "AttributeName": "range_key",
             "KeyType": "RANGE"
           }
         ],
