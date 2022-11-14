@@ -6,7 +6,9 @@ set -e
 git describe --tags --always > bootstrap-version.txt
 
 aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/k7c5t9s7
-docker build -t parallels-eks-bootstrap -f Dockerfile --build-arg IGNORECACHE=$(date +%s) .
+
+[ -n "$2" ] && concurrent_plugin="--build-arg CONCURRENT_PLUGIN=$2"
+docker build -t parallels-eks-bootstrap -f Dockerfile --build-arg IGNORECACHE=$(date +%s) $concurrent_plugin .
 
 if [ x"$1" == "x" ] ; then
   docker tag parallels-eks-bootstrap public.ecr.aws/k7c5t9s7/parallels-eks-bootstrap:latest

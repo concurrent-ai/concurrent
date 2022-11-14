@@ -233,7 +233,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         gke_creds (_type_): _description_
         hpe_cluster_config (HpeClusterConfig): _description_
         cognito_username (str): _description_
-        subs (dict): _description_
+        subs (dict): subscriber information
         con (Configuration): _description_
     """
     _create_prio_classes(con)
@@ -444,9 +444,9 @@ def lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, subs)
 
     return eks_region, eks_role, eks_role_ext, ecr_role, ecr_role_ext, ecr_type, ecr_region
 
-def _lookup_hpe_cluster_config(cognito_username:str, kube_cluster_name: str, subs:dict) -> HpeClusterConfig:
+def _lookup_hpe_cluster_config(cognito_username:str, groups:list, kube_cluster_name: str, subs:dict) -> HpeClusterConfig:
     # first try user's kube clusters
-    kube_clusters:list = query_kube_clusters(cognito_username)
+    kube_clusters:list = query_user_accessible_clusters(cognito_username, groups)
     for user_clust in kube_clusters:
         if user_clust['cluster_type'] == HpeClusterConfig.HPE_CLUSTER_TYPE and user_clust['cluster_name'] == kube_cluster_name :
             return HpeClusterConfig(user_clust['hpeKubeConfig'], user_clust['hpeKubeConfigContext'], user_clust['hpeContainerRegistry'])
