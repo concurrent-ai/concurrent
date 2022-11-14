@@ -3,8 +3,11 @@
 export DOCKER_HOST="tcp://docker-dind:2375"
 
 logit() {
-    echo "[${USER}][`date`] - ${*}" # >> ${LOG_FILE}
+    echo "`date` - $$ - INFO - bootstrap.sh - ${*}" # >> ${LOG_FILE}
 }
+
+logit "Environment: "
+typeset -p
 
 if [ x"$DOCKER_HOST" == "x" ] ; then
     ##
@@ -71,9 +74,9 @@ if [ x"$DOCKER_HOST" == "x" ] ; then
     # a "sub-container" properly if the "devices" cgroup is not in its
     # own hierarchy. Let's detect this and issue a warning.
     grep -q :devices: /proc/1/cgroup ||
-        echo "WARNING: the 'devices' cgroup should be in its own hierarchy."
+        logit "WARNING: the 'devices' cgroup should be in its own hierarchy."
     grep -qw devices /proc/1/cgroup ||
-        echo "WARNING: it looks like the 'devices' cgroup is not mounted."
+        logit "WARNING: it looks like the 'devices' cgroup is not mounted."
 
     # Now, close extraneous file descriptors.
     pushd /proc/self/fd >/dev/null
@@ -106,7 +109,7 @@ if [ x"$DOCKER_HOST" == "x" ] ; then
     until docker info >/dev/null 2>&1
     do
       if (( SECONDS >= timeout )); then
-        echo 'Timed out trying to connect to internal docker host.' >&2
+        logit 'Timed out trying to connect to internal docker host.' >&2
         break
       fi
       sleep 1
@@ -116,9 +119,9 @@ if [ x"$DOCKER_HOST" == "x" ] ; then
     ##
 fi
 
-echo "Bootstrap Container Pip Packages="
+logit "Bootstrap Container Pip Packages="
 pip list
-echo "End bootstrap Container Pip Packages="
+logit "End bootstrap Container Pip Packages="
 
 ##
 ## Begin concurrent code
@@ -244,7 +247,7 @@ get_repository_uri() {
   /bin/rm -f /tmp/reps
   aws --profile ecr --region $2 $1 describe-repositories > /tmp/reps
   if [ $? != 0 ] ; then
-    echo "Error listing repositories $1"
+    logit "Error listing repositories $1"
     return 255
   fi
   export REP_NAME=$3
@@ -311,15 +314,15 @@ get_xform() {
       if [ x"$XFORM_PATH" != "x" ] ; then
           export USE_SUBDIR=${USE_SUBDIR}${XFORM_PATH}/
       fi
-      echo "USE_SUBDIR=$USE_SUBDIR"
+      logit "USE_SUBDIR=$USE_SUBDIR"
       (cd /tmp/workdir/$USE_SUBDIR; /bin/rm -rf .git)
     else
-      echo "Error cloning git tree $XFORMNAME"
+      logit "Error cloning git tree $XFORMNAME"
       cat /tmp/git.log.$$
       fail_exit
     fi
   else
-    echo "Error checking out git tree $XFORMNAME"
+    logit "Error checking out git tree $XFORMNAME"
     fail_exit
   fi
 }
@@ -351,14 +354,14 @@ fail_exit() {
   exit 255
 }
 
-echo "MLFLOW_TRACKING_URI = " $MLFLOW_TRACKING_URI
+logit "MLFLOW_TRACKING_URI = " $MLFLOW_TRACKING_URI
 # if tracking uri is not set, then error
-[ -z "$MLFLOW_TRACKING_URI" ] && echo "Error: MLFLOW_TRACKING_URI is not set.  " && fail_exit
+[ -z "$MLFLOW_TRACKING_URI" ] && logit "Error: MLFLOW_TRACKING_URI is not set.  " && fail_exit
 
 if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
   for i in $(echo ${ADDITIONAL_PACKAGES} | tr "," "\n")
   do
-    echo "Installing additional package $i"
+    logit "Installing additional package $i"
     pip install --no-cache-dir --upgrade $i
   done
 fi
@@ -366,23 +369,23 @@ fi
 mkdir -p /tmp/workdir/.concurrent/project_files
 
 if [ x"$XFORMNAME" != "x" ] ; then
-  echo "Running xform"
+  logit "Running xform"
   echo "$XFORMNAME" | grep ':' >& /dev/null
   if [ $? == 0 ] ; then
-    echo "xform is in git repo"
+    logit "xform is in git repo"
     get_xform
-    echo "USE_SUBDIR is $USE_SUBDIR"
+    logit "USE_SUBDIR is $USE_SUBDIR"
     /bin/ls /tmp/workdir/"$USE_SUBDIR"
   else
-    echo "Error. xformname should be a git URL"
+    logit "Error. xformname should be a git URL"
     fail_exit
   fi
 else
-  echo "Using project files from mlflow artifacts"
+  logit "Using project files from mlflow artifacts"
   USE_SUBDIR=".concurrent/project_files/"
   download_project_files
   if [ $? != 0 ] ; then
-    echo "Error downloading project files"
+    logit "Error downloading project files"
     fail_exit
   fi
 fi
@@ -394,11 +397,11 @@ if [ ${BACKEND_TYPE} == "gke" ] ; then
 else # if BACKEND_TYPE is not specified, assume it is EKS
   # prepare for ECR access using aws credentials in call
   if [ ${ECR_TYPE} == "public" ] ; then
-    echo "Using public ECR repository"
+    logit "Using public ECR repository"
     ECR_SERVICE=ecr-public
     ECR_LOGIN_ENDPOINT=public.ecr.aws
   else
-    echo "Using private ECR repository"
+    logit "Using private ECR repository"
     ECR_SERVICE=ecr
     ECR_LOGIN_ENDPOINT=${ECR_AWS_ACCOUNT_ID}.dkr.ecr.${ECR_REGION}.amazonaws.com
   fi
@@ -406,7 +409,7 @@ else # if BACKEND_TYPE is not specified, assume it is EKS
   echo "${P1}" | docker login --username AWS --password-stdin ${ECR_LOGIN_ENDPOINT}
 
   # Make docker login info available to k8s
-  echo "NAMESPACE=" $NAMESPACE
+  logit "NAMESPACE=" $NAMESPACE
   if [ ${ECR_TYPE} == "private" ] ; then
     setup_docker_secret "/tmp/docker-secret.yaml" ${NAMESPACE}
     kubectl apply -f /tmp/docker-secret.yaml
@@ -416,22 +419,22 @@ fi
 # First, MLproject environment image
 DOCKER_IMAGE=`docker_img_from_mlproject`
 if [ $? != 0 ] ; then
-  echo "Error parsing MLproject to determine docker image"
+  logit "Error parsing MLproject to determine docker image"
   fail_exit
 fi
-echo "DOCKER_IMAGE is ${DOCKER_IMAGE}"
+logit "DOCKER_IMAGE is ${DOCKER_IMAGE}"
 CREATE_ENV_IMAGE="yes"
 ENV_SHA=`sha256sum /tmp/workdir/${USE_SUBDIR}Dockerfile |awk -F' ' '{ print $1 }'`
 ENV_REPO_NAME=mlflow/shared_env_images/${ENV_SHA}
 
 if [ ${BACKEND_TYPE} == "gke" ] ; then
   ENV_REPO_URI="gcr.io/${PROJECT_ID}/${ENV_REPO_NAME}"
-  echo "Checking if env image exists in repo URI ${ENV_REPO_URI}"
+  logit "Checking if env image exists in repo URI ${ENV_REPO_URI}"
   docker pull ${ENV_REPO_URI}:latest
   if [ $? == 0 ] ; then
     docker tag ${ENV_REPO_URI}:latest ${DOCKER_IMAGE}:latest
     if [ $? == 0 ] ; then
-      echo "Found latest MLproject docker env image from existing repo $ENV_REPO_URI"
+      logit "Found latest MLproject docker env image from existing repo $ENV_REPO_URI"
       docker images
       CREATE_ENV_IMAGE="no"
     fi
@@ -439,24 +442,24 @@ if [ ${BACKEND_TYPE} == "gke" ] ; then
 else # default BACKEND_TYPE is eks
   ENV_REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $ENV_REPO_NAME`
   if [ $? == 0 ] ; then
-    echo "Looking for latest MLproject docker env image from existing repo $ENV_REPO_URI"
+    logit "Looking for latest MLproject docker env image from existing repo $ENV_REPO_URI"
     docker pull ${ENV_REPO_URI}:latest
     if [ $? == 0 ] ; then
       docker tag ${ENV_REPO_URI}:latest ${DOCKER_IMAGE}:latest
       if [ $? == 0 ] ; then
-        echo "Found latest MLproject docker env image from existing repo $ENV_REPO_URI"
+        logit "Found latest MLproject docker env image from existing repo $ENV_REPO_URI"
         docker images
         CREATE_ENV_IMAGE="no"
       fi
     fi
   else
-    echo "Creating new MLproject docker env image repo $ENV_REPO_NAME"
+    logit "Creating new MLproject docker env image repo $ENV_REPO_NAME"
     /bin/rm -f /tmp/cr-out.txt
     aws --profile ecr --region ${ECR_REGION} ${ECR_SERVICE} create-repository --repository-name ${ENV_REPO_NAME} > /tmp/cr-out.txt
-    echo "Proceed if repository created"
+    logit "Proceed if repository created"
     ENV_REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $ENV_REPO_NAME`
     if [ $? != 0 ] ; then
-      echo "Error creating docker repository ${ENV_REPO_NAME}: "
+      logit "Error creating docker repository ${ENV_REPO_NAME}: "
       cat /tmp/cr-out.txt
       fail_exit
     fi
@@ -464,7 +467,7 @@ else # default BACKEND_TYPE is eks
 fi
 
 if [ $CREATE_ENV_IMAGE == "yes" ] ; then
-  echo "Building env image for pushing to $ENV_REPO_URI"
+  logit "Building env image for pushing to $ENV_REPO_URI"
   (cd /tmp/workdir/${USE_SUBDIR}; echo " " >> Dockerfile)
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt update" >> Dockerfile)
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt install -y libfuse-dev" >> Dockerfile)
@@ -474,7 +477,7 @@ if [ $CREATE_ENV_IMAGE == "yes" ] ; then
   if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
     for i in $(echo ${ADDITIONAL_PACKAGES} | tr "," "\n")
     do
-      echo "Adding additional package $i to env image"
+      logit "Adding additional package $i to env image"
       (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
     done
   fi
@@ -482,7 +485,7 @@ if [ $CREATE_ENV_IMAGE == "yes" ] ; then
   docker images
   /usr/bin/docker tag ${DOCKER_IMAGE}:latest ${ENV_REPO_URI}:latest
   if [ $? != 0 ] ; then
-    echo "Error tagging env image before pushing"
+    logit "Error tagging env image before pushing"
     fail_exit
   fi
   /usr/bin/docker push ${ENV_REPO_URI}:latest
@@ -496,21 +499,21 @@ log_mlflow_artifact ${PARENT_RUN_ID} ${MLFLOW_PROJECT_DIR} '.concurrent/project_
 USER_NAME_MUNGED=`echo ${COGNITO_USERNAME}|sed -e 's/@/-/g'`
 REPO_NAME_MUNGED=`find ${MLFLOW_PROJECT_DIR} -type f|sort|xargs sha256sum|awk -F ' ' '{ print $1 }'|sha256sum|awk -F ' ' '{ print $1 }'`
 REPOSITORY_FULL_NAME=mlflow/${USER_NAME_MUNGED}/${REPO_NAME_MUNGED}
-echo "Name of docker repository for full image is $REPOSITORY_FULL_NAME"
+logit "Name of docker repository for full image is $REPOSITORY_FULL_NAME"
 if [ ${BACKEND_TYPE} == "gke" ] ; then
   REPOSITORY_URI="gcr.io/${PROJECT_ID}/${REPOSITORY_FULL_NAME}"
 else # default backend is eks
   REPOSITORY_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPOSITORY_FULL_NAME`
   if [ $? == 0 ] ; then
-    echo "Using existing Docker repo $REPOSITORY_FULL_NAME"
+    logit "Using existing Docker repo $REPOSITORY_FULL_NAME"
   else
-    echo "Docker repo ${REPOSITORY_FULL_NAME} does not exist. Creating"
+    logit "Docker repo ${REPOSITORY_FULL_NAME} does not exist. Creating"
     /bin/rm -f /tmp/cr-out.txt
     aws --profile ecr --region ${ECR_REGION} ${ECR_SERVICE} create-repository --repository-name ${REPOSITORY_FULL_NAME} > /tmp/cr-out.txt
-    echo "Proceed if repository created"
+    logit "Proceed if repository created"
     REPOSITORY_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPOSITORY_FULL_NAME`
     if [ $? != 0 ] ; then
-      echo "Error creating docker repository:"
+      logit "Error creating docker repository:"
       cat /tmp/cr-out.txt
       fail_exit
     fi
@@ -522,27 +525,29 @@ export REPOSITORY_URI
 export MLFLOW_PROJECT_DIR
 export BOOTSTRAP_LOG_FILE
 
-echo "MLFLOW_CONCURRENT_URI is " $MLFLOW_CONCURRENT_URI
-echo "MLFLOW_TRACKING_URI is " $MLFLOW_TRACKING_URI
-echo "MLFLOW_RUN_ID is " $MLFLOW_RUN_ID
-echo "ENV_REPO_URI is " $ENV_REPO_URI
-echo "REPOSITORY_URI is " $REPOSITORY_URI
-echo "DAGID is " $DAGID
-echo "DAG_EXECUTION_ID is " $DAG_EXECUTION_ID
-echo "PERIODIC_RUN_NAME is " $PERIODIC_RUN_NAME
-echo "PARENT_RUN_ID is " $PARENT_RUN_ID
-echo "REPOSITORY_URI is " $REPOSITORY_URI
-echo "MLFLOW_PROJECT_DIR is " $MLFLOW_PROJECT_DIR
+logit "MLFLOW_CONCURRENT_URI is " $MLFLOW_CONCURRENT_URI
+logit "MLFLOW_TRACKING_URI is " $MLFLOW_TRACKING_URI
+logit "MLFLOW_RUN_ID is " $MLFLOW_RUN_ID
+logit "ENV_REPO_URI is " $ENV_REPO_URI
+logit "REPOSITORY_URI is " $REPOSITORY_URI
+logit "DAGID is " $DAGID
+logit "DAG_EXECUTION_ID is " $DAG_EXECUTION_ID
+logit "PERIODIC_RUN_NAME is " $PERIODIC_RUN_NAME
+logit "PARENT_RUN_ID is " $PARENT_RUN_ID
+logit "REPOSITORY_URI is " $REPOSITORY_URI
+logit "MLFLOW_PROJECT_DIR is " $MLFLOW_PROJECT_DIR
+logit "Full environment: "
+typeset -p
 
 ##Launch task containers
 TASK_LAUNCHER_CMD="python3 /usr/local/bin/task_launcher.py"
 
-echo "Starting task launcher: " $TASK_LAUNCHER_CMD
+logit "Starting task launcher: " $TASK_LAUNCHER_CMD
 $TASK_LAUNCHER_CMD
 if [ $? != 0 ] ; then
-    echo "Task Launcher Failed"
+    logit "Task Launcher Failed"
     exit 255
 else
-    echo "Task Launcher Succeeded"
+    logit "Task Launcher Succeeded"
     exit 0
 fi

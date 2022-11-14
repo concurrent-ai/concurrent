@@ -1,6 +1,5 @@
 import logging
 import os
-import sys
 import json
 import base64
 import zlib
@@ -12,7 +11,11 @@ from mlflow.projects.utils import load_project, MLFLOW_DOCKER_WORKDIR_PATH
 from mlflow.projects import kubernetes as kb
 
 import docker
-#pylint: disable=logging-not-lazy
+# Use lazy % or % formatting in logging functionspylint(logging-fstring-interpolation)
+# Use lazy % or % formatting in logging functionspylint(logging-format-interpolation)
+# Catching too general exception Exceptionpylint(broad-except)
+#pylint: disable=logging-not-lazy, logging-fstring-interpolation, logging-format-interpolation, broad-except
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -100,7 +103,7 @@ def get_mlflow_param(run_id, pname):
                 return run.data.params[pname]
             else:
                 return None
-        except Exception as ex:
+        except Exception:
             print(f'Exception in mlflow call, retry {attempts_left} more times')
             if attempts_left > 0:
                 ##wait before retrying
@@ -143,8 +146,8 @@ def log_describe_pod(pod_name, run_id):
             fh.write(desc_content.decode('utf-8'))
         client = MlflowClient()
         client.log_artifact(run_id, describe_file, artifact_path='.concurrent/logs')
-    except Exception as ex:
-        logger.warning('Failed to log describe pod, try again later', ex)
+    except Exception :
+        logger.warning('Failed to log describe pod, try again later')
         return
 
 def log_pip_requirements(base_image, run_id, build_logs):
@@ -162,7 +165,7 @@ def log_pip_requirements(base_image, run_id, build_logs):
                 pl = None
                 try:
                     pl = json.loads(line)
-                except Exception as ex1:
+                except Exception :
                     pl = None
                 if pl:
                     reqs = ''
@@ -250,54 +253,54 @@ def launch_dag_controller():
     periodic_run_name = os.environ.get('PERIODIC_RUN_NAME')
 
     execute_dag_url = mlflow_parallels_uri.rstrip('/') + '/api/2.0/mlflow/parallels/execdag'
-    print(execute_dag_url)
+    logger.info(execute_dag_url)
     headers = {'Content-Type': 'application/json', 'Authorization': infinstor_token}
     body = {'dagid': dagid, 'dag_execution_id': dag_execution_id, "periodic_run_name": periodic_run_name}
     response = requests.post(execute_dag_url, json=body, headers = headers)
-    print("DAG Controller response: ", response)
+    logger.info(f"DAG Controller response: {response}")
 
 
 def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_commit):
-        """
-        Build a docker image containing the project in `work_dir`, using the base image.
-        """
-        from mlflow.projects.docker import (
-            _create_docker_build_ctx,
-            _PROJECT_TAR_ARCHIVE_NAME,
-            _GENERATED_DOCKERFILE_NAME
+    """
+    Build a docker image containing the project in `work_dir`, using the base image.
+    """
+    from mlflow.projects.docker import (
+        _create_docker_build_ctx,
+        _PROJECT_TAR_ARCHIVE_NAME,
+        _GENERATED_DOCKERFILE_NAME
+    )
+    version_string = ":" + git_commit[:7] if git_commit else ""
+    image_uri = repository_uri + version_string
+    dockerfile = (
+        "FROM {imagename}\n COPY {build_context_path}/ {workdir}\n WORKDIR {workdir}\n RUN echo 'Running pip list'\n RUN echo $(pip list --format json)"
+    ).format(
+        imagename=base_image,
+        build_context_path=_PROJECT_TAR_ARCHIVE_NAME,
+        workdir=MLFLOW_DOCKER_WORKDIR_PATH,
+    )
+    logger.info("Docker file:\n {}".format(dockerfile))
+    build_ctx_path = _create_docker_build_ctx(work_dir, dockerfile)
+    logger.info("build_ctx_path = {}".format(build_ctx_path))
+    logger.info("_PROJECT_TAR_ARCHIVE_NAME = {}, _GENERATED_DOCKERFILE_NAME = {}".format(_PROJECT_TAR_ARCHIVE_NAME, _GENERATED_DOCKERFILE_NAME))
+    with open(build_ctx_path, "rb") as docker_build_ctx:
+        logger.info("=== Building docker image %s ===", image_uri)
+        client = docker.from_env()
+        image, build_logs = client.images.build(
+            tag=image_uri,
+            forcerm=True,
+            dockerfile=os.path.join(_PROJECT_TAR_ARCHIVE_NAME, _GENERATED_DOCKERFILE_NAME),
+            fileobj=docker_build_ctx,
+            custom_context=True,
+            encoding="gzip",
         )
-        version_string = ":" + git_commit[:7] if git_commit else ""
-        image_uri = repository_uri + version_string
-        dockerfile = (
-            "FROM {imagename}\n COPY {build_context_path}/ {workdir}\n WORKDIR {workdir}\n RUN echo 'Running pip list'\n RUN echo $(pip list --format json)"
-        ).format(
-            imagename=base_image,
-            build_context_path=_PROJECT_TAR_ARCHIVE_NAME,
-            workdir=MLFLOW_DOCKER_WORKDIR_PATH,
-        )
-        logger.info("Docker file:\n {}".format(dockerfile))
-        build_ctx_path = _create_docker_build_ctx(work_dir, dockerfile)
-        logger.info("build_ctx_path = {}".format(build_ctx_path))
-        logger.info("_PROJECT_TAR_ARCHIVE_NAME = {}, _GENERATED_DOCKERFILE_NAME = {}".format(_PROJECT_TAR_ARCHIVE_NAME, _GENERATED_DOCKERFILE_NAME))
-        with open(build_ctx_path, "rb") as docker_build_ctx:
-            logger.info("=== Building docker image %s ===", image_uri)
-            client = docker.from_env()
-            image, build_logs = client.images.build(
-                tag=image_uri,
-                forcerm=True,
-                dockerfile=os.path.join(_PROJECT_TAR_ARCHIVE_NAME, _GENERATED_DOCKERFILE_NAME),
-                fileobj=docker_build_ctx,
-                custom_context=True,
-                encoding="gzip",
-            )
-            log_pip_requirements(base_image, parent_run_id, build_logs)
-        try:
-            os.remove(build_ctx_path)
-        except Exception:
-            logger.info("Temporary docker context file %s was not deleted.", build_ctx_path)
-        # tracking.MlflowClient().set_tag(run_id, MLFLOW_DOCKER_IMAGE_URI, image_uri)
-        # tracking.MlflowClient().set_tag(run_id, MLFLOW_DOCKER_IMAGE_ID, image.id)
-        return image
+        log_pip_requirements(base_image, parent_run_id, build_logs)
+    try:
+        os.remove(build_ctx_path)
+    except Exception:
+        logger.info("Temporary docker context file %s was not deleted.", build_ctx_path)
+    # tracking.MlflowClient().set_tag(run_id, MLFLOW_DOCKER_IMAGE_URI, image_uri)
+    # tracking.MlflowClient().set_tag(run_id, MLFLOW_DOCKER_IMAGE_ID, image.id)
+    return image
 
 
 def get_docker_image(parent_run_id):
@@ -311,7 +314,7 @@ def get_docker_image(parent_run_id):
     docker_client = docker.from_env()
     try:
         image = docker_client.images.pull(repository_uri, tag=lookup_tag)
-    except docker.errors.ImageNotFound as inf:
+    except docker.errors.ImageNotFound :
         logger.info("task_launcher.get_docker_image: Docker img "
                      + repository_uri + ", tag=" + lookup_tag + " not found. Building...")
     except docker.errors.APIError as apie:
@@ -418,7 +421,7 @@ def main(run_id_list, input_data_specs, parent_run_id):
     #get the pod name from the jobs
     completed_pods = set()
     success_pods = set()
-    for i in range(100):
+    for _ in range(100):
         for run_id in run_id_list:
             job_name, pod_name = procs_dict[run_id]
             if not pod_name:
@@ -429,7 +432,7 @@ def main(run_id_list, input_data_specs, parent_run_id):
                     pod_name = pod_name.decode('utf-8')
                     procs_dict[run_id] = (job_name, pod_name)
                     logger.info("run_id, job name, pod name = {}, {}, {}".format(run_id, job_name, pod_name))
-                except Exception as ex:
+                except Exception :
                     logger.warning("Waiting to get pod name..")
         pods_run_dict = get_pod_run_mapping(procs_dict)
         fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods)
@@ -464,7 +467,7 @@ def main(run_id_list, input_data_specs, parent_run_id):
 
 ##Main
 if __name__ == '__main__':
-    print("THE TASK LAUNCHER ENV: ", os.environ)
+    logger.info(f"THE TASK LAUNCHER ENV: {os.environ}")
     parent_run_id = os.environ['PARENT_RUN_ID']
     ##read input specs
     with open('/root/.taskinfo/taskinfo', 'rb') as infh:

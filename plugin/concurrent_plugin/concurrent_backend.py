@@ -1,26 +1,19 @@
-import hashlib
 import json
 import yaml
 import os
-import sys
-import shutil
-import subprocess
-import tempfile
 import logging
 import posixpath
 import docker
-import platform
 from os.path import expanduser
-from os.path import sep as separator
 import requests
 from requests.exceptions import HTTPError
-import boto3
 from urllib.parse import urlparse
-import configparser
 import base64
 import uuid
 
-# pylint: disable=logging-not-lazy
+# Use lazy % or % formatting in logging functionspylint(logging-format-interpolation)
+# Use lazy % or .format() or % formatting in logging functionspylint(logging-fstring-interpolation)
+# pylint: disable=logging-not-lazy, logging-format-interpolation, logging-fstring-interpolation
 
 from mlflow.projects.backend.abstract_backend import AbstractBackend
 import mlflow.tracking as tracking
@@ -37,7 +30,6 @@ from mlflow.projects.utils import (
 )
 import mlflow.projects
 import mlflow.projects.docker
-from mlflow.utils import process, file_utils
 from mlflow.utils.mlflow_tags import (
         MLFLOW_PROJECT_ENV,
         MLFLOW_PROJECT_BACKEND,
@@ -47,10 +39,7 @@ from mlflow.utils.mlflow_tags import (
 import mlflow.projects.kubernetes
 from mlflow.projects.kubernetes import KubernetesSubmittedRun, _get_run_command, _load_kube_context
 import kubernetes
-from kubernetes.config.config_exception import ConfigException
 from concurrent_plugin.login import get_conf, get_token, get_token_file_obj, get_env_var
-import kubernetes
-from kubernetes.config.config_exception import ConfigException
 
 _logger = logging.getLogger(__name__)
 
@@ -125,10 +114,10 @@ class ParallelsSubmittedRun(SubmittedRun):
         return True
 
     def get_status(self):
-        return self.status;
+        return self.status
 
     def set_status(self, st):
-        self.status = st;
+        self.status = st
 
     def cancel(self):
         pass
@@ -146,7 +135,7 @@ def upload_objects(run_id, bucket_name, path_in_bucket, local_path):
         _logger.info('upload_objects: Entered. bucket=' + bucket_name
                 + ', path_in_bucket=' + path_in_bucket + ', local_path=' + local_path)
     try:
-        for path, subdirs, files in os.walk(local_path):
+        for path, _, files in os.walk(local_path):
             path = path.replace("\\","/")
             directory_name = path.replace(local_path, "")
             if directory_name.startswith('/.git'): # skip .git and subdirs
@@ -179,7 +168,8 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                 + ", version=" + str(version)\
                 + ", backend_config=" + str(backend_config)\
                 + ", experiment_id=" + str(experiment_id)\
-                + ", tracking_store_uri=" + str(tracking_uri))
+                + ", tracking_store_uri=" + str(tracking_uri) 
+                + ", env vars=" + str(os.environ))
 
         work_dir = fetch_and_validate_project(project_uri, version, entry_point, params)
         if 'run-id' in backend_config:
@@ -214,18 +204,6 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             path_in_bucket = pdst.path[1:]
         else:
             path_in_bucket = pdst.path
-
-        '''
-        localdir = tags['mlflow.source.name']
-        if ('mlflow.source.git.repoURL' in tags or
-                'mlflow.gitRepoURL' in tags or
-                'mlflow.source.git.commit' in tags):
-            pl = urlparse(localdir)
-            if (not pl.scheme == 'file'):
-                raise ValueError('Cannot deal with scheme ' + pl.scheme + ' in source path')
-            localdir = pl.path + separator + pl.fragment
-        '''
-
 
         project = load_project(work_dir)
         tracking.MlflowClient().set_tag(active_run.info.run_id, MLFLOW_PROJECT_BACKEND, "concurrent")
@@ -404,27 +382,29 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             validate_docker_env,
             validate_docker_installation
         )
-        from mlflow.projects import kubernetes as kb
-
+        
         tracking.MlflowClient().set_tag(active_run.info.run_id, MLFLOW_PROJECT_ENV, "docker")
         validate_docker_env(project)
         validate_docker_installation()
 
         kube_config = mlflow.projects._parse_kubernetes_config(backend_config)
 
+        env_vars:dict = get_run_env_vars(run_id=active_run.info.run_uuid, experiment_id=active_run.info.experiment_id)
+        for envvar_name in ['DATABRICKS_HOST', 'DATABRICKS_TOKEN']:
+            if os.getenv(envvar_name): env_vars[envvar_name] = os.getenv(envvar_name)
+    
         #If a local image has already been created/pulled, kube_config should have it
         if 'IMAGE_TAG' in backend_config and 'IMAGE_DIGEST' in backend_config:
             _logger.info('Image already available: {}, {}'
                          .format(backend_config['IMAGE_TAG'], backend_config['IMAGE_DIGEST']))
+            
             submitted_run = self.run_eks_job(
                 project.name,
                 active_run,
                 backend_config['IMAGE_TAG'],
                 backend_config['IMAGE_DIGEST'],
                 get_entry_point_command(project, entry_point, params, backend_config['STORAGE_DIR']),
-                get_run_env_vars(
-                    run_id=active_run.info.run_uuid, experiment_id=active_run.info.experiment_id
-                ),
+                env_vars,
                 input_data_spec,
                 kube_config.get("kube-context", None),
                 kube_config["kube-job-template"],
@@ -439,7 +419,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             docker_client = docker.from_env()
             try:
                 image = docker_client.images.pull(repository_uri, tag=git_commit[:7])
-            except docker.errors.ImageNotFound as inf:
+            except docker.errors.ImageNotFound:
                 _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: Docker img "
                         + repository_uri + ", tag=" + git_commit[:7] + " not found. Building...")
             except docker.errors.APIError as apie:
@@ -462,17 +442,15 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                 run_id=active_run.info.run_id,
                 git_commit=git_commit
             )
-            image_digest = kb.push_image_to_registry(image.tags[0])
+            image_digest = mlflow.projects.kubernetes.push_image_to_registry(image.tags[0])
 
-        submitted_run = self.run_eks_job(
+        submitted_run:KubernetesSubmittedRun = self.run_eks_job(
             project.name,
             active_run,
             image.tags[0],
             image_digest,
             get_entry_point_command(project, entry_point, params, backend_config['STORAGE_DIR']),
-            get_run_env_vars(
-                run_id=active_run.info.run_uuid, experiment_id=active_run.info.experiment_id
-            ),
+            env_vars,
             input_data_spec,
             kube_config.get("kube-context", None),
             kube_config["kube-job-template"],
@@ -517,7 +495,6 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         tracking.MlflowClient().set_tag(run_id, MLFLOW_DOCKER_IMAGE_ID, image.id)
         return image
 
-
     def run_eks_job(
         self,
         project_name,
@@ -548,7 +525,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         token_secret_name = 'parallelstokenfile-' + str(uuid.uuid4())
         try:
             core_api_instance.delete_namespaced_secret(namespace=job_namespace, name=token_secret_name)
-        except:
+        except Exception:
             pass
         sec = kubernetes.client.V1Secret()
         sec.metadata = kubernetes.client.V1ObjectMeta(name=token_secret_name, namespace=job_namespace)
@@ -559,7 +536,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         awscreds_secret_name = 'awscredsfile-' + active_run.info.run_id
         try:
             core_api_instance.delete_namespaced_secret(namespace=job_namespace, name=awscreds_secret_name)
-        except:
+        except Exception:
             pass
         sec1 = kubernetes.client.V1Secret()
         sec1.metadata = kubernetes.client.V1ObjectMeta(name=awscreds_secret_name, namespace=job_namespace)
@@ -572,7 +549,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             _logger.info('run_eks_job: input_spec_name = ' + input_spec_name)
             try:
                 core_api_instance.delete_namespaced_secret(namespace=job_namespace, name=input_spec_name)
-            except:
+            except Exception:
                 pass
             sec2 = kubernetes.client.V1Secret()
             sec2.metadata = kubernetes.client.V1ObjectMeta(name=input_spec_name, namespace=job_namespace)

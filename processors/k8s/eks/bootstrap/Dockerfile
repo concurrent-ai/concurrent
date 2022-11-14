@@ -4,9 +4,7 @@ LABEL version="0.1"
 LABEL maintainer="docker@infinstor.com"
 LABEL description="Image for creating a docker image from a git tree that has a Dockerfile"
 
-RUN apt update
-RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata
-RUN apt install -y bash \
+RUN apt update && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata && apt install -y bash \
                    build-essential \
                    git \
                    curl \
@@ -20,31 +18,20 @@ RUN apt install -y bash \
                    python3-pip && \
     rm -rf /var/lib/apt/lists
 
-RUN curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-399.0.0-linux-x86_64.tar.gz
-RUN tar -xf google-cloud-cli-399.0.0-linux-x86_64.tar.gz
-RUN ./google-cloud-sdk/install.sh
+RUN curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-399.0.0-linux-x86_64.tar.gz && tar -xf google-cloud-cli-399.0.0-linux-x86_64.tar.gz && ./google-cloud-sdk/install.sh
 ENV PATH="${PATH}:/google-cloud-sdk/bin"
 RUN gcloud components install docker-credential-gcr
 
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-RUN unzip awscliv2.zip
-RUN ./aws/install
-
-RUN python3 -m pip install --no-cache-dir --upgrade pip
-RUN python3 -m pip -V
-RUN python3 -m pip install --no-cache-dir docker mlflow boto3 kubernetes
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip awscliv2.zip && ./aws/install && python3 -m pip install --no-cache-dir --upgrade pip && python3 -m pip -V &&  python3 -m pip install --no-cache-dir docker mlflow boto3 kubernetes && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
 
 ADD ./bootstrap.sh /usr/local/bin/bootstrap.sh
 RUN chmod +x /usr/local/bin/bootstrap.sh
 ADD ./bootstrap-version.txt /usr/local/bin/bootstrap-version.txt
 ADD ./task_launcher.py /usr/local/bin/task_launcher.py
 
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-RUN install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
-
 ARG IGNORECACHE=1
-RUN echo "$IGNORECACHE"
-RUN python3 -m pip install --no-cache-dir concurrent_plugin
+ARG CONCURRENT_PLUGIN=concurrent-plugin
+RUN echo "$IGNORECACHE" && python3 -m pip install --no-cache-dir ${CONCURRENT_PLUGIN}
 # To test with a modified concurrent_plugin without pushing to pypi,
 # copy the <concurrent>/plugin directory here, modify it, then
 # comment out the line above and uncomment the two lines below
