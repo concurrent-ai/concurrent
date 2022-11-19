@@ -1,3 +1,3 @@
 def get_version():
-    return '1.0.18-24-gd42a603'
+    return '1.0.18-27-gd5735d6'
 

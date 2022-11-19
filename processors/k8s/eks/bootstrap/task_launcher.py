@@ -226,6 +226,9 @@ def fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods):
                 logger.warning("{} is in Unknown phase".format(pod_name))
                 log_describe_pod(pod_name, pod_run_id)
                 completed_pods.add(pod_name)
+            else:
+                logger.warning("{} is in unfamiliar phase {}".format(pod_name, pod_phase))
+                log_describe_pod(pod_name, pod_run_id)
     return
 
 

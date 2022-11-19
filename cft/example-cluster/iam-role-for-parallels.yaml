@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: This CFT creates a role in this AWS account (the EKS cluster will be created, or is already present, in this AWS account) for the parallels service to assume and perform EKS and ECR actions
+Parameters:
+  ParallelsAWSAccount:
+    Type: Number
+    Description: 'The Parallels Service AWS Account. This account will be allowed to assume this role and perform eks and ecr actions'
+Resources:
+  RoleForAccessingEksAndEcr:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Join [ ':', ['arn', 'aws', 'iam', '', !Ref ParallelsAWSAccount, 'root']]
+            Action:
+              - "sts:AssumeRole"
+            Condition: { "StringEquals": { "sts:ExternalId" : !Select [2, !Split ['/', !Ref AWS::StackId]] }}
+      Path: '/'
+      RoleName: !Join [ "-", [!Select [2, !Split ['/', !Ref AWS::StackId]], "RoleForAccessingEksAndEcr"]]
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - 'ecr:*'
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: !Join [ "-", [!Select [2, !Split ['/', !Ref AWS::StackId]], "AllowParallelsToAccessECR"]]
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - 'eks:*'
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: !Join [ "-", [!Select [2, !Split ['/', !Ref AWS::StackId]], "AllowParallelsToAccessEKS"]]
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - sts:GetServiceBearerToken
+            Effect: Allow
+            Resource: '*'
+          Version: '2012-10-17'
+        PolicyName: !Join [ "-", [!Select [2, !Split ['/', !Ref AWS::StackId]], "AllowParallelsToGetServiceBearerToken"]]
+Outputs:
+  RoleForParallelsServiceExtId:
+    Description: External ID for Role
+    Value: !Select [2, !Split ['/', !Ref AWS::StackId]]
+    Export:
+      Name: 'parallels:ExternalIDForRoleForAccessingEksAndEcr'
+  RoleForParallelsService:
+    Description: ARN of role
+    Value: !GetAtt RoleForAccessingEksAndEcr.Arn
+    Export:
+      Name: 'parallels:RoleForAccessingEksAndEcr'
