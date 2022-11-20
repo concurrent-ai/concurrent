@@ -4,6 +4,6 @@ Resources:
   CreateK8sRole:
     Type: "AWSQS::Kubernetes::Resource"
     Properties:
-      ClusterName: mlflow-parallels
+      ClusterName: eks-for-concurrent
       Namespace: "default"
       Url: s3://docs.concurrent-ai.org/cft/example-cluster/user-role.yaml

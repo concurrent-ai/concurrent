@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Root stack for creating the requirements for mlflow-parallels
+Description: Root stack for creating an EKS cluster for Concurrent
 Parameters:
   Region:
     Type: String
@@ -602,6 +602,6 @@ Resources:
     Type: "AWSQS::Kubernetes::Resource"
     DependsOn: createk8srolewrapper
     Properties:
-      ClusterName: mlflow-parallels
+      ClusterName: eks-for-concurrent
       Namespace: "default"
       Url: s3://docs.concurrent-ai.org/cft/example-cluster/k8s-dind-service.yaml

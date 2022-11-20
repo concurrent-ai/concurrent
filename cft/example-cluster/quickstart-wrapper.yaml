@@ -18,7 +18,7 @@ Resources:
         AvailabilityZones: !Ref AvailabilityZones
         EKSPublicAccessEndpoint: Enabled
         RemoteAccessCIDR: 0.0.0.0/0
-        EKSClusterName: mlflow-parallels
+        EKSClusterName: eks-for-concurrent
         AdditionalEKSAdminRoleArn: !ImportValue parallels:RoleForAccessingEksAndEcr
         NodeInstanceType: !Ref NodeInstanceType
         NumberOfNodes: !Ref NumberOfNodes
