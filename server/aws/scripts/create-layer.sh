@@ -47,10 +47,20 @@ echo "Before trimming: Current size of python lambda layer: $(du -s -m package |
 
 # remove unneeded directories to save space in the lambda layer
 # package/python/scipy/integrate : scipy mathematical integration solver
-for dir in package/python/mlflow/server/js/ package/python/numpy package/python/numpy.libs package/python/pandas package/python/scipy/integrate; do
+for dir in package/python/mlflow/server/js/ \
+    package/python/numpy package/python/pandas \
+    package/python/scipy/integrate \
+    package/python/sklearn \
+    package/python/llvmlite \
+    package/python/numba \
+    package/python/matplotlib \
+    package/python/fontTools \
+    package/python/numpy.libs \
+    package/python/pyarrow ; do
     echo "Removing directory to reduce python lambda layer size: $dir"
     rm -rf $dir
 done;
+
 
 # from searching mlflow source code, only scipy.parse is used.  So other scipy packages can be removed (as long as scipy.parse doesn't depend on it)
 # remove scipy.linalg and scipy.special since they are not related to scipy.sparse above

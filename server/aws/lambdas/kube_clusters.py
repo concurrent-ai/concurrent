@@ -364,7 +364,8 @@ def query_clusters_info_by_owner(owner):
     return cluster_list
 
 
-def query_user_accessible_clusters(cognito_username, groups, is_admin):
+def query_user_accessible_clusters(cognito_username, groups):
+    is_admin = is_user_admin(cognito_username)
     cluster_list = []
     hash_key = get_cluster_access_hash_key()
     range_key_prefix = get_cluster_access_range_key_prefix('user', cognito_username)
@@ -439,7 +440,7 @@ def get_kube_clusters(event, context):
                 cl['cluser_access'] = access_grouped_by_cluster[(cl_name, ns)]
     else:
         ##Get clusters that this user has access to
-        cluster_list = query_user_accessible_clusters(cognito_username, groups, is_admin)
+        cluster_list = query_user_accessible_clusters(cognito_username, groups)
 
     if cluster_list:
         return respond(None, {'kube_clusters': cluster_list})
