@@ -24,7 +24,6 @@ def handler(event, context):
       s3_client:S3Client = boto3.client('s3')
       # Retrieve parameters
       the_bucket = event['ResourceProperties']['the_bucket']
-      staticfilesBucketPrefix:str = event['ResourceProperties']['StaticfilesBucketPrefix']
       user_pool_id = event['ResourceProperties']['user_pool_id']
       cli_client_id = event['ResourceProperties']['cli_client_id']
       mlflowui_client_id = event['ResourceProperties']['mlflowui_client_id']
@@ -34,6 +33,23 @@ def handler(event, context):
       mlflow_parallels_ui_build_location = event['ResourceProperties']['mlflow_parallels_ui_build_location']
       mlflow_parallels_ui_version = event['ResourceProperties']['mlflow_parallels_ui_version']
       mlflowServerType = event['ResourceProperties']['mlflowServerType']
+      distDomainName = event['ResourceProperties']['distDomainName']
+
+      staticfilesBucketPrefix = None
+      client = boto3.client('cloudfront')
+      resp = client.list_distributions()
+      dlist = resp['DistributionList']['Items']
+      for dist in dlist:
+        if dist['DomainName'] == distDomainName:
+          origin_items = dist['Origins']['Items']
+          for oi in origin_items:
+            staticfilesBucketPrefix = oi['OriginPath']
+            break
+          break
+      if not staticfilesBucketPrefix:
+        print('Could not determine prefix in bucket for distDomain=' + str(distDomainName))
+      else:
+        print('Prefix in bucket =' + staticfilesBucketPrefix)
 
       if the_event == 'Create':
         create_all(s3_client, mlflowServerType, the_bucket, staticfilesBucketPrefix, user_pool_id, cli_client_id, mlflowui_client_id,
@@ -42,8 +58,9 @@ def handler(event, context):
         print('Operation successful!')
         cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket)
       elif the_event == 'Update':
-        OldStaticfilesBucketPrefix:str = event['OldResourceProperties']['StaticfilesBucketPrefix']
-        delete_all(s3_client, mlflowServerType, the_bucket, OldStaticfilesBucketPrefix)
+        if 'StaticfilesBucketPrefix' in event['OldResourceProperties']:
+          OldStaticfilesBucketPrefix:str = event['OldResourceProperties']['StaticfilesBucketPrefix']
+          delete_all(s3_client, mlflowServerType, the_bucket, OldStaticfilesBucketPrefix)
         create_all(s3_client, mlflowServerType, the_bucket, staticfilesBucketPrefix, user_pool_id, cli_client_id, mlflowui_client_id,
                   service, mlflow_parallels_dns_name, mlflowparallelsui_dns_name, mlflow_parallels_ui_build_location, mlflow_parallels_ui_version)
         # Everything OK... send the signal back

@@ -76,15 +76,11 @@ Parameters:
       Description: s3 bucket for static website
       Default: staticfiles
       AllowedPattern: '[a-zA-Z][.a-zA-Z0-9_-]*'
-  StaticfilesBucketPrefix:
-    Type: String
-    Description: If specified, the s3 prefix to use in the static-files bucket to copy files into.  If empty, then an appropriate s3 prefix is created internally by default, using the parallels ui version number
-    Default: ""
   ParallelsCftVersion:
     Type: String
     Description: version of mlflow parallels Cft to install
-    Default: 1.0.24
-    AllowedValues: [1.0.24]
+    Default: 1.0.25
+    AllowedValues: [1.0.25]
   MlflowParallelsUiVersion:    
     Type: String
     Default: 1.0.6
@@ -92,8 +88,8 @@ Parameters:
     Description: Mlflow Parallels UI version to install.  Cannot be modified
   MlflowParallelsLambdaVersion:
     Type: String
-    Default: 1.0.21
-    AllowedValues: [1.0.21]
+    Default: 1.0.20
+    AllowedValues: [1.0.20]
     Description: Mlflow Parallels Lambda version to install.  Cannot be modified
   UseBoundaryPolicy:
     Type: String
@@ -162,7 +158,6 @@ Mappings:
       ParallelsUiBuildPrefix: builds/ui/opensource-parallels-ui
 Conditions:
   EmptyBoundaryPolicyArn: !Equals [!Ref BoundaryPolicyARN, ""]
-  EmptyStaticfilesBucketPrefix: !Equals [!Ref StaticfilesBucketPrefix, ""]
 Rules:
   CognitoUserPoolIdValRule:
     RuleCondition: !Not [ !Equals [!Ref CognitoUserPoolId, ''] ]
@@ -178,8 +173,6 @@ Rules:
     Assertions:
     - Assert: !Not [ !Equals [ !Ref StaticfilesBucketName, ''] ]
       AssertDescription: if mlflow server type is infinstor, then StaticfilesBucketName must be specified (not empty) 
-    - Assert: !Not [ !Equals [ !Ref StaticfilesBucketPrefix, ''] ]
-      AssertDescription: if mlflow server type is infinstor, then StaticfilesBucketPrefix must be specified (not empty) 
   BoundaryPolicyRule:
     RuleCondition: !Equals [!Ref UseBoundaryPolicy, 'true']
     Assertions:
@@ -245,14 +238,6 @@ Resources:
         MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
         MlflowParallelsUiDnsName: !Ref MlflowParallelsUiDnsName
         StaticfilesBucketName: !Ref StaticfilesBucketName
-        StaticfilesBucketPrefix: 
-          Fn::If: 
-          - EmptyStaticfilesBucketPrefix 
-          - Fn::Sub:
-            - '${parallels_ui_build_prefix}/${parllels_ui_version}' 
-            - parallels_ui_build_prefix : !FindInMap [MlflowServerTypeMap, !Ref MlflowServerType, ParallelsUiBuildPrefix]
-              parllels_ui_version: !Ref MlflowParallelsUiVersion
-          - !Ref StaticfilesBucketPrefix
         MlflowParallelsUiBuildLocation: 
           Fn::Sub:
             - '${parallels_ui_build_prefix}' 
