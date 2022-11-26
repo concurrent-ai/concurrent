@@ -136,7 +136,7 @@ Resources:
                   if dist['DomainName'] == distDomainName:
                     origin_items = dist['Origins']['Items']
                     for oi in origin_items:
-                      staticfilesBucketPrefix = oi['OriginPath']
+                      staticfilesBucketPrefix = oi['OriginPath'].lstrip('/')
                       break
                     break
                 if not staticfilesBucketPrefix:
@@ -152,7 +152,7 @@ Resources:
                             service, mlflow_parallels_dns_name, mlflowparallelsui_dns_name, mlflow_parallels_ui_build_location, mlflow_parallels_ui_version)
                   # Everything OK... send the signal back
                   print('Operation successful!')
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket)
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket+'/'+staticfilesBucketPrefix)
                 elif the_event == 'Update':
                   if 'StaticfilesBucketPrefix' in event['OldResourceProperties']:
                     OldStaticfilesBucketPrefix:str = event['OldResourceProperties']['StaticfilesBucketPrefix']
@@ -161,18 +161,18 @@ Resources:
                             service, mlflow_parallels_dns_name, mlflowparallelsui_dns_name, mlflow_parallels_ui_build_location, mlflow_parallels_ui_version)
                   # Everything OK... send the signal back
                   print('Operation successful!')
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket)
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket+'/'+staticfilesBucketPrefix)
                 elif the_event == 'Delete':
                   # TODO: if installing on top of mlflow-noproxy, when we uninstall mlflow-noproxy-parallels-ui build, we need to retore the old mlflow-noproxy build that it overwrote.
                   delete_all(s3_client, mlflowServerType, the_bucket, staticfilesBucketPrefix)
                   # Everything OK... send the signal back
                   print('Operation successful!')
-                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket)
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket+'/'+staticfilesBucketPrefix)
               except Exception as e:
                 print('Operation failed...')
                 print(str(e))
                 response_data['Data'] = str(e)
-                cfnresponse.send(event, context, cfnresponse.FAILED, response_data, physicalResourceId=the_bucket)
+                cfnresponse.send(event, context, cfnresponse.FAILED, response_data, physicalResourceId=the_bucket+'/'+staticfilesBucketPrefix)
 
           def create_all(s3_client:S3Client, mlflowServerType:str, the_bucket, staticfilesBucketPrefix:str, user_pool_id, cli_client_id, mlflowui_client_id,
                           service, mlflow_parallels_dns_name, mlflowparallelsui_dns_name, mlflow_parallels_ui_build_location:str, mlflow_parallels_ui_version:str):
