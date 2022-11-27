@@ -25,6 +25,9 @@ Parameters:
   MlflowParallelsUiBuildLocation: 
     Type: String
     Description: the build location in the distribution site, without the build version.  The build version is appended to this to get the full build location.
+  ParallelsCftVersion:
+    Type: String
+    Description: version of mlflow parallels Cft to install
 Conditions:
   # if installing on top of infinstor-mlflow, then this is false.  Reuses the existing bucket.
   DoCreateStaticfilesBucket: !Not [ !Equals [!Ref MlflowServerType, "infinstor" ] ]
@@ -76,6 +79,7 @@ Resources:
       mlflow_parallels_ui_version: !Ref MlflowParallelsUiVersion
       mlflowServerType: !Ref MlflowServerType
       distDomainName: !ImportValue 'infinstor:MlflowUiARecord'
+      ParallelsCftVersion: !Ref ParallelsCftVersion
   S3CustomResourceAWSLambdaFunction:
     Type: 'AWS::Lambda::Function'
     Properties:

@@ -79,8 +79,8 @@ Parameters:
   ParallelsCftVersion:
     Type: String
     Description: version of mlflow parallels Cft to install
-    Default: 1.0.25
-    AllowedValues: [1.0.25]
+    Default: 1.0.26
+    AllowedValues: [1.0.26]
   MlflowParallelsUiVersion:    
     Type: String
     Default: 1.0.6
@@ -238,6 +238,7 @@ Resources:
         MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
         MlflowParallelsUiDnsName: !Ref MlflowParallelsUiDnsName
         StaticfilesBucketName: !Ref StaticfilesBucketName
+        ParallelsCftVersion: !Ref ParallelsCftVersion
         MlflowParallelsUiBuildLocation: 
           Fn::Sub:
             - '${parallels_ui_build_prefix}' 

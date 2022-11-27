@@ -235,6 +235,7 @@ Resources:
         MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
         MlflowParallelsUiDnsName: !Ref MlflowParallelsUiDnsName
         StaticfilesBucketName: !Ref StaticfilesBucketName
+        ParallelsCftVersion: !Ref ParallelsCftVersion
         MlflowParallelsUiBuildLocation: 
           Fn::Sub:
             - '${parallels_ui_build_prefix}' 
