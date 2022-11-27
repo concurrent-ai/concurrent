@@ -130,6 +130,9 @@ Resources:
                 mlflow_parallels_ui_build_location = event['ResourceProperties']['mlflow_parallels_ui_build_location']
                 mlflow_parallels_ui_version = event['ResourceProperties']['mlflow_parallels_ui_version']
                 mlflowServerType = event['ResourceProperties']['mlflowServerType']
+                if not 'distDomainName' in event['ResourceProperties']:
+                  # just return success. We are updating an old template that did not know about distDomainName
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket)
                 distDomainName = event['ResourceProperties']['distDomainName']
 
                 staticfilesBucketPrefix = None
@@ -176,7 +179,7 @@ Resources:
                 print('Operation failed...')
                 print(str(e))
                 response_data['Data'] = str(e)
-                cfnresponse.send(event, context, cfnresponse.FAILED, response_data, physicalResourceId=the_bucket+'/'+staticfilesBucketPrefix)
+                cfnresponse.send(event, context, cfnresponse.FAILED, response_data, physicalResourceId=the_bucket)
 
           def create_all(s3_client:S3Client, mlflowServerType:str, the_bucket, staticfilesBucketPrefix:str, user_pool_id, cli_client_id, mlflowui_client_id,
                           service, mlflow_parallels_dns_name, mlflowparallelsui_dns_name, mlflow_parallels_ui_build_location:str, mlflow_parallels_ui_version:str):
