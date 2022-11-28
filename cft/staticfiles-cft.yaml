@@ -133,6 +133,7 @@ Resources:
                 if not 'distDomainName' in event['ResourceProperties']:
                   # just return success. We are updating an old template that did not know about distDomainName
                   cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket)
+                  return
                 distDomainName = event['ResourceProperties']['distDomainName']
 
                 staticfilesBucketPrefix = None
