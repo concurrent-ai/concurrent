@@ -227,7 +227,7 @@ if [ x$NEW_CONCURRENT_UI != "x" ] ; then
   if [ -d workdir/mlflow-noproxy ] ; then
     echo "Cleaning up existing mlflow-noproxy source tree"
     (cd workdir/mlflow-noproxy; git reset --hard)
-    (cd workdir/mlflow-noproxy; git checkout main)
+    (cd workdir/mlflow-noproxy; git checkout master)
   else
     echo "Checking out mlflow-noproxy source tree"
     (cd workdir; git clone https://git-codecommit.us-east-1.amazonaws.com/v1/repos/mlflow-noproxy)
@@ -242,13 +242,13 @@ if [ x$NEW_CONCURRENT_UI != "x" ] ; then
     echo "Error fetching all tags in source tree mlflow-noproxy"
     exit $?
   fi
-  echo "Checkout out tag $NEW_MLFLOW_UI in the mlflow-noproxy source tree"
-  (cd workdir/mlflow-noproxy; git -c advice.detachedHead=false checkout tags/$NEW_MLFLOW_UI)
+  echo "Checkout out tag $NEW_CONCURRENT_UI in the mlflow-noproxy source tree"
+  (cd workdir/mlflow-noproxy; git -c advice.detachedHead=false checkout tags/$NEW_CONCURRENT_UI)
   if [ $? != 0 ] ; then
-    echo "Error checking out tag $NEW_MLFLOW_UI in source tree mlflow-noproxy. Perhaps tag $NEW_MLFLOW_UI does not exist?"
+    echo "Error checking out tag $NEW_CONCURRENT_UI in source tree mlflow-noproxy. Perhaps tag $NEW_CONCURRENT_UI does not exist?"
     exit $?
   fi
-  (cd workdir/mlflow-noproxy; ./scripts/build-and-copy.sh infinstordist.com $NEW_CONCURRENT_UI)
+  (cd workdir/mlflow-noproxy; ./scripts/build-and-copy-mlflow-noproxy-parallels.sh $NEW_CONCURRENT_UI)
   if [ $? != 0 ] ; then
     echo "Error building and copying $NEW_CONCURRENT_UI version of Concurrent UI"
     exit $?
