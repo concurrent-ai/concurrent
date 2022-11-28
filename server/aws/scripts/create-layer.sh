@@ -28,7 +28,7 @@ pip install setuptools==57.5.0
 #pip install botocore
 pip install certifi==2021.10.8
 pip install sqlparse
-pip install mlflow
+pip install mlflow==2.0.1
 pip install infinstor
 pip install infinstor_mlflow_plugin
 pip install python-jose
