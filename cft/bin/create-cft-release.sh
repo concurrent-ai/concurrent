@@ -193,7 +193,8 @@ if [ x$NEW_CONCURRENT_LAMBDAS != "x" ] ; then
     echo "Error determining the name of the generated template.yaml file. Details in file /tmp/concurrent-build.log.$$"
     exit $?
   fi
-  UPLINE=`echo $UPLINER|sed -e 's///g'`
+  UPLINE=`echo $UPLINER|sed -e 's/
+//g'`
   CONCURRENT_TEMPLATE_FILE=`echo $UPLINE | sed -e 's/Uploading to \(concurrent-server\/.*template\).*/\1/'`
   echo "Concurrent Lambdas generated template file name is $CONCURRENT_TEMPLATE_FILE"
   aws s3 cp s3://scratch-bucket-xyzzy-3/$CONCURRENT_TEMPLATE_FILE ./workdir
@@ -272,7 +273,7 @@ for file in certs-cft.json mlflow-parallels-cft-template.yaml mlflow-parallels-c
     aws s3 cp $file s3://concurrentdist/cft/parallels-cft/"$NEW_CFT_VERSION"/$file
 done;
 
-if [ $UPDATE_VERSION_JSON == "true" ] ; then
+if [ "$UPDATE_VERSION_JSON" == "true" ] ; then
   echo "Updating s3://concurrentdist/cft/parallels-cft/latest-software-versions.json"
   echo "{" > /tmp/latest-software-versions.json.$$
   echo "  \"cft_version\": \"$NEW_CFT_VERSION\"," >> /tmp/latest-software-versions.json.$$
