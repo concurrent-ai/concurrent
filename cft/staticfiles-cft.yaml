@@ -130,6 +130,7 @@ Resources:
                 mlflow_parallels_ui_build_location = event['ResourceProperties']['mlflow_parallels_ui_build_location']
                 mlflow_parallels_ui_version = event['ResourceProperties']['mlflow_parallels_ui_version']
                 mlflowServerType = event['ResourceProperties']['mlflowServerType']
+
                 staticfilesBucketPrefix = None
                 # the 'delete during an upgrade' will not have 'distDomainName', when upgrading from an old cft version with 'StaticFilesBucket' to a new cft version with 'distDomainName
                 if 'distDomainName' in event['ResourceProperties']:
