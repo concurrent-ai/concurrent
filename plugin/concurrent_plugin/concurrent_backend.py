@@ -563,13 +563,24 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                 ]
         if input_data_spec:
             volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/root/.concurrent-data', name=input_spec_name))
+
+        ##Add volume for fuse mounts, side car volume is setup with 'Bidirectional' mount propagation
+        side_car_volume_mounts = volume_mounts.copy()
+        volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/mount_base_dir', name='sharedmount',
+                                                             mount_propagation='HostToContainer'))
+        side_car_volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/mount_base_dir',
+                                                    name='sharedmount',
+                                                    mount_propagation='Bidirectional'))
+
         job_template["spec"]["template"]["spec"]["containers"][0]["volumeMounts"] = volume_mounts
+        job_template["spec"]["template"]["spec"]["containers"][1]["volumeMounts"] = side_car_volume_mounts
 
         job_template["spec"]["template"]["spec"]["serviceAccountName"] = 'k8s-serviceaccount-for-users-' + job_namespace
 
         job_template["spec"]["template"]["spec"]["volumes"] = [
                     kubernetes.client.V1Volume(name="parallels-token-file", secret=kubernetes.client.V1SecretVolumeSource(secret_name=token_secret_name)),
-                    kubernetes.client.V1Volume(name="aws-creds-file", secret=kubernetes.client.V1SecretVolumeSource(secret_name=awscreds_secret_name))
+                    kubernetes.client.V1Volume(name="aws-creds-file", secret=kubernetes.client.V1SecretVolumeSource(secret_name=awscreds_secret_name)),
+                    kubernetes.client.V1Volume(name='sharedmount', empty_dir=kubernetes.client.V1EmptyDirVolumeSource())
                 ]
         if input_data_spec:
             job_template["spec"]["template"]["spec"]["volumes"].append(
