@@ -33,30 +33,35 @@ def handler(event, context):
       mlflow_parallels_ui_build_location = event['ResourceProperties']['mlflow_parallels_ui_build_location']
       mlflow_parallels_ui_version = event['ResourceProperties']['mlflow_parallels_ui_version']
       mlflowServerType = event['ResourceProperties']['mlflowServerType']
-      distDomainName = event['ResourceProperties']['distDomainName']
-
       staticfilesBucketPrefix = None
-      client = boto3.client('cloudfront')
-      resp = client.list_distributions()
-      dlist = resp['DistributionList']['Items']
-      for dist in dlist:
-        if dist['DomainName'] == distDomainName:
-          origin_items = dist['Origins']['Items']
-          for oi in origin_items:
-            staticfilesBucketPrefix = oi['OriginPath']
+      # the 'delete during an upgrade' will not have 'distDomainName', when upgrading from an old cft version with 'StaticFilesBucket' to a new cft version with 'distDomainName
+      if 'distDomainName' in event['ResourceProperties']:
+        distDomainName = event['ResourceProperties']['distDomainName']
+        # use the 'distDomainName' (cloudfront hosted dns name) and cloudfront API to locate the name of the staticfiles bucket prefix
+        client = boto3.client('cloudfront')
+        resp = client.list_distributions()
+        dlist = resp['DistributionList']['Items']
+        for dist in dlist:
+          if dist['DomainName'] == distDomainName:
+            origin_items = dist['Origins']['Items']
+            for oi in origin_items:
+              staticfilesBucketPrefix = oi['OriginPath'].lstrip('/')
+              break
             break
-          break
-      if not staticfilesBucketPrefix:
-        print('Could not determine prefix in bucket for distDomain=' + str(distDomainName))
-      else:
-        print('Prefix in bucket =' + staticfilesBucketPrefix)
+        if not staticfilesBucketPrefix:
+          print('Could not determine prefix in bucket for distDomain=' + str(distDomainName))
+          cfnresponse.send(event, context, cfnresponse.FAILED, response_data, physicalResourceId=the_bucket)
+          return
+        else:
+          print('Prefix in bucket =' + staticfilesBucketPrefix)
+
 
       if the_event == 'Create':
         create_all(s3_client, mlflowServerType, the_bucket, staticfilesBucketPrefix, user_pool_id, cli_client_id, mlflowui_client_id,
                   service, mlflow_parallels_dns_name, mlflowparallelsui_dns_name, mlflow_parallels_ui_build_location, mlflow_parallels_ui_version)
         # Everything OK... send the signal back
         print('Operation successful!')
-        cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket)
+        cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket+'/'+staticfilesBucketPrefix)
       elif the_event == 'Update':
         if 'StaticfilesBucketPrefix' in event['OldResourceProperties']:
           OldStaticfilesBucketPrefix:str = event['OldResourceProperties']['StaticfilesBucketPrefix']
@@ -65,13 +70,16 @@ def handler(event, context):
                   service, mlflow_parallels_dns_name, mlflowparallelsui_dns_name, mlflow_parallels_ui_build_location, mlflow_parallels_ui_version)
         # Everything OK... send the signal back
         print('Operation successful!')
-        cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket)
+        cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket+'/'+staticfilesBucketPrefix)
       elif the_event == 'Delete':
+        # 'delete' during an upgrade: old cft version had 'StaticfilesBucketPrefix' and new cft version has 'distDomainName'
+        # 'delete' during an upgrade: when staticBucketPrefix changes (staticBucketPrefix is part of the physicalResourceId below)
+        if 'StaticfilesBucketPrefix' in event['ResourceProperties']: staticfilesBucketPrefix = event['ResourceProperties']['StaticfilesBucketPrefix'] 
         # TODO: if installing on top of mlflow-noproxy, when we uninstall mlflow-noproxy-parallels-ui build, we need to retore the old mlflow-noproxy build that it overwrote.
         delete_all(s3_client, mlflowServerType, the_bucket, staticfilesBucketPrefix)
         # Everything OK... send the signal back
         print('Operation successful!')
-        cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket)
+        cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data, physicalResourceId=the_bucket+'/'+staticfilesBucketPrefix)
     except Exception as e:
       print('Operation failed...')
       print(str(e))

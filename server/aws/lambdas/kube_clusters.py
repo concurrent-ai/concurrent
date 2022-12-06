@@ -364,7 +364,7 @@ def query_clusters_info_by_owner(owner):
     return cluster_list
 
 
-def query_user_accessible_clusters(cognito_username, groups):
+def query_user_accessible_clusters(cognito_username, groups:list):
     is_admin = is_user_admin(cognito_username)
     cluster_list = []
     hash_key = get_cluster_access_hash_key()
