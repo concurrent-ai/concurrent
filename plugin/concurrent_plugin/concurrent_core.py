@@ -14,7 +14,14 @@ import glob
 import copy
 import re
 from io import StringIO
-
+import socket
+import string
+import random
+import time
+from concurrent_plugin.concurrent_backend import (
+    CONCURRENT_FUSE_MOUNT_BASE,
+    MOUNT_SERVICE_READY_MARKER_FILE
+)
 
 def _list_one_dir(client, bucket, prefix_in, arr):
     print("INFO: _list_one_dir: ", bucket, prefix_in)
@@ -248,6 +255,45 @@ def _filter_df_for_partition(df, input_spec, all_keys):
     return df
 
 
+def mount_request(mount_path, mount_spec, shadow_path, use_cache):
+    ##Check if mount service is ready
+    max_wait_time = 3*60
+    start = time.time()
+    while time.time() - start <= max_wait_time:
+        if os.path.exists(MOUNT_SERVICE_READY_MARKER_FILE):
+            print('Mount service available')
+            break
+        else:
+            print('Wait for mount service to be ready')
+            time.sleep(10)
+    else:
+        print('ERROR: No mount service available')
+        raise Exception("No mount service available")
+
+    req = {
+        'mount_path': mount_path,
+        'mount_spec': mount_spec,
+        'shadow_path': shadow_path if shadow_path else 'None',
+        'use_cache': 'True' if use_cache else 'False'
+    }
+    req_data = json.dumps(req).encode('utf-8')
+
+    HOST = "127.0.0.1"  # Standard loopback interface address (localhost)
+    PORT = 7963  # Port to listen on (non-privileged ports are > 1023)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        print('Sending mount request: ', req_data)
+        s.connect((HOST, PORT))
+        s.sendall(req_data)
+        response = s.recv(1024)
+        response = response.decode('utf-8')
+        if response == 'success':
+            print('Mount created successfully')
+            return
+        else:
+            print('Mount failed: ' + response)
+            raise Exception('Failed to create mount: '+response)
+
+
 def _perform_mount_for_mount_spec(df, mount_spec, mount_path):
     path_list = df['FileName'].tolist()
     # replace the cloud prefix by mounted path
@@ -258,7 +304,17 @@ def _perform_mount_for_mount_spec(df, mount_spec, mount_path):
         local_path = os.path.join(mount_path, fpath[cloud_prefix_len:])
         local_file_list.append(local_path)
 
-    infinmount.perform_mount(mount_path, mount_spec)
+    if os.environ.get('USE_DATA_CACHE') == 'False':
+        use_cache = False
+    else:
+        use_cache = True
+
+    if 'SHARED_DATA_VOLUME' in os.environ:
+        shadow_path = os.environ['SHARED_DATA_VOLUME']
+    else:
+        shadow_path = None
+
+    mount_request(mount_path, mount_spec, shadow_path, use_cache)
 
     return local_file_list
 
@@ -274,12 +330,13 @@ def get_local_paths(df):
         ## Local files
         return df['FileName'].tolist()
 
-    mount_path = tempfile.mkdtemp()
+    mount_path = os.path.join(CONCURRENT_FUSE_MOUNT_BASE,
+                              ''.join(random.choices(string.ascii_letters + string.digits, k=10)))
 
     all_local_files = []
     for i, m_spec in enumerate(mount_specs):
         m_path = os.path.join(mount_path, "part-" + str(i))
-        os.mkdir(m_path)
+        os.makedirs(m_path, exist_ok=True)
         m_spec['mountpoint'] = m_path
         rb = m_spec['row_start']
         re = rb + m_spec['num_rows']

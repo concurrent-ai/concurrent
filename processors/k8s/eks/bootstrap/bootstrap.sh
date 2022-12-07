@@ -474,6 +474,7 @@ if [ $CREATE_ENV_IMAGE == "yes" ] ; then
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install --ignore-installed PyYAML" >> Dockerfile)
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install concurrent-plugin" >> Dockerfile)
   (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install boto3" >> Dockerfile)
+  (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install psutil" >> Dockerfile)
   if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
     for i in $(echo ${ADDITIONAL_PACKAGES} | tr "," "\n")
     do

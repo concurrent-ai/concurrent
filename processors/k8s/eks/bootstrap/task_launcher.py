@@ -19,7 +19,11 @@ import docker
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-def generate_kubernetes_job_template(job_tmplate_file, namespace):
+def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_tag,
+                                     image_digest, side_car_name):
+    image_uri = image_tag + "@" + image_digest
+    mlflow_tracking_uri = os.environ['MLFLOW_TRACKING_URI']
+    concurrent_uri = os.environ['MLFLOW_CONCURRENT_URI']
     with open(job_tmplate_file, "w") as fh:
         fh.write("apiVersion: batch/v1\n")
         fh.write("kind: Job\n")
@@ -31,19 +35,14 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace):
         fh.write("  backoffLimit: 0\n")
         fh.write("  template:\n")
         fh.write("    spec:\n")
+        fh.write("      shareProcessNamespace: true\n")
         fh.write("      containers:\n")
         fh.write("      - name: \"{replaced with MLflow Project name}\"\n")
         fh.write("        image: \"{replaced with URI of Docker image created during Project execution}\"\n")
         fh.write("        command: [\"{replaced with MLflow Project entry point command}\"]\n")
         fh.write("        imagePullPolicy: IfNotPresent\n")
-        fh.write("        securityContext:\n")
-        fh.write("          privileged: true\n")
-        fh.write("          capabilities:\n")
-        fh.write("            add:\n")
-        fh.write("              - SYS_ADMIN\n")
         fh.write("        resources:\n")
         fh.write("          limits:\n")
-
         if 'RESOURCES_LIMITS_CPU' in os.environ:
             fh.write("            cpu: \"{}\"\n".format(os.environ['RESOURCES_LIMITS_CPU']))
         if 'RESOURCES_LIMITS_MEMORY' in os.environ:
@@ -66,8 +65,41 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace):
         if os.environ.get('ECR_TYPE') == "private":
             fh.write("      imagePullSecrets:\n")
             fh.write("      - name: ecr-private-key\n")
+
+        ##Add sidecar container
+        fh.write("      - name: \"{}\"\n".format(side_car_name))
+        fh.write("        image: \"{}\"\n".format(image_uri))
+        fh.write("        lifecycle:\n")
+        fh.write("          type: Sidecar\n")
+        fh.write("        command: [\"python\"]\n")
+        fh.write("        args: [\"-m\", \"concurrent_plugin.infinfs.mount_service\"]\n")
+        fh.write("        imagePullPolicy: IfNotPresent\n")
+        fh.write("        env:\n")
+        fh.write("        - name: MLFLOW_TRACKING_URI\n")
+        fh.write("          value: \"{}\"\n".format(mlflow_tracking_uri))
+        fh.write("        - name: MLFLOW_RUN_ID\n")
+        fh.write("          value: \"{}\"\n".format(run_id))
+        fh.write("        - name: MLFLOW_CONCURRENT_URI\n")
+        fh.write("          value: \"{}\"\n".format(concurrent_uri))
+        fh.write("        securityContext:\n")
+        fh.write("          privileged: true\n")
+        fh.write("          capabilities:\n")
+        fh.write("            add:\n")
+        fh.write("              - SYS_ADMIN\n")
+        fh.write("        resources:\n")
+        fh.write("          limits:\n")
+        fh.write("            cpu: \"250m\"\n")
+        fh.write("            memory: \"1024Mi\"\n")
+        if os.environ.get('ECR_TYPE') == "private":
+            fh.write("      imagePullSecrets:\n")
+            fh.write("      - name: ecr-private-key\n")
+        ## Sidecar config ends
+
         fh.write("      restartPolicy: Never\n")
 
+
+def get_side_car_container_name(run_id):
+    return 'sidecar-' + run_id
 
 def generate_backend_config_json(backend_conf_file, input_spec, run_id, k8s_job_template_file,
                                 image_tag, image_digest):
@@ -111,8 +143,11 @@ def get_mlflow_param(run_id, pname):
     print(f'Failed to get mlflow param {pname} from run {run_id}')
 
 
-def upload_logs_for_pod(run_id, pod_name, tmp_log_file):
-    get_log_cmd = ['kubectl', 'logs', pod_name]
+def upload_logs_for_pod(run_id, pod_name, tmp_log_file, container_name=None):
+    if container_name:
+        get_log_cmd = ['kubectl', 'logs', pod_name, '-c', container_name]
+    else:
+        get_log_cmd = ['kubectl', 'logs', pod_name]
     try:
         log_content = subprocess.check_output(get_log_cmd)
         with open(tmp_log_file, "w") as fh:
@@ -200,18 +235,23 @@ def fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods):
         pod_name, pod_phase = pod_record.split()
         if pod_name in pods_run_dict:
             pod_run_id = pods_run_dict[pod_name]
+            side_car_container = get_side_car_container_name(pod_run_id)
             if pod_phase == 'Pending':
                 logger.info("{} is in Pending phase. Waiting".format(pod_name))
                 log_describe_pod(pod_name, pod_run_id)
                 upload_logs_for_pod(pod_run_id, pod_name, "/tmp/run-logs.txt")
+                upload_logs_for_pod(pod_run_id, pod_name, f"/tmp/sidecar-logs.txt", container_name=side_car_container)
             elif pod_phase == 'Running':
                 logger.info("{} is in Running phase. Waiting".format(pod_name))
                 upload_logs_for_pod(pod_run_id, pod_name, "/tmp/run-logs.txt")
+                upload_logs_for_pod(pod_run_id, pod_name, "/tmp/sidecar-logs.txt", container_name=side_car_container)
             elif pod_phase == 'Succeeded':
                 if pod_name not in completed_pods:
                     logger.info("{} is in Succeeded phase".format(pod_name))
                     log_describe_pod(pod_name, pod_run_id)
                     upload_logs_for_pod(pod_run_id, pod_name, "/tmp/run-logs.txt")
+                    upload_logs_for_pod(pod_run_id, pod_name, "/tmp/sidecar-logs.txt",
+                                        container_name=side_car_container)
                     update_mlflow_run(pod_run_id, "FINISHED")
                     completed_pods.add(pod_name)
                     success_pods.add(pod_name)
@@ -220,6 +260,8 @@ def fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods):
                     logger.info("{} is in Failed phase".format(pod_name))
                     log_describe_pod(pod_name, pod_run_id)
                     upload_logs_for_pod(pod_run_id, pod_name, "/tmp/run-logs.txt")
+                    upload_logs_for_pod(pod_run_id, pod_name, "/tmp/sidecar-logs.txt",
+                                        container_name=side_car_container)
                     update_mlflow_run(pod_run_id, "FAILED")
                     completed_pods.add(pod_name)
             elif pod_phase == 'Unknown':
@@ -259,8 +301,21 @@ def launch_dag_controller():
     logger.info(execute_dag_url)
     headers = {'Content-Type': 'application/json', 'Authorization': infinstor_token}
     body = {'dagid': dagid, 'dag_execution_id': dag_execution_id, "periodic_run_name": periodic_run_name}
-    response = requests.post(execute_dag_url, json=body, headers = headers)
-    logger.info(f"DAG Controller response: {response}")
+    attempts_left = max_attempts = 3
+    while attempts_left > 0:
+        attempts_left -= 1
+        try:
+            response = requests.post(execute_dag_url, json=body, headers = headers)
+            logger.info(f"DAG Controller response: {response}")
+            return
+        except Exception as ex:
+            logger.warning(str(ex))
+            print(f'Exception in dag controller call, retry {attempts_left} more times')
+            if attempts_left > 0:
+                ##wait before retrying
+                time.sleep(10 * 2 ** (max_attempts - attempts_left))
+    else:
+        raise Exception("Dag Controller launch failed multiple times")
 
 
 def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_commit):
@@ -393,13 +448,15 @@ def main(run_id_list, input_data_specs, parent_run_id):
         if os.path.exists(k8s_job_template_file):
             os.remove(k8s_job_template_file)
 
+        side_car_name = get_side_car_container_name(run_id)
         if 'KUBE_JOB_TEMPLATE_CONTENTS' in os.environ:
             logger.info("Using Kubernetes Job Template from environment")
             with open(k8s_job_template_file, "w") as fh:
                 base64.decode(os.environ['KUBE_JOB_TEMPLATE_CONTENTS'], fh)
         else:
             logger.info("Generating Kubernetes Job Template from params")
-            generate_kubernetes_job_template(k8s_job_template_file, os.environ['NAMESPACE'])
+            generate_kubernetes_job_template(k8s_job_template_file, os.environ['NAMESPACE'],
+                                             run_id, image.tags[0], image_digest, side_car_name)
 
         k8s_backend_config_file = "/tmp/k8s-backend-config-" + run_id + ".json"
         if os.path.exists(k8s_backend_config_file):
@@ -424,6 +481,7 @@ def main(run_id_list, input_data_specs, parent_run_id):
     #get the pod name from the jobs
     completed_pods = set()
     success_pods = set()
+    prev_complete = len(completed_pods)
     for _ in range(100):
         for run_id in run_id_list:
             job_name, pod_name = procs_dict[run_id]
@@ -444,10 +502,11 @@ def main(run_id_list, input_data_specs, parent_run_id):
             break
         upload_logs_for_pod(parent_run_id, os.environ['MY_POD_NAME'], os.environ['BOOTSTRAP_LOG_FILE'])
         time.sleep(10)
-        launch_dag_controller()
+        if len(completed_pods) > prev_complete:
+            launch_dag_controller()
+            prev_complete = len(completed_pods)
 
     pods_run_dict = get_pod_run_mapping(procs_dict)
-    prev_complete = len(completed_pods)
     if len(completed_pods) < len(run_id_list):
         while True:
             fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods)
