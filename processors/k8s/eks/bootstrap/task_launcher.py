@@ -41,28 +41,8 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         fh.write("        image: \"{replaced with URI of Docker image created during Project execution}\"\n")
         fh.write("        command: [\"{replaced with MLflow Project entry point command}\"]\n")
         fh.write("        imagePullPolicy: IfNotPresent\n")
-        fh.write("      - name: \"{}\"\n".format(side_car_name))
-        fh.write("        image: \"{}\"\n".format(image_uri))
-        fh.write("        lifecycle:\n")
-        fh.write("          type: Sidecar\n")
-        fh.write("        command: [\"python\"]\n")
-        fh.write("        args: [\"-m\", \"concurrent_plugin.infinfs.mount_service\"]\n")
-        fh.write("        imagePullPolicy: IfNotPresent\n")
-        fh.write("        env:\n")
-        fh.write("        - name: MLFLOW_TRACKING_URI\n")
-        fh.write("          value: \"{}\"\n".format(mlflow_tracking_uri))
-        fh.write("        - name: MLFLOW_RUN_ID\n")
-        fh.write("          value: \"{}\"\n".format(run_id))
-        fh.write("        - name: MLFLOW_CONCURRENT_URI\n")
-        fh.write("          value: \"{}\"\n".format(concurrent_uri))
-        fh.write("        securityContext:\n")
-        fh.write("          privileged: true\n")
-        fh.write("          capabilities:\n")
-        fh.write("            add:\n")
-        fh.write("              - SYS_ADMIN\n")
         fh.write("        resources:\n")
         fh.write("          limits:\n")
-
         if 'RESOURCES_LIMITS_CPU' in os.environ:
             fh.write("            cpu: \"{}\"\n".format(os.environ['RESOURCES_LIMITS_CPU']))
         if 'RESOURCES_LIMITS_MEMORY' in os.environ:
@@ -85,6 +65,36 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         if os.environ.get('ECR_TYPE') == "private":
             fh.write("      imagePullSecrets:\n")
             fh.write("      - name: ecr-private-key\n")
+
+        ##Add sidecar container
+        fh.write("      - name: \"{}\"\n".format(side_car_name))
+        fh.write("        image: \"{}\"\n".format(image_uri))
+        fh.write("        lifecycle:\n")
+        fh.write("          type: Sidecar\n")
+        fh.write("        command: [\"python\"]\n")
+        fh.write("        args: [\"-m\", \"concurrent_plugin.infinfs.mount_service\"]\n")
+        fh.write("        imagePullPolicy: IfNotPresent\n")
+        fh.write("        env:\n")
+        fh.write("        - name: MLFLOW_TRACKING_URI\n")
+        fh.write("          value: \"{}\"\n".format(mlflow_tracking_uri))
+        fh.write("        - name: MLFLOW_RUN_ID\n")
+        fh.write("          value: \"{}\"\n".format(run_id))
+        fh.write("        - name: MLFLOW_CONCURRENT_URI\n")
+        fh.write("          value: \"{}\"\n".format(concurrent_uri))
+        fh.write("        securityContext:\n")
+        fh.write("          privileged: true\n")
+        fh.write("          capabilities:\n")
+        fh.write("            add:\n")
+        fh.write("              - SYS_ADMIN\n")
+        fh.write("        resources:\n")
+        fh.write("          limits:\n")
+        fh.write("            cpu: \"250m\"\n")
+        fh.write("            memory: \"1024Mi\"\n")
+        if os.environ.get('ECR_TYPE') == "private":
+            fh.write("      imagePullSecrets:\n")
+            fh.write("      - name: ecr-private-key\n")
+        ## Sidecar config ends
+
         fh.write("      restartPolicy: Never\n")
 
 

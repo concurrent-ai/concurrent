@@ -17,7 +17,11 @@ from io import StringIO
 import socket
 import string
 import random
-
+import time
+from concurrent_plugin.concurrent_backend import (
+    CONCURRENT_FUSE_MOUNT_BASE,
+    MOUNT_SERVICE_READY_MARKER_FILE
+)
 
 def _list_one_dir(client, bucket, prefix_in, arr):
     print("INFO: _list_one_dir: ", bucket, prefix_in)
@@ -252,6 +256,20 @@ def _filter_df_for_partition(df, input_spec, all_keys):
 
 
 def mount_request(mount_path, mount_spec, shadow_path, use_cache):
+    ##Check if mount service is ready
+    max_wait_time = 3*60
+    start = time.time()
+    while time.time() - start <= max_wait_time:
+        if os.path.exists(MOUNT_SERVICE_READY_MARKER_FILE):
+            print('Mount service available')
+            break
+        else:
+            print('Wait for mount service to be ready')
+            time.sleep(10)
+    else:
+        print('ERROR: No mount service available')
+        raise Exception("No mount service available")
+
     req = {
         'mount_path': mount_path,
         'mount_spec': mount_spec,
@@ -312,7 +330,8 @@ def get_local_paths(df):
         ## Local files
         return df['FileName'].tolist()
 
-    mount_path = "/mount_base_dir/" + ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+    mount_path = os.path.join(CONCURRENT_FUSE_MOUNT_BASE,
+                              ''.join(random.choices(string.ascii_letters + string.digits, k=10)))
 
     all_local_files = []
     for i, m_spec in enumerate(mount_specs):

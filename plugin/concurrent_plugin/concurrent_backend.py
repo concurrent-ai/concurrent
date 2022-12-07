@@ -45,6 +45,9 @@ _logger = logging.getLogger(__name__)
 
 verbose = True
 
+CONCURRENT_FUSE_MOUNT_BASE = '/mount_base_dir'
+MOUNT_SERVICE_READY_MARKER_FILE = os.path.join(CONCURRENT_FUSE_MOUNT_BASE,  '__service_ready__')
+
 '''
 For running in k8s, invoke as 'mlflow run . -b infinstor-backend --backend-config kubernetes_config.json'
 kubernetes_config.json contains:
@@ -566,9 +569,10 @@ class PluginConcurrentProjectBackend(AbstractBackend):
 
         ##Add volume for fuse mounts, side car volume is setup with 'Bidirectional' mount propagation
         side_car_volume_mounts = volume_mounts.copy()
-        volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/mount_base_dir', name='sharedmount',
+        volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path=CONCURRENT_FUSE_MOUNT_BASE,
+                                                             name='sharedmount',
                                                              mount_propagation='HostToContainer'))
-        side_car_volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/mount_base_dir',
+        side_car_volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path=CONCURRENT_FUSE_MOUNT_BASE,
                                                     name='sharedmount',
                                                     mount_propagation='Bidirectional'))
 

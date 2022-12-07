@@ -5,6 +5,7 @@ from concurrent_plugin.infinfs import infinmount
 import json
 from mlflow.tracking import MlflowClient
 import psutil
+from concurrent_plugin.concurrent_backend import MOUNT_SERVICE_READY_MARKER_FILE
 
 FUSE_DEBUG_FILE = '/tmp/fuse_debug.log'
 VERBOSE = False
@@ -58,6 +59,12 @@ def print_info(*args):
     print(*args)
 
 
+def mount_service_ready():
+    ##Create empty marker file
+    if not os.path.exists(MOUNT_SERVICE_READY_MARKER_FILE):
+        with open(MOUNT_SERVICE_READY_MARKER_FILE, "w"):
+            pass
+
 if __name__ == '__main__':
     print_info("Starting..")
     HOST = "127.0.0.1"
@@ -70,6 +77,7 @@ if __name__ == '__main__':
         s.bind((HOST, PORT))
         print('Listening on port {}:{}'.format(HOST, PORT))
         s.listen()
+        mount_service_ready()
         while True:
             print_info('Waiting for request..')
             try:
