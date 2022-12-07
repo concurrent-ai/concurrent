@@ -354,6 +354,16 @@ fail_exit() {
   exit 255
 }
 
+get_python_package_version() {
+  export PACKAGE_NAME=$1
+  python3 << ENDPY
+import os
+from importlib.metadata import version
+package_name = os.environ['PACKAGE_NAME']
+print(version(package_name))
+ENDPY
+}
+
 logit "MLFLOW_TRACKING_URI = " $MLFLOW_TRACKING_URI
 # if tracking uri is not set, then error
 [ -z "$MLFLOW_TRACKING_URI" ] && logit "Error: MLFLOW_TRACKING_URI is not set.  " && fail_exit
@@ -364,6 +374,12 @@ if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
     logit "Installing additional package $i"
     pip install --no-cache-dir --upgrade $i
   done
+fi
+
+# Install latest concurrent-plugin
+pip install --upgrade concurrent-plugin
+if [ x"$CONCURRENT_PLUGIN_VERSION" == "x" ] ; then
+  CONCURRENT_PLUGIN_VERSION=`get_python_package_version concurrent-plugin`
 fi
 
 mkdir -p /tmp/workdir/.concurrent/project_files
@@ -423,6 +439,26 @@ if [ $? != 0 ] ; then
   fail_exit
 fi
 logit "DOCKER_IMAGE is ${DOCKER_IMAGE}"
+logit "Add additional dependencies to Dockerfile"
+(cd /tmp/workdir/${USE_SUBDIR}; echo " " >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt update" >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt install -y libfuse-dev" >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install --ignore-installed PyYAML" >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip uninstall -y concurrent-plugin" >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install --no-cache-dir concurrent-plugin==${CONCURRENT_PLUGIN_VERSION}" >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install boto3" >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install psutil" >> Dockerfile)
+if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
+  for i in $(echo ${ADDITIONAL_PACKAGES} | tr "," "\n")
+  do
+    logit "Adding additional package $i to env image"
+    (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
+  done
+fi
+echo "Updated Dockerfile ========="
+cat /tmp/workdir/${USE_SUBDIR}/Dockerfile
+echo "============================"
+
 CREATE_ENV_IMAGE="yes"
 ENV_SHA=`sha256sum /tmp/workdir/${USE_SUBDIR}Dockerfile |awk -F' ' '{ print $1 }'`
 ENV_REPO_NAME=mlflow/shared_env_images/${ENV_SHA}
@@ -468,20 +504,6 @@ fi
 
 if [ $CREATE_ENV_IMAGE == "yes" ] ; then
   logit "Building env image for pushing to $ENV_REPO_URI"
-  (cd /tmp/workdir/${USE_SUBDIR}; echo " " >> Dockerfile)
-  (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt update" >> Dockerfile)
-  (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt install -y libfuse-dev" >> Dockerfile)
-  (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install --ignore-installed PyYAML" >> Dockerfile)
-  (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install concurrent-plugin" >> Dockerfile)
-  (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install boto3" >> Dockerfile)
-  (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install psutil" >> Dockerfile)
-  if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
-    for i in $(echo ${ADDITIONAL_PACKAGES} | tr "," "\n")
-    do
-      logit "Adding additional package $i to env image"
-      (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
-    done
-  fi
   (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} -f Dockerfile .)
   docker images
   /usr/bin/docker tag ${DOCKER_IMAGE}:latest ${ENV_REPO_URI}:latest
