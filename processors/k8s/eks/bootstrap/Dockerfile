@@ -29,9 +29,9 @@ RUN chmod +x /usr/local/bin/bootstrap.sh
 ADD ./bootstrap-version.txt /usr/local/bin/bootstrap-version.txt
 ADD ./task_launcher.py /usr/local/bin/task_launcher.py
 
-ARG IGNORECACHE=1
-ARG CONCURRENT_PLUGIN=concurrent-plugin
-RUN echo "$IGNORECACHE" && python3 -m pip install --no-cache-dir ${CONCURRENT_PLUGIN}
+#ARG IGNORECACHE=1
+#ARG CONCURRENT_PLUGIN=concurrent-plugin
+#RUN echo "$IGNORECACHE" && python3 -m pip install --no-cache-dir ${CONCURRENT_PLUGIN}
 # To test with a modified concurrent_plugin without pushing to pypi,
 # copy the <concurrent>/plugin directory here, modify it, then
 # comment out the line above and uncomment the two lines below
