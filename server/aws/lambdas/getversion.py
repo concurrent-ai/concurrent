@@ -33,6 +33,20 @@ def getversion(event, context):
         print('getversion: Error ' + status + ' lookup service conf')
         return respond(ValueError('Could not get service config'))
 
+    #        runProjectLambda  : 'arn:aws:lambda:xxx'
+    #         configVersion    : 1
+    # cognitoMlflowuiClientId  : '6plr4xxxxx'
+    #             serviceHost  : 'xxxx.concurrent-ai.org'
+    #         cognitoUserPool  : 'us-east-1_xxxxx'
+    #     cognitoCliClientId   : '1pcfrh7xxxxx'
+    #     mlflowParallelsApiId : 'wncxxxxx'
+    #             isStaging    : 'true'
+    # mlflowParallelsUiDnsName : 'mlflowui'
+    #     periodRunLambdaArn   : 'arn:aws:lambda:xxxxx'
+    # mlflowParallelsDnsName   : 'concurrent'
+    #         cognitoClientId  : '1pcfrhxxxxx'
+    #             cookieHost   : 'concurrent-ai.org'
+    #         executeDagLambda : 'arn:aws:lambda:us-east-1:xxxxx'
     rv = dict()
     rv['version'] = get_version()
     rv['cognitoClientId'] = conf['cognitoClientId']['S']
@@ -40,5 +54,9 @@ def getversion(event, context):
     rv['cognitoCallbackUrl'] = cognito_callback_url(conf)
     rv['cognitoDomain'] = cognito_domain(conf)
     rv['isExternalAuth'] = conf['isExternalAuth']['S'] == 'true' if conf.get('isExternalAuth', False) else False
+    rv['mlflowParallelsDnsName'] = conf['mlflowParallelsDnsName']['S']
+    rv['mlflowParallelsUiDnsName'] = conf['mlflowParallelsUiDnsName']['S']
+    rv['cookieHost'] = conf['cookieHost']['S']
+    rv['cognitoMlflowuiClientId'] = conf['cognitoMlflowuiClientId']['S']
     print('getversion returning ' + str(rv))
     return respond(None, rv)
