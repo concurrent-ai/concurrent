@@ -165,8 +165,8 @@ def add_mod_periodicrun(event, context):
     print('periodicRunJson=' + periodic_run_json)
 
     #Inject Parallels token in the ddb entry
-    queue_message_uuid, token = get_custom_token(cognito_username, groups)
-    custom_token="Custom {0}:{1}".format(queue_message_uuid, token)
+    token_info = get_custom_token(cognito_username, groups)
+    custom_token="Custom {0}:{1}".format(token_info['queue_message_uuid'], token_info['token'])
 
     item={
         'username': {'S': cognito_username},

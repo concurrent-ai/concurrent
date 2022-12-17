@@ -4,7 +4,7 @@ import logging
 import time
 import random
 
-from utils import get_service_conf, get_subscriber_info, get_cognito_user, get_custom_token, extract_url_kv_params
+from utils import get_service_conf, get_subscriber_info, get_cognito_user, extract_url_kv_params
 import ddb_mlflow_parallels_txns as ddb_ptxns
 import ddb_mlflow_parallels_queries as ddb_pqrs
 from botocore.exceptions import ClientError

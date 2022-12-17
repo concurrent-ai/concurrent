@@ -77,8 +77,8 @@ def run_project(event, context):
     item = json.loads(body)
 
     #Inject Parallels token in the body
-    queue_message_uuid, token = get_custom_token(cognito_username, groups)
-    item['parallels_token']="Custom {0}:{1}".format(queue_message_uuid, token)
+    token_info = get_custom_token(cognito_username, groups)
+    item['parallels_token']="Custom {0}:{1}".format(token_info['queue_message_uuid'], token_info['token'])
 
     logger.info('msg payload item=' + str(item))
 

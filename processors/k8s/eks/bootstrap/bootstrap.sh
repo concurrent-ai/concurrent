@@ -377,9 +377,11 @@ if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
 fi
 
 # Install latest concurrent-plugin
-pip install --upgrade concurrent-plugin
 if [ x"$CONCURRENT_PLUGIN_VERSION" == "x" ] ; then
+  pip install --upgrade concurrent-plugin
   CONCURRENT_PLUGIN_VERSION=`get_python_package_version concurrent-plugin`
+else
+  pip install concurrent-plugin==$CONCURRENT_PLUGIN_VERSION
 fi
 
 mkdir -p /tmp/workdir/.concurrent/project_files
