@@ -49,7 +49,7 @@ def get_dag_execution(event, context):
 
     try:
         if dag_execution_id:
-            dag_execution_info = dag_utils.fetch_dag_execution_info(cognito_username, dagid, dag_execution_id)
+            dag_execution_info = dag_utils.fetch_dag_execution_info(cognito_username, groups, dagid, dag_execution_id)
         else:
             dag_execution_info = dag_utils.get_dag_execution_list(cognito_username, dagid)
     except Exception as ex:

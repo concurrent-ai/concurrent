@@ -8,11 +8,13 @@ import re
 import boto3
 import ddb_mlflow_parallels_queries as ddb_pqrs
 from mlflow_utils import fetch_mlflow_artifact_file
+from utils import get_custom_token
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 DAG_INFO_TABLE = os.environ['DAG_TABLE']
-DAG_EXECUTION_TABLE = os.environ['DAG_EXECUTION_TABLE']
+#DAG_EXECUTION_TABLE = os.environ['DAG_EXECUTION_TABLE']
+DAG_EXECUTION_TABLE = "concurrent-dag-execution"
 DAG_RUNTIME_ARTIFACT = 'dag_runtime.json.bin'
 
 def fetch_dag_details(cognito_username, dag_id):
@@ -35,14 +37,14 @@ def create_dag_execution_record(cognito_username, dag_id, dag_execution_id, stat
     client = boto3.client('dynamodb')
 
     now = int(time.time())
+    auth_info.pop('custom_token', None)
+    auth_info.pop('custom_token_expiry', None)
     item = {
+        'dag_id': {'S': dag_id},
         'dag_execution_id' : {'S' : dag_execution_id},
         'username': {'S' : cognito_username},
-        'dagid': {'S': dag_id},
-        #'run_status': {'S': json.dumps(status)},
         'locked' : {'S': 'no'},
         'update_time' : {'N': str(now)},
-        #'dagJson' : {'S': json.dumps(dag_json)},
         'authInfo' : {'S': json.dumps(auth_info)},
         'parent_run_id': {'S': parent_run_id},
         'start_time': {'N': str(now)}
@@ -53,7 +55,7 @@ def create_dag_execution_record(cognito_username, dag_id, dag_execution_id, stat
     except Exception as ex:
         status_msg = 'caught while updating dag status' + str(ex)
         logger.info(status_msg)
-        raise(status_msg)
+        raise Exception(status_msg)
     return
 
 def get_new_dag_exec_id(dagid):
@@ -82,13 +84,54 @@ def create_new_dag_json(old_dag_json, new_node_dict, new_edge_dict):
     return new_dag_json
 
 
-def get_dag_execution_record(cognito_username, dag_id, dag_execution_id):
+# def check_and_update_auth_info(cognito_username, groups, dag_id, dag_execution_id, record):
+#     auth_info = record['auth_info']
+#     if 'custom_token_expiry' in auth_info and int(auth_info['custom_token_expiry']) >= time.time() + 60*60:
+#         return record
+#     else:
+#         ##Update custom token
+#         ##The user must be authorized for this dag_id.
+#         logger.info('custom token almost expired, fetch a new one')
+#         token_info = get_custom_token(cognito_username, groups)
+#         queue_message_uuid = token_info['queue_message_uuid']
+#         token = token_info['token']
+#         expiry = token_info['expiry']
+#         custom_token = "Custom {0}:{1}".format(queue_message_uuid, token)
+#         auth_info['custom_token'] = custom_token
+#         auth_info['custom_token_expiry'] = expiry
+#         record['auth_info'] = auth_info
+#
+#         client = boto3.client('dynamodb')
+#         key = dict()
+#         hk = dict()
+#         hk['S'] = dag_id
+#         key['dag_id'] = hk
+#         rk = dict()
+#         rk['S'] = dag_execution_id
+#         key['dag_execution_id'] = rk
+#
+#         uxp = 'SET auth_info = :ai'
+#         eav = {
+#             ":ai": {"S": json.dumps(auth_info)},
+#         }
+#
+#         try:
+#             client.update_item(TableName=DAG_EXECUTION_TABLE, Key=key, UpdateExpression=uxp,
+#                                ExpressionAttributeValues=eav)
+#             return record
+#         except Exception as ex:
+#             status_msg = 'caught while updating auth_info' + str(ex)
+#             raise Exception(status_msg)
+
+
+
+def get_dag_execution_record(cognito_username, groups, dag_id, dag_execution_id):
     client = boto3.client('dynamodb')
 
     key = dict()
     hk = dict()
-    hk['S'] = cognito_username
-    key['username'] = hk
+    hk['S'] = dag_id
+    key['dag_id'] = hk
     rk = dict()
     rk['S'] = dag_execution_id
     key['dag_execution_id'] = rk
@@ -102,9 +145,6 @@ def get_dag_execution_record(cognito_username, dag_id, dag_execution_id):
 
     if 'Item' in dag_execution_result:
         item = dag_execution_result['Item']
-        if dag_id != item['dagid']['S']:
-            msg = "Invalid dag execution id " + str(dag_execution_id) + "for dag " + str(dag_id)
-            raise(msg)
         auth_info = json.loads(item['authInfo']['S'])
         record = {
             'dag_id': dag_id,
@@ -115,6 +155,7 @@ def get_dag_execution_record(cognito_username, dag_id, dag_execution_id):
         }
         if 'start_time' in item:
             record['start_time'] = item['start_time']['N']
+        ##record = check_and_update_auth_info(cognito_username, groups, dag_id, dag_execution_id, record)
         return record
     else:
         msg = 'Could not find dag execution status for '+str(dag_id) + ", for user "+cognito_username
@@ -123,10 +164,9 @@ def get_dag_execution_record(cognito_username, dag_id, dag_execution_id):
 def get_dag_execution_list(cognito_username, dagid):
     client = boto3.client('dynamodb')
 
-    key_condition_expression = "username = :un AND begins_with(dag_execution_id, :dx)"
+    key_condition_expression = "dag_id = :di"
     expression_attr_vals = {
-        ":un" : {"S" : cognito_username},
-        ":dx" : {"S" : dagid}
+        ":di" : {"S" : dagid}
     }
 
     response = client.query(TableName=DAG_EXECUTION_TABLE,
@@ -167,17 +207,18 @@ def get_spec_list_from_named_input_map(named_map):
     return input_list
 
 
-def fetch_dag_execution_info(cognito_username, dag_id, dag_execution_id):
-    record = get_dag_execution_record(cognito_username, dag_id, dag_execution_id)
-    dag_runtime_info = fetch_dag_runtime_artifact(record['auth_info'], record['parent_run_id'])
+def fetch_dag_execution_info(cognito_username, groups, dag_id, dag_execution_id):
+    record = get_dag_execution_record(cognito_username, groups, dag_id, dag_execution_id)
+    dag_runtime_info = fetch_dag_runtime_artifact(cognito_username, groups,
+                                                  record['auth_info'], record['parent_run_id'])
     record['dag_json'] = dag_runtime_info['dag_json']
     record['run_status'] = dag_runtime_info['run_status']
     return record
 
 
-def fetch_dag_runtime_artifact(authinfo, parent_run_id):
+def fetch_dag_runtime_artifact(cognito_username, groups, authinfo, parent_run_id):
     dag_runtime_path = os.path.join('.concurrent', DAG_RUNTIME_ARTIFACT)
-    artifact_content = fetch_mlflow_artifact_file(authinfo, parent_run_id, dag_runtime_path)
+    artifact_content = fetch_mlflow_artifact_file(cognito_username, groups, authinfo, parent_run_id, dag_runtime_path)
     dag_runtime_info = json.loads(artifact_content.decode('utf-8'))
     return dag_runtime_info
 

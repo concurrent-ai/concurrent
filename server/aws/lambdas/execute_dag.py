@@ -107,9 +107,17 @@ def execute_dag(event, context):
     experiment_id = run_params.get('experiment_id')
 
     if dag_execution_id:
-        lock_key, lock_lease_time = acquire_idle_row_lock(cognito_username, dag_execution_id)
-        dag_exec_record = dag_utils.fetch_dag_execution_info(cognito_username, dag_id, dag_execution_id)
+        lock_key, lock_lease_time = acquire_idle_row_lock(dag_id, dag_execution_id)
+        dag_exec_record = dag_utils.fetch_dag_execution_info(cognito_username, groups, dag_id, dag_execution_id)
         dag_json, dag_execution_status, auth_info = dag_exec_record['dag_json'], dag_exec_record['run_status'], dag_exec_record['auth_info']
+        token_info = get_custom_token(cognito_username, groups)
+        queue_message_uuid = token_info['queue_message_uuid']
+        token = token_info['token']
+        token_expiry = token_info['expiry']
+        custom_token = "Custom {0}:{1}".format(queue_message_uuid, token)
+        auth_info['custom_token'] = custom_token
+        auth_info['custom_token_expiry'] = token_expiry
+
         parent_run_name = dag_execution_status['parent_run_name']
         parent_run_id = dag_execution_status['parent_run_id']
         if not experiment_id and 'experiment_id' in dag_json:
@@ -131,14 +139,18 @@ def execute_dag(event, context):
         if dagParamsJsonRuntime:
             dag_json = override_dag_runtime_params(dag_json, dagParamsJsonRuntime)
 
-        queue_message_uuid, token = get_custom_token(cognito_username, groups)
+        token_info = get_custom_token(cognito_username, groups)
+        queue_message_uuid = token_info['queue_message_uuid']
+        token = token_info['token']
+        token_expiry = token_info['expiry']
         custom_token="Custom {0}:{1}".format(queue_message_uuid, token)
         auth_info = {
                 'mlflow_tracking_uri' : run_params.get('MLFLOW_TRACKING_URI'),
                 'mlflow_tracking_token': run_params.get('MLFLOW_TRACKING_TOKEN'),
                 'mlflow_concurrent_uri': run_params.get('MLFLOW_CONCURRENT_URI') or run_params.get('MLFLOW_PARALLELS_URI'),
                 'custom_token': custom_token,
-                'cognito_client_id': service_conf['cognitoClientId']['S']
+                'cognito_client_id': service_conf['cognitoClientId']['S'],
+                'custom_token_expiry': token_expiry
                 }
 
         dag_name = dag_json['name']
@@ -146,7 +158,7 @@ def execute_dag(event, context):
             if 'experiment_id' in dag_json:
                 experiment_id = dag_json['experiment_id']
             else:
-                experiment_id = create_and_update_experiment(cognito_username, auth_info, dag_id, dag_name)
+                experiment_id = create_and_update_experiment(cognito_username, groups, auth_info, dag_id, dag_name)
         dag_json['experiment_id'] = experiment_id
 
         dag_execution_id = dag_utils.get_new_dag_exec_id(dag_id)
@@ -154,7 +166,7 @@ def execute_dag(event, context):
         #create parent run
         parent_run_name = dag_name + "-" + str(dag_execution_id)
         parent_run_id, parent_artifact_uri, parent_run_status, parent_run_lifecycle_stage \
-            = call_create_run(cognito_username, experiment_id, auth_info, parent_run_name,
+            = call_create_run(cognito_username, groups, experiment_id, auth_info, parent_run_name,
                               tags={'dag_execution_id': dag_execution_id})
 
         dag_execution_status = {'parent_run_name': parent_run_name, 'parent_run_id': parent_run_id}
@@ -167,10 +179,10 @@ def execute_dag(event, context):
                                               dag_json, parent_run_id, auth_info)
 
         dag_detail_artifact = {'dag_json': dag_json, 'dag_execution_id': dag_execution_id}
-        log_mlflow_artifact(auth_info, parent_run_id, dag_detail_artifact, '.concurrent', 'dag_details.json.bin')
+        log_mlflow_artifact(cognito_username, groups, auth_info, parent_run_id, dag_detail_artifact, '.concurrent', 'dag_details.json.bin')
         dag_exec_details_artifact = {'dag_json': dag_json, 'run_status': dag_execution_status}
-        log_mlflow_artifact(auth_info, parent_run_id, dag_exec_details_artifact, '.concurrent', dag_utils.DAG_RUNTIME_ARTIFACT)
-        lock_key, lock_lease_time = acquire_idle_row_lock(cognito_username, dag_execution_id)
+        log_mlflow_artifact(cognito_username, groups, auth_info, parent_run_id, dag_exec_details_artifact, '.concurrent', dag_utils.DAG_RUNTIME_ARTIFACT)
+        lock_key, lock_lease_time = acquire_idle_row_lock(dag_id, dag_execution_id)
 
     if httpOperation:
         release_row_lock(lock_key)
@@ -191,7 +203,7 @@ def execute_dag(event, context):
 
     try:
         incoming_dag_graph, outgoing_graph, node_dict, edge_dict = get_graph_struct(dag_json)
-        node_statuses, lock_lease_time = fetch_node_status(cognito_username, auth_info, node_dict, dag_execution_status['nodes'],
+        node_statuses, lock_lease_time = fetch_node_status(cognito_username, groups, auth_info, node_dict, dag_execution_status['nodes'],
                                           lock_key, lock_lease_time)
         dag_execution_status['nodes'] = node_statuses
         allDone, ready_to_run = get_ready_to_run_nodes(incoming_dag_graph, node_statuses)
@@ -201,7 +213,7 @@ def execute_dag(event, context):
                                              outgoing_graph, node_dict, edge_dict, dag_execution_status)
         if modified:
             new_dag_json = dag_utils.create_new_dag_json(dag_json, node_dict, edge_dict)
-            update_dag_exec_runtime_info(cognito_username, auth_info, new_dag_json, dag_execution_id,
+            update_dag_exec_runtime_info(cognito_username, groups, dag_id, auth_info, new_dag_json, dag_execution_id,
                                          dag_execution_status, parent_run_id)
             ##Evaluate ready to run nodes again
             allDone, ready_to_run = get_ready_to_run_nodes(incoming_dag_graph, node_statuses)
@@ -239,7 +251,7 @@ def execute_dag(event, context):
                         run_name = node_details['name']
                         input_data_spec = get_input_data_spec(n, node_dict[n], dag_execution_status['nodes'], incoming_dag_graph)
                         run_id, artifact_uri, run_status, run_lifecycle_stage = \
-                            call_create_run(cognito_username, experiment_id, auth_info, run_name, parent_run_id, xformname)
+                            call_create_run(cognito_username, groups, experiment_id, auth_info, run_name, parent_run_id, xformname)
                         run_input_spec_map[run_id] = input_data_spec
                         run_info = {'run_id': run_id, 'status': run_status, 'artifact_uri': artifact_uri,
                                     'lifecycle_stage': run_lifecycle_stage}
@@ -262,6 +274,8 @@ def execute_dag(event, context):
                     logger.debug("Look for future result for node {}".format(nid))
                     try:
                         f.result(timeout=30)
+                    except concurrent.futures.TimeoutError as tx:
+                        logger.warning('Ignoring timeout for nid ' + str(nid))
                     except ApiException as apex:
                         emsg = None
                         st = -1
@@ -279,8 +293,8 @@ def execute_dag(event, context):
                         if nid in dag_execution_status['nodes']:
                             logger.warning('Marking run_id ' + dag_execution_status['nodes'][nid]['run_id'] + ' as FAILED')
                             dag_execution_status['nodes'][nid]['status'] = 'FAILED'
-                            update_run(auth_info, dag_execution_status['nodes'][nid]['run_id'], 'FAILED')
-                            log_mlflow_artifact(auth_info, dag_execution_status['nodes'][nid]['run_id'],
+                            update_run(cognito_username, groups, auth_info, dag_execution_status['nodes'][nid]['run_id'], 'FAILED')
+                            log_mlflow_artifact(cognito_username, groups, auth_info, dag_execution_status['nodes'][nid]['run_id'],
                                     {"status": apex.status, "message": str(emsg), "body": str(apex.body), "reason": str(apex.reason)},
                                     '.concurrent/logs', 'run-logs.txt')
                         else:
@@ -290,13 +304,13 @@ def execute_dag(event, context):
                 logger.warning("Failure in launching nodes: " + str(ex))
                 import traceback
                 logger.warning(traceback.format_exc())
-                release_row_lock(lock_key)
+                #release_row_lock(lock_key)
                 return respond("Node launch failed", dict())
 
-        update_dag_run_status(cognito_username, auth_info, dag_execution_id, dag_execution_status, parent_run_id)
+        update_dag_run_status(cognito_username, groups, dag_id, auth_info, dag_execution_id, dag_execution_status, parent_run_id)
         rv = {'status' : 'success', 'dagExecutionId': dag_execution_id, 'parentRunId': parent_run_id}
         if allDone:
-            update_run(auth_info, parent_run_id, 'FINISHED')
+            update_run(cognito_username, groups, auth_info, parent_run_id, 'FINISHED')
             print('Dag execution Completed Successfully')
         if httpOperation:
             print('Send Http Response')
@@ -308,8 +322,8 @@ def execute_dag(event, context):
         release_row_lock(lock_key)
 
 
-def acquire_idle_row_lock(cognito_username, dag_execution_id):
-    dag_exec_key = create_dag_execution_key(cognito_username, dag_execution_id)
+def acquire_idle_row_lock(dag_id, dag_execution_id):
+    dag_exec_key = create_dag_execution_key(dag_id, dag_execution_id)
     locked = lock_utils.acquire_idle_row_lock(DAG_EXECUTION_TABLE, dag_exec_key)
     if not locked:
         print("No lock, cannot proceed")
@@ -325,28 +339,28 @@ def renew_lock(key, lock_lease_time):
     return lock_utils.renew_lock(DAG_EXECUTION_TABLE, key, lock_lease_time)
 
 
-def create_dag_execution_key(cognito_username, dag_execution_id):
+def create_dag_execution_key(dag_id, dag_execution_id):
     key = dict()
     hk = dict()
-    hk['S'] = cognito_username
-    key['username'] = hk
+    hk['S'] = dag_id
+    key['dag_id'] = hk
     rk = dict()
     rk['S'] = dag_execution_id
     key['dag_execution_id'] = rk
     return key
 
 
-def update_dag_run_status(cognito_username, auth_info, dag_execution_id, status, parent_run_id):
+def update_dag_run_status(cognito_username, groups, dag_id, auth_info, dag_execution_id, status, parent_run_id):
     try:
-        dag_runtime = dag_utils.fetch_dag_runtime_artifact(auth_info, parent_run_id)
+        dag_runtime = dag_utils.fetch_dag_runtime_artifact(cognito_username, groups, auth_info, parent_run_id)
         dag_runtime['run_status'] = status
-        log_mlflow_artifact(auth_info, parent_run_id, dag_runtime, '.concurrent', dag_utils.DAG_RUNTIME_ARTIFACT)
+        log_mlflow_artifact(cognito_username, groups, auth_info, parent_run_id, dag_runtime, '.concurrent', dag_utils.DAG_RUNTIME_ARTIFACT)
     except Exception as ex:
         print('Failed to update dag execution info', ex)
         raise ex
 
     client = boto3.client('dynamodb')
-    key = create_dag_execution_key(cognito_username, dag_execution_id)
+    key = create_dag_execution_key(dag_id, dag_execution_id)
 
     now = int(time.time())
     uxp = 'SET update_time = :ut'
@@ -387,7 +401,7 @@ def get_graph_struct(dag_json):
 
     return incoming_graph, outgoing_graph, node_dict, edge_dict
 
-def fetch_node_status(cognito_username, auth_info, node_details, previous_statuses, lock_key, lock_lease_time):
+def fetch_node_status(cognito_username, groups, auth_info, node_details, previous_statuses, lock_key, lock_lease_time):
     node_statuses = dict()
     for node in node_details.keys():
         node_run_info = previous_statuses[node]
@@ -396,7 +410,7 @@ def fetch_node_status(cognito_username, auth_info, node_details, previous_status
             run_id = node_run_info['run_id']
             status = node_run_info['status']
             if run_id and status == "RUNNING":
-                run_info = fetch_run_id_info(auth_info, run_id)
+                run_info = fetch_run_id_info(cognito_username, groups, auth_info, run_id)
                 logger.debug('RUN INFO for '+run_id)
                 logger.debug(str(run_info))
                 node_statuses[node].update(run_info)
@@ -521,8 +535,8 @@ def get_input_data_spec(node, node_details, node_statuses, dag_graph):
     return input_specs
 
 
-def create_and_update_experiment(cognito_username, auth_info, dag_id, dag_name):
-    experiment_id = create_experiment(auth_info, dag_name + "-" + dag_id)
+def create_and_update_experiment(cognito_username, groups, auth_info, dag_id, dag_name):
+    experiment_id = create_experiment(cognito_username, groups, auth_info, dag_name + "-" + dag_id)
     ddb_txns.update_parallel(cognito_username, dag_id, None, None, experiment_id)
     return experiment_id
 
@@ -623,19 +637,19 @@ def override_dag_runtime_params_for_recovery(dag_json, dagParamsJsonRuntime, dag
     return dag_json
 
 
-def update_dag_exec_runtime_info(cognito_username, auth_info, dag_json, dag_execution_id,
+def update_dag_exec_runtime_info(cognito_username, groups, dag_id, auth_info, dag_json, dag_execution_id,
                                  dag_exec_status, parent_run_id):
     try:
-        dag_runtime = dag_utils.fetch_dag_runtime_artifact(auth_info, parent_run_id)
+        dag_runtime = dag_utils.fetch_dag_runtime_artifact(cognito_username, groups, auth_info, parent_run_id)
         dag_runtime['dag_json'] = dag_json
         dag_runtime['run_status'] = dag_exec_status
-        log_mlflow_artifact(auth_info, parent_run_id, dag_runtime, '.concurrent', dag_utils.DAG_RUNTIME_ARTIFACT)
+        log_mlflow_artifact(cognito_username, groups, auth_info, parent_run_id, dag_runtime, '.concurrent', dag_utils.DAG_RUNTIME_ARTIFACT)
     except Exception as ex:
         print('Failed to update dag execution info', ex)
         raise ex
 
     client = boto3.client('dynamodb')
-    key = create_dag_execution_key(cognito_username, dag_execution_id)
+    key = create_dag_execution_key(dag_id, dag_execution_id)
 
     now = int(time.time())
     uxp = 'SET update_time = :ut'
