@@ -54,8 +54,8 @@ Parameters:
     Default: mlflow-parallels-dag
   dagExecutionTable:
     Type: String
-    Description: 'parallels-dag-execution table'
-    Default: parallels-dag-execution
+    Description: 'concurrent-dag-execution table'
+    Default: concurrent-dag-execution
   customTokensTable: 
       Type: String
       Description: parallels-custom-tokens table

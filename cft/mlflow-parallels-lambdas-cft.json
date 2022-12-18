@@ -42,7 +42,7 @@
     },
     "dagExecutionTable": {
       "Type": "String",
-      "Description": "parallels-dag-execution table"
+      "Description": "concurrent-dag-execution table"
     },
     "customTokensTable": {
       "Type": "String",
@@ -233,7 +233,7 @@
         "TableName": { "Ref": "dagExecutionTable"},
         "AttributeDefinitions": [
           {
-            "AttributeName": "username",
+            "AttributeName": "dag_id",
             "AttributeType": "S"
           },
           {
@@ -243,7 +243,7 @@
         ],
         "KeySchema": [
           {
-            "AttributeName": "username",
+            "AttributeName": "dag_id",
             "KeyType": "HASH"
           },
           {
