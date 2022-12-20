@@ -55,6 +55,8 @@ def extract_run_params(body):
                 run_params['MLFLOW_PARALLELS_URI'] = obss[1]
             elif obss[0] == 'MLFLOW_EXPERIMENT_ID':
                 run_params['experiment_id'] = obss[1]
+            elif obss[0] == 'periodic_run_start_time':
+                run_params['periodic_run_start_time'] = obss[1]
     if not run_params:
         run_params = json.loads(body)
     return run_params
@@ -98,6 +100,7 @@ def execute_dag(event, context):
     periodic_run_name = run_params.get('periodic_run_name')
 
     frequency = run_params.get('frequency')
+    periodic_run_start_time = run_params.get('periodic_run_start_time')
     dagParamsJsonRuntime = None
     if 'dagParamsJson' in run_params:
         dagParamsJsonRuntime = json.loads(run_params['dagParamsJson'])
@@ -268,7 +271,7 @@ def execute_dag(event, context):
                                                     experiment_id, frequency, instance_type,
                                                     periodic_run_name, dag_execution_info, xform_path=xform_path,
                                                     parent_run_id=parent_run_id, last_in_chain_of_xforms='False',
-                                                    parallelization=parallelization, k8s_params=k8s_params)
+                                                    parallelization=parallelization, k8s_params=k8s_params, periodic_run_start_time=periodic_run_start_time)
                     futures.append((launch_future, n))
                 for f, nid in futures:
                     logger.debug("Look for future result for node {}".format(nid))
@@ -781,7 +784,7 @@ def launch_bootstrap_run_project(
         xform_params, experiment_id, frequency, instance_type,
         periodic_run_name, dag_execution_info,
         xform_path=None, parent_run_id=None, last_in_chain_of_xforms='False',
-        parallelization=None, k8s_params=None):
+        parallelization=None, k8s_params=None, periodic_run_start_time=None):
     logger.debug("RUN_ID -> INPUT_SPEC #")
     logger.debug(str(run_input_spec_map))
     logger.debug(artifact_uri)
@@ -802,6 +805,8 @@ def launch_bootstrap_run_project(
     body['run_id'] = parent_run_id
     body['parent_run_id'] = parent_run_id
     body['experiment_id'] = experiment_id
+    body['frequency'] = frequency
+    body['periodic_run_start_time'] = periodic_run_start_time
     body['last_in_chain_of_xforms'] = last_in_chain_of_xforms
     body['instance_type'] = instance_type
     body['original_node'] = orig_node

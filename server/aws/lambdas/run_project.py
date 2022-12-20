@@ -256,6 +256,10 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     cmap.data['MLFLOW_CONCURRENT_URI'] = item['MLFLOW_CONCURRENT_URI']
     cmap.data['MLFLOW_TRACKING_URI'] = item['MLFLOW_TRACKING_URI']
     cmap.data['MLFLOW_RUN_ID'] = run_id
+    if 'frequency' in item:
+        cmap.data['PERIODIC_RUN_FREQUENCY'] = item['frequency']
+    if 'periodic_run_start_time' in item:
+        cmap.data['PERIODIC_RUN_START_TIME'] = str(item['periodic_run_start_time'])
     cmap.data['NAMESPACE'] = namespace
     if backend_type == 'eks':
         cmap.data['ECR_TYPE'] = ecr_type
