@@ -296,11 +296,17 @@ def launch_dag_controller():
     dag_execution_id = os.environ['DAG_EXECUTION_ID']
     dagid = os.environ['DAGID']
     periodic_run_name = os.environ.get('PERIODIC_RUN_NAME')
+    periodic_run_frequency = os.getenv('PERIODIC_RUN_FREQUENCY')
+    periodic_run_start_time = os.getenv('PERIODIC_RUN_START_TIME')
 
     execute_dag_url = mlflow_parallels_uri.rstrip('/') + '/api/2.0/mlflow/parallels/execdag'
     logger.info(execute_dag_url)
     headers = {'Content-Type': 'application/json', 'Authorization': infinstor_token}
     body = {'dagid': dagid, 'dag_execution_id': dag_execution_id, "periodic_run_name": periodic_run_name}
+    if periodic_run_frequency:
+      body['periodic_run_frequency'] = periodic_run_frequency
+    if periodic_run_start_time:
+      body['periodic_run_start_time'] = periodic_run_start_time
     attempts_left = max_attempts = 3
     while attempts_left > 0:
         attempts_left -= 1

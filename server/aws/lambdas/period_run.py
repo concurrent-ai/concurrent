@@ -83,7 +83,7 @@ def period_run(event, context):
     dag_event['dagid'] = periodic_run_info['dagid']
     dag_event['periodic_run_name'] = periodic_run['periodic_run_name']
     dag_event['experiment_id'] = str(periodic_run_info['experiment_id'])
-    dag_event['frequency'] = periodic_run_info.get('period').get('type')
+    dag_event['periodic_run_frequency'] = periodic_run_info.get('period').get('type')
     dag_event['periodic_run_start_time'] = time.time_ns()//1_000_000
     dag_event['MLFLOW_TRACKING_URI'] = periodic_run_info.get('MLFLOW_TRACKING_URI')
     dag_event['MLFLOW_TRACKING_TOKEN'] = periodic_run_info.get('MLFLOW_TRACKING_TOKEN')
