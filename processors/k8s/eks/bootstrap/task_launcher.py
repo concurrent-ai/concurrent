@@ -94,7 +94,7 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
             fh.write("      imagePullSecrets:\n")
             fh.write("      - name: ecr-private-key\n")
         ## Sidecar config ends
-
+        fh.write("      priorityClassName: concurrent-high-non-preempt-prio\n")
         fh.write("      restartPolicy: Never\n")
 
 
