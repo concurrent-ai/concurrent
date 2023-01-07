@@ -84,6 +84,8 @@ for dir in package/python/scipy/integrate/tests \
     package/python/scipy/spatial/tests \
     package/python/scipy/stats/tests \
     package/python/scipy/linalg \
+    package/python/PIL \
+    package/python/Pillow.libs \
     package/python/scipy/special ; do
     
     [ -d $dir ] && { echo "Removing directory to reduce python lambda layer size: $dir";  rm -rf $dir; }
