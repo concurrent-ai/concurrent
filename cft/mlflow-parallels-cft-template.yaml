@@ -55,7 +55,7 @@ Parameters:
   dagExecutionTable:
     Type: String
     Description: 'concurrent-dag-execution table'
-    Default: concurrent-dag-execution
+    Default: concurrent-dag-execution-v2
   customTokensTable: 
       Type: String
       Description: parallels-custom-tokens table
