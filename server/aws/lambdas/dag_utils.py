@@ -13,8 +13,8 @@ from utils import get_custom_token
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 DAG_INFO_TABLE = os.environ['DAG_TABLE']
-#DAG_EXECUTION_TABLE = os.environ['DAG_EXECUTION_TABLE']
-DAG_EXECUTION_TABLE = "concurrent-dag-execution"
+DAG_EXECUTION_TABLE = os.environ['DAG_EXECUTION_TABLE']
+#DAG_EXECUTION_TABLE = "concurrent-dag-execution"
 DAG_RUNTIME_ARTIFACT = 'dag_runtime.json.bin'
 
 def fetch_dag_details(cognito_username, dag_id):
