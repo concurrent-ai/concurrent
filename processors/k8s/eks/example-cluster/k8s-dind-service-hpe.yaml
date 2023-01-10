@@ -15,6 +15,7 @@ metadata:
   name: docker-dind-data
   namespace: parallelsns
 spec:
+  storageClassName: hpe-hdd-storage
   accessModes:
     - ReadWriteOnce
   resources:
@@ -41,6 +42,7 @@ spec:
       priorityClassName: parallels-super-high-for-dind
       containers:
         - image: docker:20.10.18-dind
+          args: [--insecure-registry=registry-service:5000, --insecure-registry=registry-service:443, --insecure-registry=registry-service.parallelsns, --insecure-registry=registry-service.parallelsns:5000, --insecure-registry=registry-service.parallelsns.svc.cluster.local ]
           name: docker-dind
           env:
             - name: DOCKER_HOST

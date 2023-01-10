@@ -1,10 +1,78 @@
 #!/bin/bash
 
+# if there is an error, abort
+set -e
+
 export DOCKER_HOST="tcp://docker-dind:2375"
 
 logit() {
     echo "`date` - $$ - INFO - bootstrap.sh - ${*}" # >> ${LOG_FILE}
+    # [ -n "$LOG_FILE" ] && echo "`date` - $$ - INFO - bootstrap.sh - ${*}"  >> "${LOG_FILE}"
 }
+
+logit "Bootstrap Container Pip Packages="
+pip list
+logit "End bootstrap Container Pip Packages="
+
+##
+## Begin concurrent code
+##
+
+BOOTSTRAP_LOG_FILE="/tmp/bootstrap-log-${ORIGINAL_NODE_ID}.txt"
+
+if [ x"${PARENT_RUN_ID}" == "x" ] ; then
+    PARENT_RUN_ID=$MLFLOW_RUN_ID
+    export PARENT_RUN_ID
+fi
+
+update_mlflow_run() {
+  export MLFLOW_RUN_ID=$1
+  export UPD_STATUS=$2
+  python3 << ENDPY
+import sys
+import os
+import mlflow
+from mlflow.tracking import MlflowClient
+${ADDITIONAL_IMPORTS}
+
+client = MlflowClient()
+client.set_terminated(os.getenv('MLFLOW_RUN_ID'), os.getenv('UPD_STATUS'))
+ENDPY
+}
+
+log_mlflow_artifact() {
+  export MLFLOW_RUN_ID=$1
+  export ARTIFACT=$2
+  export DESTINATION_PREFIX=$3
+  python3 << ENDPY
+import sys
+import os
+import mlflow
+from mlflow.tracking import MlflowClient
+${ADDITIONAL_IMPORTS}
+
+client = MlflowClient()
+artifact = os.getenv('ARTIFACT')
+if os.path.isdir(artifact):
+    client.log_artifacts(os.getenv('MLFLOW_RUN_ID'), artifact, os.getenv('DESTINATION_PREFIX'))
+else:
+    client.log_artifact(os.getenv('MLFLOW_RUN_ID'), artifact, os.getenv('DESTINATION_PREFIX'))
+ENDPY
+}
+
+fail_exit() {
+  logit "script exited: logging bootstrap output to mlflow"
+  update_mlflow_run ${PARENT_RUN_ID} "FAILED" 
+  kubectl logs "${MY_POD_NAME}" > ${BOOTSTRAP_LOG_FILE}
+  log_mlflow_artifact ${PARENT_RUN_ID} ${BOOTSTRAP_LOG_FILE} '.concurrent/logs'
+  exit 255
+}
+
+# If a SIGNAL_SPEC is EXIT (0) ARG is executed on exit from the shell.  
+# If a SIGNAL_SPEC is DEBUG, ARG is executed before every simple command.  
+# If a SIGNAL_SPEC is RETURN, ARG is executed each time a shell function or a  script run by the . or source builtins finishes executing.  
+# A SIGNAL_SPEC of ERR means to execute ARG each time a command's failure would cause the shell to exit when the -e option is enabled.
+trap fail_exit EXIT
 
 logit "Environment: "
 typeset -p
@@ -94,7 +162,6 @@ if [ x"$DOCKER_HOST" == "x" ] ; then
     done
     popd >/dev/null
 
-
     # If a pidfile is still around (for example after a container restart),
     # delete it so that docker can start.
     rm -rf /var/run/docker.pid
@@ -117,21 +184,6 @@ if [ x"$DOCKER_HOST" == "x" ] ; then
     ##
     ## End Code lifted from stackexchange that provides docker-in-docker functionality
     ##
-fi
-
-logit "Bootstrap Container Pip Packages="
-pip list
-logit "End bootstrap Container Pip Packages="
-
-##
-## Begin concurrent code
-##
-
-BOOTSTRAP_LOG_FILE="/tmp/bootstrap-log-${ORIGINAL_NODE_ID}.txt"
-
-if [ x"${PARENT_RUN_ID}" == "x" ] ; then
-    PARENT_RUN_ID=$MLFLOW_RUN_ID
-    export PARENT_RUN_ID
 fi
 
 setup_docker_secret() {
@@ -207,46 +259,9 @@ generate_kubernetes_job_template() {
   echo "      restartPolicy: Never" >> $1
 }
 
-update_mlflow_run() {
-  export MLFLOW_RUN_ID=$1
-  export UPD_STATUS=$2
-  python3 << ENDPY
-import sys
-import os
-import mlflow
-from mlflow.tracking import MlflowClient
-${ADDITIONAL_IMPORTS}
-
-client = MlflowClient()
-client.set_terminated(os.getenv('MLFLOW_RUN_ID'), os.getenv('UPD_STATUS'))
-ENDPY
-}
-
-log_mlflow_artifact() {
-  export MLFLOW_RUN_ID=$1
-  export ARTIFACT=$2
-  export DESTINATION_PREFIX=$3
-  python3 << ENDPY
-import sys
-import os
-import mlflow
-from mlflow.tracking import MlflowClient
-${ADDITIONAL_IMPORTS}
-
-client = MlflowClient()
-artifact = os.getenv('ARTIFACT')
-if os.path.isdir(artifact):
-    client.log_artifacts(os.getenv('MLFLOW_RUN_ID'), artifact, os.getenv('DESTINATION_PREFIX'))
-else:
-    client.log_artifact(os.getenv('MLFLOW_RUN_ID'), artifact, os.getenv('DESTINATION_PREFIX'))
-ENDPY
-}
-
-
 get_repository_uri() {
   /bin/rm -f /tmp/reps
-  aws --profile ecr --region $2 $1 describe-repositories > /tmp/reps
-  if [ $? != 0 ] ; then
+  if ! aws --profile ecr --region $2 $1 describe-repositories > /tmp/reps ; then
     logit "Error listing repositories $1"
     return 255
   fi
@@ -306,10 +321,9 @@ ENDPY
 }
 
 get_xform() {
-  (cd /tmp/workdir; git clone "$XFORMNAME" >& /tmp/git.log.$$)
-  if [ $? == 0 ] ; then
-    CINTO=`grep 'Cloning into' /tmp/git.log.$$`
-    if [ $? == 0 ] ; then
+  
+  if (cd /tmp/workdir; git clone "$XFORMNAME" >& /tmp/git.log.$$) ; then
+    if CINTO=`grep 'Cloning into' /tmp/git.log.$$` ; then
       export USE_SUBDIR=`echo $CINTO | sed -e "s/^Cloning into '//"|sed -e "s/'.*$//"`/
       if [ x"$XFORM_PATH" != "x" ] ; then
           export USE_SUBDIR=${USE_SUBDIR}${XFORM_PATH}/
@@ -347,13 +361,6 @@ else:
 ENDPY
 }
 
-fail_exit() {
-  update_mlflow_run ${PARENT_RUN_ID} "FAILED" 
-  kubectl logs "${MY_POD_NAME}" > ${BOOTSTRAP_LOG_FILE}
-  log_mlflow_artifact ${PARENT_RUN_ID} ${BOOTSTRAP_LOG_FILE} '.concurrent/logs'
-  exit 255
-}
-
 get_python_package_version() {
   export PACKAGE_NAME=$1
   python3 << ENDPY
@@ -386,8 +393,8 @@ mkdir -p /tmp/workdir/.concurrent/project_files
 
 if [ x"$XFORMNAME" != "x" ] ; then
   logit "Running xform"
-  echo "$XFORMNAME" | grep ':' >& /dev/null
-  if [ $? == 0 ] ; then
+  
+  if echo "$XFORMNAME" | grep ':' >& /dev/null ; then
     logit "xform is in git repo"
     get_xform
     logit "USE_SUBDIR is $USE_SUBDIR"
@@ -399,20 +406,25 @@ if [ x"$XFORMNAME" != "x" ] ; then
 else
   logit "Using project files from mlflow artifacts"
   USE_SUBDIR=".concurrent/project_files/"
-  download_project_files
-  if [ $? != 0 ] ; then
+  if ! download_project_files ; then
     logit "Error downloading project files"
     fail_exit
   fi
 fi
 
-/bin/rm -f /root/.docker/config.json
+#HPE_CONTAINER_REGISTRY_URI="registry-service:5000"
+# TODO:HPE: /bin/rm -f /root/.docker/config.json
 if [ ${BACKEND_TYPE} == "gke" ] ; then
   gcloud auth activate-service-account ${GCE_ACCOUNT} --key-file=/root/.gce/key.json
   gcloud auth configure-docker
+elif [ ${BACKEND_TYPE} == "HPE" ]; then
+  logit "HPE: Using docker registry for images being built: $HPE_CONTAINER_REGISTRY_URI"
+  #TODO:HPE remove line below
+  logit "HPE: logging into AWS ECR public repo: $HPE_CONTAINER_REGISTRY_URI"
+  cat ~/.kube/hpeContainerRegistryPassword | docker login --username AWS --password-stdin public.ecr.aws
 else # if BACKEND_TYPE is not specified, assume it is EKS
   # prepare for ECR access using aws credentials in call
-  if [ ${ECR_TYPE} == "public" ] ; then
+  if [ "${ECR_TYPE}" == "public" ] ; then
     logit "Using public ECR repository"
     ECR_SERVICE=ecr-public
     ECR_LOGIN_ENDPOINT=public.ecr.aws
@@ -426,19 +438,19 @@ else # if BACKEND_TYPE is not specified, assume it is EKS
 
   # Make docker login info available to k8s
   logit "NAMESPACE=" $NAMESPACE
-  if [ ${ECR_TYPE} == "private" ] ; then
+  if [ "${ECR_TYPE}" == "private" ] ; then
     setup_docker_secret "/tmp/docker-secret.yaml" ${NAMESPACE}
     kubectl apply -f /tmp/docker-secret.yaml
   fi
 fi
 
 # First, MLproject environment image
-DOCKER_IMAGE=`docker_img_from_mlproject`
-if [ $? != 0 ] ; then
+
+if ! DOCKER_IMAGE=`docker_img_from_mlproject` ; then
   logit "Error parsing MLproject to determine docker image"
   fail_exit
 fi
-logit "DOCKER_IMAGE is ${DOCKER_IMAGE}"
+logit "DOCKER_IMAGE for MLproject is ${DOCKER_IMAGE}"
 logit "Add additional dependencies to Dockerfile"
 (cd /tmp/workdir/${USE_SUBDIR}; echo " " >> Dockerfile)
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt update" >> Dockerfile)
@@ -455,7 +467,7 @@ if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
     (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
   done
 fi
-echo "Updated Dockerfile ========="
+echo "Updated Dockerfile /tmp/workdir/${USE_SUBDIR}/Dockerfile ========="
 cat /tmp/workdir/${USE_SUBDIR}/Dockerfile
 echo "============================"
 
@@ -463,26 +475,31 @@ CREATE_ENV_IMAGE="yes"
 ENV_SHA=`sha256sum /tmp/workdir/${USE_SUBDIR}Dockerfile |awk -F' ' '{ print $1 }'`
 ENV_REPO_NAME=mlflow/shared_env_images/${ENV_SHA}
 
-if [ ${BACKEND_TYPE} == "gke" ] ; then
+if [ "${BACKEND_TYPE}" == "gke" ] ; then
   ENV_REPO_URI="gcr.io/${PROJECT_ID}/${ENV_REPO_NAME}"
   logit "Checking if env image exists in repo URI ${ENV_REPO_URI}"
-  docker pull ${ENV_REPO_URI}:latest
-  if [ $? == 0 ] ; then
-    docker tag ${ENV_REPO_URI}:latest ${DOCKER_IMAGE}:latest
-    if [ $? == 0 ] ; then
+  if docker pull ${ENV_REPO_URI}:latest ; then    
+    if docker tag ${ENV_REPO_URI}:latest ${DOCKER_IMAGE}:latest ; then
       logit "Found latest MLproject docker env image from existing repo $ENV_REPO_URI"
       docker images
       CREATE_ENV_IMAGE="no"
     fi
   fi
-else # default BACKEND_TYPE is eks
-  ENV_REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $ENV_REPO_NAME`
-  if [ $? == 0 ] ; then
-    logit "Looking for latest MLproject docker env image from existing repo $ENV_REPO_URI"
-    docker pull ${ENV_REPO_URI}:latest
-    if [ $? == 0 ] ; then
-      docker tag ${ENV_REPO_URI}:latest ${DOCKER_IMAGE}:latest
-      if [ $? == 0 ] ; then
+elif  [ "${BACKEND_TYPE}" == "HPE" ]; then
+  ENV_REPO_URI="${HPE_CONTAINER_REGISTRY_URI}/${ENV_REPO_NAME}"
+  logit "Checking if env image exists in repo URI ${ENV_REPO_URI}"  
+  if docker pull ${ENV_REPO_URI}:latest ; then    
+    if docker tag ${ENV_REPO_URI}:latest ${DOCKER_IMAGE}:latest ; then
+      logit "Found latest MLproject docker env image from existing repo $ENV_REPO_URI"
+      docker images
+      CREATE_ENV_IMAGE="no"
+    fi
+  fi
+else # default BACKEND_TYPE is eks  
+  if ENV_REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $ENV_REPO_NAME` ; then
+    logit "Looking for latest MLproject docker env image from existing repo $ENV_REPO_URI"    
+    if docker pull ${ENV_REPO_URI}:latest ; then      
+      if docker tag ${ENV_REPO_URI}:latest ${DOCKER_IMAGE}:latest ; then
         logit "Found latest MLproject docker env image from existing repo $ENV_REPO_URI"
         docker images
         CREATE_ENV_IMAGE="no"
@@ -492,9 +509,8 @@ else # default BACKEND_TYPE is eks
     logit "Creating new MLproject docker env image repo $ENV_REPO_NAME"
     /bin/rm -f /tmp/cr-out.txt
     aws --profile ecr --region ${ECR_REGION} ${ECR_SERVICE} create-repository --repository-name ${ENV_REPO_NAME} > /tmp/cr-out.txt
-    logit "Proceed if repository created"
-    ENV_REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $ENV_REPO_NAME`
-    if [ $? != 0 ] ; then
+    logit "Proceed if repository created"    
+    if ! ENV_REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $ENV_REPO_NAME` ; then
       logit "Error creating docker repository ${ENV_REPO_NAME}: "
       cat /tmp/cr-out.txt
       fail_exit
@@ -504,10 +520,13 @@ fi
 
 if [ $CREATE_ENV_IMAGE == "yes" ] ; then
   logit "Building env image for pushing to $ENV_REPO_URI"
-  (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} -f Dockerfile .)
-  docker images
-  /usr/bin/docker tag ${DOCKER_IMAGE}:latest ${ENV_REPO_URI}:latest
-  if [ $? != 0 ] ; then
+  if  [ "${BACKEND_TYPE}" == "HPE" ]; then
+    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} -f Dockerfile --network host . )
+  else
+    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} -f Dockerfile . )
+  fi
+  docker images  
+  if ! /usr/bin/docker tag ${DOCKER_IMAGE}:latest ${ENV_REPO_URI}:latest ; then
     logit "Error tagging env image before pushing"
     fail_exit
   fi
@@ -516,7 +535,9 @@ fi
 
 MLFLOW_PROJECT_DIR=/tmp/workdir/${USE_SUBDIR}
 
-log_mlflow_artifact ${PARENT_RUN_ID} ${MLFLOW_PROJECT_DIR} '.concurrent/project_files'
+# Note: we are uploading the modified Dockerfile here
+# TODO:HPE: uncomment below
+# log_mlflow_artifact ${PARENT_RUN_ID} ${MLFLOW_PROJECT_DIR} '.concurrent/project_files'
 
 # Next, repository for full image, i.e. MLproject env base plus project code/data
 USER_NAME_MUNGED=`echo ${COGNITO_USERNAME}|sed -e 's/@/-/g'`
@@ -525,17 +546,17 @@ REPOSITORY_FULL_NAME=mlflow/${USER_NAME_MUNGED}/${REPO_NAME_MUNGED}
 logit "Name of docker repository for full image is $REPOSITORY_FULL_NAME"
 if [ ${BACKEND_TYPE} == "gke" ] ; then
   REPOSITORY_URI="gcr.io/${PROJECT_ID}/${REPOSITORY_FULL_NAME}"
-else # default backend is eks
-  REPOSITORY_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPOSITORY_FULL_NAME`
-  if [ $? == 0 ] ; then
+elif [ ${BACKEND_TYPE} == "HPE" ] ; then
+  REPOSITORY_URI="${HPE_CONTAINER_REGISTRY_URI}/${REPOSITORY_FULL_NAME}"
+else # default backend is eks  
+  if REPOSITORY_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPOSITORY_FULL_NAME` ; then
     logit "Using existing Docker repo $REPOSITORY_FULL_NAME"
   else
     logit "Docker repo ${REPOSITORY_FULL_NAME} does not exist. Creating"
     /bin/rm -f /tmp/cr-out.txt
     aws --profile ecr --region ${ECR_REGION} ${ECR_SERVICE} create-repository --repository-name ${REPOSITORY_FULL_NAME} > /tmp/cr-out.txt
-    logit "Proceed if repository created"
-    REPOSITORY_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPOSITORY_FULL_NAME`
-    if [ $? != 0 ] ; then
+    logit "Proceed if repository created"    
+    if ! REPOSITORY_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPOSITORY_FULL_NAME` ; then
       logit "Error creating docker repository:"
       cat /tmp/cr-out.txt
       fail_exit
@@ -562,12 +583,17 @@ logit "MLFLOW_PROJECT_DIR is " $MLFLOW_PROJECT_DIR
 logit "Full environment: "
 typeset -p
 
+# ARG is a command to be read and executed when the shell receives the signal(s) SIGNAL_SPEC.  If ARG is absent (and a single SIGNAL_SPEC
+# is supplied) or `-', each specified signal is reset to its original value.
+# 
+# task_launcher has its own 'trap' to hook into 'EXIT' and upload logs.  So disable this script's exit hook
+trap - EXIT
+
 ##Launch task containers
 TASK_LAUNCHER_CMD="python3 /usr/local/bin/task_launcher.py"
 
 logit "Starting task launcher: " $TASK_LAUNCHER_CMD
-$TASK_LAUNCHER_CMD
-if [ $? != 0 ] ; then
+if ! $TASK_LAUNCHER_CMD ; then
     logit "Task Launcher Failed"
     exit 255
 else
