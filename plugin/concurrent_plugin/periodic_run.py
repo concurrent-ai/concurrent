@@ -6,7 +6,7 @@ from requests.exceptions import HTTPError
 import requests
 import json
 
-parser = argparse.ArgumentParser(epilog='Example: python -m concurrent_plugin.periodic_run add test1 --schedule "06_22_*_*_*_*" --schedule_type once --dagid DAG1665114786385 --experiment_id 7')
+parser = argparse.ArgumentParser(epilog='Example: python -m concurrent_plugin.periodic_run add --periodic_run_name test1 --schedule "06_22_*_*_*_*" --schedule_type once --dagid DAG1665114786385 --experiment_id 7')
 parser.add_argument('operation', type=str, choices=['add', 'delete', 'list'])
 parser.add_argument('--periodic_run_name', type=str, required=False)
 parser.add_argument('--schedule', type=str, required=False, help='format is a_b_c_d_e_f where a=minutes(0-59), b=hour(0-23), c=day_of_month(1-31), d=month(1-12), e=day_of_week(0-7, 0 is Sunday)')

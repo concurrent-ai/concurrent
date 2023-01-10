@@ -1,11 +1,12 @@
 import boto3
+import botocore
 from botocore.exceptions import ClientError
 import os
 import secrets
 import time
 import json
 import uuid
-
+import random
 
 PARALLELS_SCHEMA_VERSION = 'v000'
 DAG_INFO_TABLE = os.environ['DAG_TABLE']
@@ -208,8 +209,13 @@ def get_custom_token(cognito_username, groups):
                         + ' for ' + cognito_username)
                 if 'token_expiry' in one_item:
                     token_expiry = int(one_item['token_expiry']['S'])
-                    if time.time() < token_expiry:
-                        return one_item['queue_message_uuid']['S'], one_item['token']['S']
+                    if time.time() <= token_expiry - 60*60:
+                        token_info = {
+                            'queue_message_uuid': one_item['queue_message_uuid']['S'],
+                            'token': one_item['token']['S'],
+                            'expiry': token_expiry
+                        }
+                        return token_info
                 found_token_uuid = one_item['queue_message_uuid']['S']
 
     if found_token_uuid:
@@ -217,12 +223,12 @@ def get_custom_token(cognito_username, groups):
     else:
         queue_message_uuid = str(uuid.uuid1())
     token = secrets.token_urlsafe(256)
-
+    token_expiry = int(time.time()) + 7*24*3600
     item = {
         "queue_message_uuid": {"S": queue_message_uuid},
         "token": {"S": token},
         "cognito_username": {"S": cognito_username},
-        "token_expiry": {"S": str(int(time.time()) + 7*24*3600)}  # 7 days
+        "token_expiry": {"S": str(token_expiry)}  # 7 days
     }
     if groups:
         item['groups'] = {"S": json.dumps(groups)}
@@ -233,7 +239,13 @@ def get_custom_token(cognito_username, groups):
         print("Couldn't put item in dynamodb")
         raise
 
-    return queue_message_uuid, token
+    token_info = {
+        'queue_message_uuid': queue_message_uuid,
+        'token': token,
+        'expiry': token_expiry
+    }
+
+    return token_info
 
 #Creates a fake context, useful in lambda to lambda invocation
 def create_request_context(cognito_username):

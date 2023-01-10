@@ -193,8 +193,7 @@ if [ x$NEW_CONCURRENT_LAMBDAS != "x" ] ; then
     echo "Error determining the name of the generated template.yaml file. Details in file /tmp/concurrent-build.log.$$"
     exit $?
   fi
-  UPLINE=`echo $UPLINER|sed -e 's/
-//g'`
+  UPLINE=`echo $UPLINER| tr -d '\n' | tr -d '\r'`
   CONCURRENT_TEMPLATE_FILE=`echo $UPLINE | sed -e 's/Uploading to \(concurrent-server\/.*template\).*/\1/'`
   echo "Concurrent Lambdas generated template file name is $CONCURRENT_TEMPLATE_FILE"
   aws s3 cp s3://scratch-bucket-xyzzy-3/$CONCURRENT_TEMPLATE_FILE ./workdir
