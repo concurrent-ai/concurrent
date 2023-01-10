@@ -84,7 +84,7 @@ for dir in package/python/scipy/integrate/tests \
     package/python/scipy/spatial/tests \
     package/python/scipy/stats/tests \
     package/python/scipy/linalg \
-    package/python/scipy.libs/libopenblasp* \
+    package/python/scipy.libs \
     package/python/PIL \
     package/python/Pillow.libs \
     package/python/scipy/special ; do
