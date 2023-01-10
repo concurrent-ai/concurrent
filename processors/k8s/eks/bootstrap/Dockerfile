@@ -40,4 +40,23 @@ ADD ./task_launcher.py /usr/local/bin/task_launcher.py
 
 RUN echo $(pip list)
 VOLUME /var/lib/docker
+
+# The CMD instruction has three forms:
+# CMD ["executable","param1","param2"] (exec form, this is the preferred form)
+# CMD ["param1","param2"] (as default parameters to ENTRYPOINT; ENTRYPOINT must be specified)
+# CMD command param1 param2 (shell form)
+#
+# Provide defaults for an executing container. If an executable is not specified, then ENTRYPOINT must be specified as well. There can only be one CMD instruction in a Dockerfile.
+# CMD [ "/bin/ls", "-l" ]
 CMD /usr/local/bin/bootstrap.sh
+
+# ENTRYPOINT has two forms: 
+# The exec form, which is the preferred form: 
+# ENTRYPOINT ["executable", "param1", "param2"]
+# The shell form: 
+# ENTRYPOINT command param1 param2
+# An ENTRYPOINT allows you to configure a container that will run as an executable.
+#
+# Configures the container to be run as an executable;  
+# ENTRYPOINT [ "/opt/app/run.sh", "--port", "8080" ]
+# ENTRYPOINT [ "executable" ]
