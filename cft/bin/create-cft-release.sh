@@ -153,6 +153,7 @@ if [ x$NEW_CONCURRENT_LAMBDAS != "x" ] ; then
   echo "Concurrent Serverless Application Appid in ap-south-1 is $CONCURRENT_AP_SOUTH_1_APPID"
   if [ -d workdir/concurrent ] ; then
     echo "Cleaning up existing concurrent source tree"
+    (cd workdir/concurrent; /bin/rm -f server/aws/lambdas/parallels_version.py)
     (cd workdir/concurrent; git reset --hard)
     (cd workdir/concurrent; git checkout main)
   else
