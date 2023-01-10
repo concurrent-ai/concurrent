@@ -384,9 +384,11 @@ if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
 fi
 
 # Install latest concurrent-plugin
-pip install --upgrade concurrent-plugin
 if [ x"$CONCURRENT_PLUGIN_VERSION" == "x" ] ; then
+  pip install --upgrade concurrent-plugin
   CONCURRENT_PLUGIN_VERSION=`get_python_package_version concurrent-plugin`
+else
+  pip install concurrent-plugin==$CONCURRENT_PLUGIN_VERSION
 fi
 
 mkdir -p /tmp/workdir/.concurrent/project_files
@@ -568,6 +570,8 @@ export REPOSITORY_URI
 
 export MLFLOW_PROJECT_DIR
 export BOOTSTRAP_LOG_FILE
+export PERIODIC_RUN_FREQUENCY
+export PERIODIC_RUN_START_TIME
 
 logit "MLFLOW_CONCURRENT_URI is " $MLFLOW_CONCURRENT_URI
 logit "MLFLOW_TRACKING_URI is " $MLFLOW_TRACKING_URI
@@ -580,6 +584,8 @@ logit "PERIODIC_RUN_NAME is " $PERIODIC_RUN_NAME
 logit "PARENT_RUN_ID is " $PARENT_RUN_ID
 logit "REPOSITORY_URI is " $REPOSITORY_URI
 logit "MLFLOW_PROJECT_DIR is " $MLFLOW_PROJECT_DIR
+logit "PERIODIC_RUN_FREQUENCY is " $PERIODIC_RUN_FREQUENCY
+logit "PERIODIC_RUN_START_TIME is " $PERIODIC_RUN_START_TIME
 logit "Full environment: "
 typeset -p
 

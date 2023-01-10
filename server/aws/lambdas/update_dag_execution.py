@@ -3,6 +3,7 @@ import os
 import logging
 import time
 import copy
+import boto3
 
 import lock_utils, execute_dag, dag_utils
 from utils import get_cognito_user
@@ -55,8 +56,8 @@ def update_dag_execution(event, context):
 
     try:
         dag_json, dag_execution_status, auth_info \
-            = execute_dag.fetch_dag_execution_info(cognito_username, dagid, dag_execution_id)
-        update_dag_execution_info(cognito_username, dag_execution_id, dag_execution_status,
+            = execute_dag.fetch_dag_execution_info(cognito_username, groups, dagid, dag_execution_id)
+        update_dag_execution_info(cognito_username, dagid, dag_execution_id, dag_execution_status,
                                   dag_json, run_id, partition_spec)
     except Exception as ex:
         status_msg = 'caught while fetching and updating dag execution info: ' + str(ex)
@@ -67,7 +68,7 @@ def update_dag_execution(event, context):
         execute_dag.release_row_lock(lock_key)
     return respond(None, dict())
 
-def update_dag_execution_info(cognito_username, dag_execution_id, dag_execution_status,
+def update_dag_execution_info(cognito_username, dag_id, dag_execution_id, dag_execution_status,
                               dag_json, run_id, partition_list, test_call=False):
     incoming_edge_graph, outgoing_edge_graph, node_dict, edge_dict = execute_dag.get_graph_struct(dag_json)
     nodes_to_split = set()  ##Set of nodes to be partitioned
@@ -216,7 +217,7 @@ def update_dag_execution_info(cognito_username, dag_execution_id, dag_execution_
         new_dag_json, new_dag_exec_status, modified = update_edge_partitioned_nodes(new_dag_json, new_dag_exec_status)
 
     if not test_call:
-        update_ddb_dag_exec_info(cognito_username, new_dag_json, dag_execution_id, new_dag_exec_status)
+        update_ddb_dag_exec_info(dag_id, new_dag_json, dag_execution_id, new_dag_exec_status)
     return new_dag_json
 
 
@@ -398,10 +399,10 @@ def split_outgoing_edge(splitted_nodes, edge, node_dict):
     return new_edges
 
 
-def update_ddb_dag_exec_info(cognito_username, dag_json, dag_execution_id, dag_exec_status):
+def update_ddb_dag_exec_info(dag_id, dag_json, dag_execution_id, dag_exec_status):
     client = boto3.client('dynamodb')
 
-    dag_exec_key = execute_dag.create_dag_execution_key(cognito_username, dag_execution_id)
+    dag_exec_key = execute_dag.create_dag_execution_key(dag_id, dag_execution_id)
 
     now = int(time.time())
     uxp = 'SET dagJson = :ps, run_status = :rs, update_time = :ut'

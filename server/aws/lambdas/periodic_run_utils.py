@@ -21,7 +21,7 @@ def get_periodic_run_info(cognito_username, periodic_run_name):
     try:
         pr_result = client.get_item(TableName=table_name, Key=key)
     except Exception as ex:
-        status_msg = 'caught while get_periodic_run_info' + str(ex)
+        status_msg = 'caught while get_periodic_run_info: ' + str(ex)
         logger.info(status_msg)
         return False, status_msg, dict()
 

@@ -54,8 +54,8 @@ Parameters:
     Default: mlflow-parallels-dag
   dagExecutionTable:
     Type: String
-    Description: 'parallels-dag-execution table'
-    Default: parallels-dag-execution
+    Description: 'concurrent-dag-execution table'
+    Default: concurrent-dag-execution-v2
   customTokensTable: 
       Type: String
       Description: parallels-custom-tokens table
@@ -143,6 +143,11 @@ Parameters:
     Type: String
     Description: additional packages to be installed in the image for the working container.  
     Default: infinstor_mlflow_plugin,infinstor
+  IsSingleTenant:
+    Type: String
+    Description: "is this a single tenant install(default) or multi-tenant"
+    AllowedValues: [true,false]
+    Default: true
 Mappings:
   MlflowServerTypeMap:
     infinstor:
@@ -155,6 +160,7 @@ Mappings:
       ParallelsUiBuildPrefix: builds/ui/opensource-parallels-ui
 Conditions:
   EmptyBoundaryPolicyArn: !Equals [!Ref BoundaryPolicyARN, ""]
+  DoSingleTenant: !Equals [!Ref IsSingleTenant, 'true']
 Rules:
   CognitoUserPoolIdValRule:
     RuleCondition: !Not [ !Equals [!Ref CognitoUserPoolId, ''] ]
@@ -252,6 +258,7 @@ Resources:
         ServiceConfTable: !Ref ServiceConfTable
   SingleTenant:
     Type: AWS::CloudFormation::Stack
+    Condition: DoSingleTenant
     DependsOn: serviceconf
     Properties:
       TemplateURL: !Sub https://s3.amazonaws.com/concurrentdist/cft/parallels-cft/${ParallelsCftVersion}/single-tenant-cft.yaml

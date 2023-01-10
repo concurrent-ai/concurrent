@@ -77,8 +77,8 @@ def run_project(event, context):
     item = json.loads(body)
 
     #Inject Parallels token in the body
-    queue_message_uuid, token = get_custom_token(cognito_username, groups)
-    item['parallels_token']="Custom {0}:{1}".format(queue_message_uuid, token)
+    token_info = get_custom_token(cognito_username, groups)
+    item['parallels_token']="Custom {0}:{1}".format(token_info['queue_message_uuid'], token_info['token'])
 
     logger.info('msg payload item=' + str(item))
 
@@ -160,22 +160,23 @@ def run_project_gke(cognito_username, groups, context, subs, item, service_conf)
     os.remove(creds_file_path)
     return respond(None, {})
 
-def _create_prio_class(con, name, val, global_default):
+def _create_prio_class(con, name, val, global_default, preemption_policy=None):
     api_resp = None
     api_instance = kubernetes_client.SchedulingV1Api(api_client=api_client.ApiClient(configuration=con))
     try:
         api_resp = api_instance.read_priority_class(name)
     except ApiException as ae:
         print('While reading ' + str(name) + ', caught ' + str(ae))
-        _do_create_prio_class(con, name, val, global_default)
+        _do_create_prio_class(con, name, val, global_default, preemption_policy=preemption_policy)
     else:
         print('Successfully read priority class ' + str(name) + ': ' + str(api_resp))
         return
 
-def _do_create_prio_class(con, name, val, global_default):
+def _do_create_prio_class(con, name, val, global_default, preemption_policy=None):
     api_resp = None
     api_instance = kubernetes_client.SchedulingV1Api(api_client=api_client.ApiClient(configuration=con))
-    body = kubernetes_client.V1PriorityClass(value=val, metadata=kubernetes_client.V1ObjectMeta(name=name), global_default=global_default)
+    body = kubernetes_client.V1PriorityClass(value=val, metadata=kubernetes_client.V1ObjectMeta(name=name),
+                                             global_default=global_default, preemption_policy=preemption_policy)
     try:
         api_resp = api_instance.create_priority_class(body)
     except ApiException as ae:
@@ -184,7 +185,7 @@ def _do_create_prio_class(con, name, val, global_default):
         print('Successfully created priority class ' + str(name) + ': ' + str(api_resp))
 
 def _create_prio_classes(con):
-    _create_prio_class(con, 'parallels-high-prio', 1000, False)
+    _create_prio_class(con, 'concurrent-high-non-preempt-prio', 1000, False, preemption_policy='Never')
     _create_prio_class(con, 'parallels-lo-prio', 100, True)
 
 @dataclass
@@ -252,6 +253,10 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     cmap.data['MLFLOW_CONCURRENT_URI'] = item['MLFLOW_CONCURRENT_URI']
     cmap.data['MLFLOW_TRACKING_URI'] = item['MLFLOW_TRACKING_URI']
     cmap.data['MLFLOW_RUN_ID'] = run_id
+    if 'periodic_run_frequency' in item:
+        cmap.data['PERIODIC_RUN_FREQUENCY'] = item['periodic_run_frequency']
+    if 'periodic_run_start_time' in item:
+        cmap.data['PERIODIC_RUN_START_TIME'] = str(item['periodic_run_start_time'])
     cmap.data['NAMESPACE'] = namespace
     if backend_type == 'eks':
         cmap.data['ECR_TYPE'] = ecr_type
@@ -393,7 +398,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                 )
             ],
             restart_policy='Never',
-            priority_class_name='parallels-high-prio',
+            priority_class_name='parallels-lo-prio',
             volumes=volumes,
             # service_account_name='infinstor-serviceaccount-' + namespace
             service_account_name='k8s-serviceaccount-for-parallels-' + namespace

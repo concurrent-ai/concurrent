@@ -39,8 +39,8 @@ Parameters:
     Default: parallels-Subscribers
   dagexecutionTable:
     Type: String
-    Description: 'parallels-dag-execution table'
-    Default: parallels-dag-execution
+    Description: 'concurrent-dag-execution table'
+    Default: concurrent-dag-execution
   kubeClustersTable:
     Type: String
     Description: 'concurrent-k8s-clusters table'
