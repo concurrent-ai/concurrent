@@ -415,15 +415,12 @@ else
 fi
 
 #HPE_CONTAINER_REGISTRY_URI="registry-service:5000"
-# TODO:HPE: /bin/rm -f /root/.docker/config.json
+/bin/rm -f /root/.docker/config.json
 if [ ${BACKEND_TYPE} == "gke" ] ; then
   gcloud auth activate-service-account ${GCE_ACCOUNT} --key-file=/root/.gce/key.json
   gcloud auth configure-docker
 elif [ ${BACKEND_TYPE} == "HPE" ]; then
   logit "HPE: Using docker registry for images being built: $HPE_CONTAINER_REGISTRY_URI"
-  #TODO:HPE remove line below
-  logit "HPE: logging into AWS ECR public repo: $HPE_CONTAINER_REGISTRY_URI"
-  cat ~/.kube/hpeContainerRegistryPassword | docker login --username AWS --password-stdin public.ecr.aws
 else # if BACKEND_TYPE is not specified, assume it is EKS
   # prepare for ECR access using aws credentials in call
   if [ "${ECR_TYPE}" == "public" ] ; then
@@ -538,8 +535,7 @@ fi
 MLFLOW_PROJECT_DIR=/tmp/workdir/${USE_SUBDIR}
 
 # Note: we are uploading the modified Dockerfile here
-# TODO:HPE: uncomment below
-# log_mlflow_artifact ${PARENT_RUN_ID} ${MLFLOW_PROJECT_DIR} '.concurrent/project_files'
+log_mlflow_artifact ${PARENT_RUN_ID} ${MLFLOW_PROJECT_DIR} '.concurrent/project_files'
 
 # Next, repository for full image, i.e. MLproject env base plus project code/data
 USER_NAME_MUNGED=`echo ${COGNITO_USERNAME}|sed -e 's/@/-/g'`
