@@ -92,4 +92,8 @@ done;
 # remove all __pycache__ directories to reduce size
 find package/python -type d -name __pycache__ -exec rm -r {} \+
 
-echo "After trimming: Current size of python lambda layer: $(du -s -m package | awk '{print $1}' ) MB"
+layer_size_bytes=$(du -s --bytes package | awk '{print $1}' )
+echo "After trimming: Current size of python lambda layer: $layer_size_bytes"
+
+max_layer_size=262144000
+[ "$layer_size_bytes" -gt  $max_layer_size ] && { echo "Error: layer size $layer_size_bytes is greater than $max_layer_size.  Fix layer size and try again."; exit 1; }
