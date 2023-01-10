@@ -41,7 +41,7 @@ import yaml
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-def respond(err, res=None):
+def respond(err, res=None) -> dict:
     return {
         'statusCode': '400' if err else '200',
         'body': str(err) if err else json.dumps(res),
@@ -82,13 +82,8 @@ def run_project(event, context):
 
     logger.info('msg payload item=' + str(item))
 
-    if item.get('instance_type') == 'eks':
-        ##TODO: UI curently sends instance type
-        backend_type = 'eks'
-    elif item.get('instance_type') == 'gke':
-        backend_type = 'gke'
-    else:
-        backend_type = item.get('backend_type')
+    backend_type = item.get('instance_type')
+    if not backend_type:  backend_type = item.get('backend_type')
 
     if backend_type == 'eks':
         return run_project_eks(cognito_username, groups, context, subs, item, service_conf)
@@ -197,14 +192,15 @@ def _create_prio_classes(con):
 class HpeClusterConfig:
     HPE_CLUSTER_TYPE = 'HPE'
     
-    # .kube/config file for access to the clusters
+    # .kube/config file for access to the cluster.  This is for access from the internet
     hpeKubeConfig: str
+    # .kube/config file for access to the cluster.  This is for access from the Private network (non internet)
+    hpeKubeConfigPrivateNet: str
     # the context name in kube_config
     hpeKubeConfigContext:str
-    # ip address or hostname of container registry
-    hpeContainerRegistry: str    
-
-empty_hpe_cluster_config = HpeClusterConfig("", "", "")    
+    # uri of container registry: like registry-service:5000 or public.ecr.aws/y9l4v0u6/
+    hpeContainerRegistryUri: str    
+empty_hpe_cluster_config = HpeClusterConfig("", "", "", "")    
 
 def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                         eks_access_key_id, eks_secret_access_key, eks_session_token, ecr_type, ecr_region,
@@ -267,6 +263,8 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         cmap.data['ECR_REGION'] = ecr_region
     elif backend_type == 'gke':
         cmap.data['PROJECT_ID'] = gke_project_id
+    elif backend_type == HpeClusterConfig.HPE_CLUSTER_TYPE:
+        cmap.data['HPE_CONTAINER_REGISTRY_URI'] = hpe_cluster_config.hpeContainerRegistryUri
     if ecr_aws_account_id:
         cmap.data['ECR_AWS_ACCOUNT_ID'] = ecr_aws_account_id
 
@@ -454,14 +452,15 @@ def _lookup_hpe_cluster_config(cognito_username:str, groups:list, kube_cluster_n
     kube_clusters:list = query_user_accessible_clusters(cognito_username, groups)
     for user_clust in kube_clusters:
         if user_clust['cluster_type'] == HpeClusterConfig.HPE_CLUSTER_TYPE and user_clust['cluster_name'] == kube_cluster_name :
-            return HpeClusterConfig(user_clust['hpeKubeConfig'], user_clust['hpeKubeConfigContext'], user_clust['hpeContainerRegistry'])
+            return HpeClusterConfig(user_clust['hpeKubeConfig'], user_clust['hpeKubeConfigPrivateNet'], user_clust['hpeKubeConfigContext'], user_clust['hpeContainerRegistryUri'])
     
     # fall back to subscriber's cluster information
     logger.info("Use cluster info for subscriber")
     return HpeClusterConfig(
         subs['hpeKubeConfig']['S'] if 'hpeKubeConfig' in subs else None,
+        subs['hpeKubeConfigPrivateNet']['S'] if 'hpeKubeConfigPrivateNet' in subs else None,
         subs['hpeKubeConfigContext']['S'] if 'hpeKubeConfigContext' in subs else None,
-        subs['hpeContainerRegistry']['S'] if 'hpeContainerRegistry' in subs else None
+        subs['hpeContainerRegistryUri']['S'] if 'hpeContainerRegistryUri' in subs else None
     )
 
 def _run_project_hpe(cognito_username:str, groups, context, subs:dict, reqbody:dict, service_conf:dict):
@@ -477,7 +476,7 @@ def _run_project_hpe(cognito_username:str, groups, context, subs:dict, reqbody:d
         reqbody (dict): example: {"backend-type": "HPE", "kube-context": "isstage23-cluster-1", "kube-namespace": "parallelsns", "resources.requests.memory": "1024Mi", "kube-client-location": "backend"}
         service_conf (dict): _description_
     """
-    hpe_cluster_conf:HpeClusterConfig = _lookup_hpe_cluster_config(cognito_username, reqbody['kube_context'], subs)
+    hpe_cluster_conf:HpeClusterConfig = _lookup_hpe_cluster_config(cognito_username, groups, reqbody['kube_context'], subs)
     print(f"hpe_cluster_conf={hpe_cluster_conf}")
     
     # write kube config to temp file
@@ -487,9 +486,14 @@ def _run_project_hpe(cognito_username:str, groups, context, subs:dict, reqbody:d
         
     # create a kube config from its string representation
     kube_config:Configuration = Configuration()
+    # Loads authentication and cluster information from kube-config file and stores them in kubernetes.client.configuration.
+    # config_file: Name of the kube-config file.
+    # client_configuration: The kubernetes.client.Configuration to set configs to.
     config.load_kube_config(config_file=kube_config_fname, client_configuration=kube_config)
     
     _kickoff_bootstrap(HpeClusterConfig.HPE_CLUSTER_TYPE, endpoint=None, cert_auth=None, cluster_arn=None, item=reqbody, eks_access_key_id=None, eks_secret_access_key=None, eks_session_token=None, ecr_type=None, ecr_region=None, ecr_access_key_id=None, ecr_secret_access_key=None, ecr_session_token=None, ecr_aws_account_id=None, gke_project_id=None, gke_creds=None, hpe_cluster_config=hpe_cluster_conf, cognito_username=cognito_username, subs=subs, con=kube_config)
+    
+    return respond(None, {})
 
 def run_project_eks(cognito_username, groups, context, subs, item, service_conf):
     logger.info("run_project: Running in kube. item=" + str(item) + ', service_conf=' + str(service_conf))
@@ -690,10 +694,10 @@ apiVersion: v1
 kind: Secret
 type: Opaque
 data:
-    config: {base64.b64encode(hpe_cluster_config.hpeKubeConfig.encode('utf-8')).decode('utf-8')}
+    config: {base64.b64encode(hpe_cluster_config.hpeKubeConfigPrivateNet.encode('utf-8')).decode('utf-8')}
 stringData:
     hpeKubeConfigContext: {hpe_cluster_config.hpeKubeConfigContext}
-    hpeContainerRegistry: {hpe_cluster_config.hpeContainerRegistry}
+    hpeContainerRegistryUri: {hpe_cluster_config.hpeContainerRegistryUri}    
 metadata:
     name: {hpe_secret_name}
     namespace: {job_namespace}

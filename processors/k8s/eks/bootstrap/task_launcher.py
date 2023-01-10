@@ -2,6 +2,7 @@ import logging
 import os
 import json
 import base64
+from typing import Dict, List, Tuple
 import zlib
 import subprocess
 import time
@@ -11,6 +12,7 @@ from mlflow.projects.utils import load_project, MLFLOW_DOCKER_WORKDIR_PATH
 from mlflow.projects import kubernetes as kb
 
 import docker
+import docker.models.images
 # Use lazy % or % formatting in logging functionspylint(logging-fstring-interpolation)
 # Use lazy % or % formatting in logging functionspylint(logging-format-interpolation)
 # Catching too general exception Exceptionpylint(broad-except)
@@ -101,13 +103,27 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
 def get_side_car_container_name(run_id):
     return 'sidecar-' + run_id
 
-def generate_backend_config_json(backend_conf_file, input_spec, run_id, k8s_job_template_file,
+def generate_backend_config_json(backend_conf_file:str, input_spec, run_id, k8s_job_template_file,
                                 image_tag, image_digest):
+    """
+    writes the backend config json to 'backend_conf_file'.
+    {backend-type: <backend_type>, repository-uri: <uri>, git-commit: <git>, run-id:<runid>, INPUT_DATA_SPEC:<spec>, IMAGE_TAG:<tag>, IMAGE_DIGEST:<digest>, kube-job-template-path:<path> }
+
+    Args:
+        backend_conf_file (str): file to write the backend config json to
+        input_spec (_type_): _description_
+        run_id (_type_): _description_
+        k8s_job_template_file (_type_): _description_
+        image_tag (_type_): _description_
+        image_digest (_type_): _description_
+    """
     input_spec_encoded = base64.b64encode(json.dumps(input_spec).encode('utf-8'), altchars=None).decode('utf-8')
     with open(backend_conf_file, "w") as fh:
         fh.write("{\n")
         if os.environ["BACKEND_TYPE"] == "gke":
             fh.write("  \"backend-type\": \"gke\",\n")
+        elif os.environ["BACKEND_TYPE"] == "HPE":
+            fh.write("  \"backend-type\": \"HPE\",\n")
         else:
             fh.write("  \"backend-type\": \"eks\",\n")
 
@@ -348,14 +364,14 @@ def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_
     logger.info("_PROJECT_TAR_ARCHIVE_NAME = {}, _GENERATED_DOCKERFILE_NAME = {}".format(_PROJECT_TAR_ARCHIVE_NAME, _GENERATED_DOCKERFILE_NAME))
     with open(build_ctx_path, "rb") as docker_build_ctx:
         logger.info("=== Building docker image %s ===", image_uri)
-        client = docker.from_env()
+        client:docker.DockerClient = docker.from_env()
         image, build_logs = client.images.build(
             tag=image_uri,
             forcerm=True,
             dockerfile=os.path.join(_PROJECT_TAR_ARCHIVE_NAME, _GENERATED_DOCKERFILE_NAME),
             fileobj=docker_build_ctx,
             custom_context=True,
-            encoding="gzip",
+            encoding="gzip"
         )
         log_pip_requirements(base_image, parent_run_id, build_logs)
     try:
@@ -367,7 +383,17 @@ def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_
     return image
 
 
-def get_docker_image(parent_run_id):
+def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str]:
+    """
+    get the docker image that corresponds to os.environ['REPOSITORY_URI']:latest.  
+    Either build the image if it doesn't exist, using Dockerfile in os.environ['MLFLOW_PROJECT_DIR'] or pull an existing image.
+
+    Args:
+        parent_run_id (str): pip requirements.txt is logged to this parent_run_id.  requirements.txt is created by parsing 'docker build' output
+
+    Returns:
+        Tuple[docker.models.images.Image, str]: returns (image, image_digest)
+    """
     git_commit = os.environ.get('GIT_COMMIT')
     repository_uri = os.environ['REPOSITORY_URI']
     do_build = True
@@ -375,9 +401,9 @@ def get_docker_image(parent_run_id):
         lookup_tag = git_commit[:7]
     else:
         lookup_tag = 'latest'
-    docker_client = docker.from_env()
+    docker_client:docker.DockerClient = docker.from_env()
     try:
-        image = docker_client.images.pull(repository_uri, tag=lookup_tag)
+        image:docker.models.images.Image = docker_client.images.pull(repository_uri, tag=lookup_tag)
     except docker.errors.ImageNotFound :
         logger.info("task_launcher.get_docker_image: Docker img "
                      + repository_uri + ", tag=" + lookup_tag + " not found. Building...")
@@ -410,7 +436,16 @@ def get_docker_image(parent_run_id):
     return image, image_digest
 
 
-def launch_mlflow_commands(cmd_list):
+def launch_mlflow_commands(cmd_list:List[Tuple[str, List[str]]]) -> Dict[str, Tuple[str, None]]:
+    """
+    launch the specified mlflow commands; 
+
+    Args:
+        cmd_list (List[Tuple[str, List[str]]]): List of tuples.  Each tuple is (run_id, [mlflow_command args as list])
+
+    Returns:
+        Dict[str, Tuple[str, None]]: returns a dict of run_id --> (k8s_job_name, None)
+    """
     batch_size = 10
     run_job_dict = {}
     remaining = cmd_list
@@ -418,7 +453,7 @@ def launch_mlflow_commands(cmd_list):
         procs_dict = {}
         cmds_to_run = remaining[:batch_size]
         for run_id, cmd in cmds_to_run:
-            proc = subprocess.Popen(cmd, cwd=os.environ['MLFLOW_PROJECT_DIR'],
+            proc:subprocess.Popen = subprocess.Popen(cmd, cwd=os.environ['MLFLOW_PROJECT_DIR'],
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             logger.info("Launched mlflow cmd: " + str(cmd))
             procs_dict[run_id] = (proc, None, None)
@@ -445,7 +480,7 @@ def launch_mlflow_commands(cmd_list):
 
 
 def main(run_id_list, input_data_specs, parent_run_id):
-
+    image:docker.models.images.Image; image_digest:str; 
     image, image_digest = get_docker_image(parent_run_id)
 
     mlflow_cmd_list = []
