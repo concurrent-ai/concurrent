@@ -104,7 +104,7 @@ def lookup_gke_cluster_config(cognito_username, groups, kube_cluster_name, subs)
     for cl in kube_clusters:
         if cl['cluster_name'] == kube_cluster_name and cl['cluster_type'] == 'GKE':
             logger.info("Found user's cluser " + kube_cluster_name)
-            return cl['gke_location_type'], cl['gke_location'], cl['gke_project_id'], cl['gke_creds']
+            return cl['gke_location_type'], cl['gke_location'], cl['gke_project'], cl['gke_creds']
 
     logger.info("Use cluster info for subscriber")
     # Fall back to subscriber's cluster
