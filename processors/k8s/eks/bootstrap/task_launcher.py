@@ -247,10 +247,15 @@ def fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods):
         return
 
     pods_status = pods_status.decode('utf-8')
+    pods_status_dict = {}
     for pod_record in pods_status.splitlines():
         pod_name, pod_phase = pod_record.split()
-        if pod_name in pods_run_dict:
-            pod_run_id = pods_run_dict[pod_name]
+        pods_status_dict[pod_name] = pod_phase
+
+    for pod_name in pods_run_dict.keys():
+        pod_run_id, job_name = pods_run_dict[pod_name]
+        if pod_name in pods_status_dict:
+            pod_phase = pods_status_dict[pod_name]
             side_car_container = get_side_car_container_name(pod_run_id)
             if pod_phase == 'Pending':
                 logger.info("{} is in Pending phase. Waiting".format(pod_name))
@@ -287,11 +292,24 @@ def fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods):
             else:
                 logger.warning("{} is in unfamiliar phase {}".format(pod_name, pod_phase))
                 log_describe_pod(pod_name, pod_run_id)
+        else:
+            ## Pod status not available, check job status
+            logger.warning('Pod status not available for ' + pod_name + ", find job status for job " + job_name)
+            #Check for failed job first (more likely job failed)
+            job_status_cmd = ['kubectl', 'wait', 'job/' + job_name, "--for=condition=failed", "--timeout=1s"]
+            try:
+                job_status = subprocess.check_output(job_status_cmd)
+                if 'condition met' in job_status:
+                    update_mlflow_run(pod_run_id, "FAILED")
+                    completed_pods.add(pod_name)
+            except Exception as ex:
+                logger.warning("Failed to get pods status: " + str(ex))
+                return
     return
 
 
 def get_pod_run_mapping(run_job_pod_dict):
-    return {x[1]: run_id for run_id, x in run_job_pod_dict.items() if x[1] is not None}
+    return {x[1]: (run_id, x[0]) for run_id, x in run_job_pod_dict.items() if x[1] is not None}
 
 
 def read_token(token_file):
