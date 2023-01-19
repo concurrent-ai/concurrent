@@ -13,7 +13,8 @@ import base64
 
 from utils import get_cognito_user, get_service_conf, create_request_context, get_custom_token
 import period_run, lock_utils, dag_utils, run_project
-from mlflow_utils import call_create_run, fetch_run_id_info, update_run, create_experiment, log_mlflow_artifact
+from mlflow_utils import call_create_run, fetch_run_id_info, update_run, create_experiment, \
+    log_mlflow_artifact, log_params
 import ddb_mlflow_parallels_txns as ddb_txns
 
 from kubernetes.client.exceptions import ApiException
@@ -59,6 +60,10 @@ def extract_run_params(body):
                 run_params['periodic_run_frequency'] = obss[1]
             elif obss[0] == 'periodic_run_start_time':
                 run_params['periodic_run_start_time'] = obss[1]
+            elif obss[0] == 'periodic_run_end_time':
+                run_params['periodic_run_end_time'] = obss[1]
+            elif obss[0] == 'DROP_DEAD_TIME':
+                run_params['DROP_DEAD_TIME'] = obss[1]
     if not run_params:
         run_params = json.loads(body)
     return run_params
@@ -102,6 +107,7 @@ def execute_dag(event, context):
     periodic_run_name = run_params.get('periodic_run_name')
 
     periodic_run_start_time = run_params.get('periodic_run_start_time')
+    periodic_run_end_time = run_params.get('periodic_run_end_time')
     periodic_run_frequency = run_params.get('periodic_run_frequency')
     dagParamsJsonRuntime = None
     if 'dagParamsJson' in run_params:
@@ -173,6 +179,13 @@ def execute_dag(event, context):
         parent_run_id, parent_artifact_uri, parent_run_status, parent_run_lifecycle_stage \
             = call_create_run(cognito_username, groups, experiment_id, auth_info, parent_run_name,
                               tags={'dag_execution_id': dag_execution_id})
+        periodic_run_params = {}
+        if periodic_run_start_time:
+            periodic_run_params['periodic_run_start_time'] = str(periodic_run_start_time)
+        if periodic_run_end_time:
+            periodic_run_params['periodic_run_end_time'] = str(periodic_run_end_time)
+        if periodic_run_params:
+            log_params(cognito_username, groups, auth_info, parent_run_id, periodic_run_params)
 
         dag_execution_status = {'parent_run_name': parent_run_name, 'parent_run_id': parent_run_id}
 
@@ -274,7 +287,8 @@ def execute_dag(event, context):
                                                     periodic_run_name, dag_execution_info, xform_path=xform_path,
                                                     parent_run_id=parent_run_id, last_in_chain_of_xforms='False',
                                                     parallelization=parallelization, k8s_params=k8s_params,
-                                                    periodic_run_start_time=periodic_run_start_time)
+                                                    periodic_run_start_time=periodic_run_start_time,
+                                                    periodic_run_end_time=periodic_run_end_time)
                     futures.append((launch_future, n))
                 for f, nid in futures:
                     logger.debug("Look for future result for node {}".format(nid))
@@ -787,7 +801,8 @@ def launch_bootstrap_run_project(
         xform_params, experiment_id, periodic_run_frequency, instance_type,
         periodic_run_name, dag_execution_info,
         xform_path=None, parent_run_id=None, last_in_chain_of_xforms='False',
-        parallelization=None, k8s_params=None, periodic_run_start_time=None):
+        parallelization=None, k8s_params=None, periodic_run_start_time=None,
+        periodic_run_end_time=None):
     logger.debug("RUN_ID -> INPUT_SPEC #")
     logger.debug(str(run_input_spec_map))
     logger.debug(artifact_uri)
@@ -810,6 +825,8 @@ def launch_bootstrap_run_project(
     body['experiment_id'] = experiment_id
     if periodic_run_start_time:
       body['periodic_run_start_time'] = periodic_run_start_time
+    if periodic_run_end_time:
+      body['periodic_run_end_time'] = periodic_run_end_time
     if periodic_run_frequency:
       body['periodic_run_frequency'] = periodic_run_frequency
     body['last_in_chain_of_xforms'] = last_in_chain_of_xforms

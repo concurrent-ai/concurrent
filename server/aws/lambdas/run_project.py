@@ -257,6 +257,8 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         cmap.data['PERIODIC_RUN_FREQUENCY'] = item['periodic_run_frequency']
     if 'periodic_run_start_time' in item:
         cmap.data['PERIODIC_RUN_START_TIME'] = str(item['periodic_run_start_time'])
+    if 'periodic_run_end_time' in item:
+        cmap.data['PERIODIC_RUN_END_TIME'] = str(item['periodic_run_end_time'])
     cmap.data['NAMESPACE'] = namespace
     if backend_type == 'eks':
         cmap.data['ECR_TYPE'] = ecr_type
