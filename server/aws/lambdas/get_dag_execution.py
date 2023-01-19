@@ -47,11 +47,15 @@ def get_dag_execution(event, context):
     if 'dag_execution_id' in qs:
         dag_execution_id = qs['dag_execution_id']
 
+    #Auth info is not returned in the http response, as it may contain sensitive info.
     try:
         if dag_execution_id:
             dag_execution_info = dag_utils.fetch_dag_execution_info(cognito_username, groups, dagid, dag_execution_id)
+            dag_execution_info.pop('auth_info', None)
         else:
             dag_execution_info = dag_utils.get_dag_execution_list(cognito_username, dagid)
+            for dag_exec in dag_execution_info:
+                dag_exec.pop('auth_info', None)
     except Exception as ex:
         err = "get_dag_execution: Error {0}".format(str(ex))
         logger.error(err)
