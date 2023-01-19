@@ -13,8 +13,14 @@ args = parser.parse_args()
 client = MlflowClient()
 run = client.get_run(str(args.run_id))
 
-print(json.dumps({'run_id': str(run.info.run_uuid),
-            'artifact_uri': str(run.info.artifact_uri),
-            'status': str(run.info.status),
-            'lifecycle_stage': str(run.info.lifecycle_stage)}), flush=True)
+run_info = {
+    'run_id': str(run.info.run_uuid),
+    'artifact_uri': str(run.info.artifact_uri),
+    'status': str(run.info.status),
+    'lifecycle_stage': str(run.info.lifecycle_stage)
+}
+if run.data.params:
+    run_info['params'] = run.data.params
+
+print(json.dumps(run_info), flush=True)
 os._exit(os.EX_OK)

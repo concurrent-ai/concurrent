@@ -170,7 +170,7 @@ def get_dag_execution_list(cognito_username, dagid):
     }
 
     response = client.query(TableName=DAG_EXECUTION_TABLE,
-                            ProjectionExpression="dag_execution_id, update_time, start_time",
+                            ProjectionExpression="dag_execution_id, authInfo, update_time, start_time, parent_run_id",
                             KeyConditionExpression=key_condition_expression,
                             ExpressionAttributeValues=expression_attr_vals
                             )
@@ -189,6 +189,10 @@ def get_projections(item):
     }
     if 'start_time' in item:
         result['start_time'] = str(item['start_time']['N'])
+    if 'parent_run_id' in item:
+        result['parent_run_id'] = str(item['parent_run_id']['S'])
+    if 'authInfo' in item:
+        result['auth_info'] = json.loads(item['authInfo']['S'])
     return result
 
 def get_named_input_spec_map(inputs):
