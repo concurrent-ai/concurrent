@@ -179,3 +179,24 @@ def fetch_mlflow_artifact_file(cognito_username, groups, auth_info, run_id, arti
                 time.sleep(10)
 
 
+def log_params(cognito_username, groups, auth_info, run_id, params):
+    cmd = [sys.executable, os.getcwd() + '/log_params.py',
+            '--run_id', run_id, '--params', json.dumps(params)]
+    modified_env = setup_for_subprocess(cognito_username, groups, auth_info)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, env=modified_env)
+    full_out = ''
+    for line in proc.stdout:
+        fline = line.rstrip().decode("utf-8")
+        full_out = full_out + fline + '\n'
+    proc.wait()
+    if proc.returncode != 0:
+        print('Error calling log_params.py=' + full_out)
+        raise Exception('log_params failed')
+
+
+
+def get_experiment_id_from_run_id(run_id):
+    expid, _ = run_id.split('-')
+    return expid
+
+

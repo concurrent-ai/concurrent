@@ -521,6 +521,8 @@ class PluginConcurrentProjectBackend(AbstractBackend):
           env_vars['PERIODIC_RUN_FREQUENCY'] = os.getenv('PERIODIC_RUN_FREQUENCY')
         if os.getenv('PERIODIC_RUN_START_TIME'):
           env_vars['PERIODIC_RUN_START_TIME'] = os.getenv('PERIODIC_RUN_START_TIME')
+        if os.getenv('PERIODIC_RUN_END_TIME'):
+          env_vars['PERIODIC_RUN_END_TIME'] = os.getenv('PERIODIC_RUN_END_TIME')
         env_vars['MLFLOW_CONCURRENT_URI'] = os.getenv('MLFLOW_CONCURRENT_URI')
         job_template = mlflow.projects.kubernetes._get_kubernetes_job_definition(
             project_name, image_tag, image_digest, _get_run_command(command), env_vars, job_template
