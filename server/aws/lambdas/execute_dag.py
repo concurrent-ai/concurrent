@@ -224,7 +224,7 @@ def execute_dag(event, context):
         node_statuses, lock_lease_time = fetch_node_status(cognito_username, groups, auth_info, node_dict, dag_execution_status['nodes'],
                                           lock_key, lock_lease_time)
         dag_execution_status['nodes'] = node_statuses
-        allDone, ready_to_run = get_ready_to_run_nodes(incoming_dag_graph, node_statuses)
+        allDone, ready_to_run, parent_new_status = get_ready_to_run_nodes(incoming_dag_graph, node_statuses)
 
         print(f'Nodes ready to run {ready_to_run}', "Analyze ready nodes for partitioning")
         modified = perform_node_partitioning(ready_to_run, incoming_dag_graph,
@@ -234,7 +234,7 @@ def execute_dag(event, context):
             update_dag_exec_runtime_info(cognito_username, groups, dag_id, auth_info, new_dag_json, dag_execution_id,
                                          dag_execution_status, parent_run_id)
             ##Evaluate ready to run nodes again
-            allDone, ready_to_run = get_ready_to_run_nodes(incoming_dag_graph, node_statuses)
+            allDone, ready_to_run, parent_new_status = get_ready_to_run_nodes(incoming_dag_graph, node_statuses)
             dag_json = new_dag_json
 
         ## Group ready to run nodes by original_node_id
@@ -330,7 +330,7 @@ def execute_dag(event, context):
         update_dag_run_status(cognito_username, groups, dag_id, auth_info, dag_execution_id, dag_execution_status, parent_run_id)
         rv = {'status' : 'success', 'dagExecutionId': dag_execution_id, 'parentRunId': parent_run_id}
         if allDone:
-            update_run(cognito_username, groups, auth_info, parent_run_id, 'FINISHED')
+            update_run(cognito_username, groups, auth_info, parent_run_id, parent_new_status)
             print('Dag execution Completed Successfully')
         if httpOperation:
             print('Send Http Response')
@@ -458,10 +458,9 @@ def get_ready_to_run_nodes(dag_graph, node_statuses):
             if all_dependencies_completed:
                 ready_to_run.append(node)
 
-    all_done = False
     if failed_run:
         print('Aborting: run-id ' + node_statuses[node]['run_id'] + ' failed')
-        return False, []
+        return True, [], 'FAILED'
     elif not ready_to_run:
         all_done = True
         for n in node_statuses.keys():
@@ -469,8 +468,11 @@ def get_ready_to_run_nodes(dag_graph, node_statuses):
                 all_done = False
                 break
         if all_done:
-            return True, []
-    return all_done, ready_to_run
+            return True, [], 'FINISHED'
+        else:
+            return False, [], 'UNFINISHED'
+    else:
+        return False, ready_to_run, 'UNFINISHED'
 
 
 def get_xform_details(node_details):
