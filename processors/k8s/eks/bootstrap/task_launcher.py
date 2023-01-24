@@ -6,7 +6,6 @@ from typing import Dict, List, Tuple
 import zlib
 import subprocess
 import time
-import requests
 from mlflow.tracking import MlflowClient
 from mlflow.projects.utils import load_project, MLFLOW_DOCKER_WORKDIR_PATH
 from mlflow.projects import kubernetes as kb
@@ -26,6 +25,12 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
     image_uri = image_tag + "@" + image_digest
     mlflow_tracking_uri = os.environ['MLFLOW_TRACKING_URI']
     concurrent_uri = os.environ['MLFLOW_CONCURRENT_URI']
+    dag_execution_id = os.getenv('DAG_EXECUTION_ID')
+    periodic_run_name = os.environ.get('PERIODIC_RUN_NAME')
+    periodic_run_frequency = os.getenv('PERIODIC_RUN_FREQUENCY')
+    periodic_run_start_time = os.getenv('PERIODIC_RUN_START_TIME')
+    periodic_run_end_time = os.getenv('PERIODIC_RUN_END_TIME')
+    dag_id = os.getenv('DAGID')
     with open(job_tmplate_file, "w") as fh:
         fh.write("apiVersion: batch/v1\n")
         fh.write("kind: Job\n")
@@ -83,6 +88,30 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         fh.write("          value: \"{}\"\n".format(run_id))
         fh.write("        - name: MLFLOW_CONCURRENT_URI\n")
         fh.write("          value: \"{}\"\n".format(concurrent_uri))
+        fh.write("        - name: DAG_EXECUTION_ID\n")
+        fh.write("          value: \"{}\"\n".format(dag_execution_id))
+        fh.write("        - name: DAGID\n")
+        fh.write("          value: \"{}\"\n".format(dag_id))
+        if periodic_run_name:
+            fh.write("        - name: PERIODIC_RUN_NAME\n")
+            fh.write("          value: \"{}\"\n".format(periodic_run_name))
+        if periodic_run_frequency:
+            fh.write("        - name: PERIODIC_RUN_FREQUENCY\n")
+            fh.write("          value: \"{}\"\n".format(periodic_run_frequency))
+        if periodic_run_start_time:
+            fh.write("        - name: PERIODIC_RUN_START_TIME\n")
+            fh.write("          value: \"{}\"\n".format(periodic_run_start_time))
+        if periodic_run_end_time:
+            fh.write("        - name: PERIODIC_RUN_END_TIME\n")
+            fh.write("          value: \"{}\"\n".format(periodic_run_end_time))
+        fh.write("        - name: MY_POD_NAME\n")
+        fh.write("          valueFrom:\n")
+        fh.write("            fieldRef:\n")
+        fh.write("              fieldPath: metadata.name\n")
+        fh.write("        - name: MY_POD_NAMESPACE\n")
+        fh.write("          valueFrom:\n")
+        fh.write("            fieldRef:\n")
+        fh.write("              fieldPath: metadata.namespace\n")
         fh.write("        securityContext:\n")
         fh.write("          privileged: true\n")
         fh.write("          capabilities:\n")
@@ -140,25 +169,6 @@ def generate_backend_config_json(backend_conf_file:str, input_spec, run_id, k8s_
         fh.write("}\n")
 
 
-def get_mlflow_param(run_id, pname):
-    attempts_left = max_attempts = 4
-    while attempts_left > 0:
-        attempts_left -= 1
-        try:
-            client = MlflowClient()
-            run = client.get_run(run_id)
-            if pname in run.data.params:
-                return run.data.params[pname]
-            else:
-                return None
-        except Exception:
-            print(f'Exception in mlflow call, retry {attempts_left} more times')
-            if attempts_left > 0:
-                ##wait before retrying
-                time.sleep(10 * 2 ** (max_attempts - attempts_left))
-    print(f'Failed to get mlflow param {pname} from run {run_id}')
-
-
 def upload_logs_for_pod(run_id, pod_name, tmp_log_file, container_name=None):
     if container_name:
         get_log_cmd = ['kubectl', 'logs', pod_name, '-c', container_name]
@@ -179,27 +189,10 @@ def upload_logs_for_pod(run_id, pod_name, tmp_log_file, container_name=None):
         logger.warning("Failed upload logs for {}, {}: {}".format(run_id, pod_name, ex))
 
 
-def update_mlflow_run(run_id, status):
-    client = MlflowClient()
-    client.set_terminated(run_id, status)
-
-
 def fail_exit(parent_run_id):
     upload_logs_for_pod(parent_run_id, os.environ['MY_POD_NAME'], os.environ['BOOTSTRAP_LOG_FILE'])
     exit(-1)
 
-def log_describe_pod(pod_name, run_id):
-    describe_file = "/tmp/describe-" + pod_name + ".txt"
-    describe_cmd = ['kubectl', 'describe', 'pod', pod_name]
-    try:
-        desc_content = subprocess.check_output(describe_cmd)
-        with open(describe_file, "w") as fh:
-            fh.write(desc_content.decode('utf-8'))
-        client = MlflowClient()
-        client.log_artifact(run_id, describe_file, artifact_path='.concurrent/logs')
-    except Exception :
-        logger.warning('Failed to log describe pod, try again later')
-        return
 
 def log_pip_requirements(base_image, run_id, build_logs):
     try:
@@ -236,129 +229,6 @@ def log_pip_requirements(base_image, run_id, build_logs):
                 start_looking = True
     except Exception as ex2:
         logger.info("Caught exception while trying to extract pip package list. Not fatal" + str(ex2))
-
-def fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods):
-    pods_status_cmd = ['kubectl', 'get', 'pod',
-                       "-o=jsonpath={range .items[*]}{.metadata.name}{\"\\t\"}{.status.phase}{\"\\n\"}{end}"]
-    try:
-        pods_status = subprocess.check_output(pods_status_cmd)
-    except Exception as ex:
-        logger.warning("Failed to get pods status: " + str(ex))
-        return
-
-    pods_status = pods_status.decode('utf-8')
-    pods_status_dict = {}
-    for pod_record in pods_status.splitlines():
-        pod_name, pod_phase = pod_record.split()
-        pods_status_dict[pod_name] = pod_phase
-
-    for pod_name in pods_run_dict.keys():
-        pod_run_id, job_name = pods_run_dict[pod_name]
-        if pod_name in pods_status_dict:
-            pod_phase = pods_status_dict[pod_name]
-            side_car_container = get_side_car_container_name(pod_run_id)
-            if pod_phase == 'Pending':
-                logger.info("{} is in Pending phase. Waiting".format(pod_name))
-                log_describe_pod(pod_name, pod_run_id)
-                upload_logs_for_pod(pod_run_id, pod_name, "/tmp/run-logs.txt")
-                upload_logs_for_pod(pod_run_id, pod_name, f"/tmp/sidecar-logs.txt", container_name=side_car_container)
-            elif pod_phase == 'Running':
-                logger.info("{} is in Running phase. Waiting".format(pod_name))
-                upload_logs_for_pod(pod_run_id, pod_name, "/tmp/run-logs.txt")
-                upload_logs_for_pod(pod_run_id, pod_name, "/tmp/sidecar-logs.txt", container_name=side_car_container)
-            elif pod_phase == 'Succeeded':
-                if pod_name not in completed_pods:
-                    logger.info("{} is in Succeeded phase".format(pod_name))
-                    log_describe_pod(pod_name, pod_run_id)
-                    upload_logs_for_pod(pod_run_id, pod_name, "/tmp/run-logs.txt")
-                    upload_logs_for_pod(pod_run_id, pod_name, "/tmp/sidecar-logs.txt",
-                                        container_name=side_car_container)
-                    update_mlflow_run(pod_run_id, "FINISHED")
-                    completed_pods.add(pod_name)
-                    success_pods.add(pod_name)
-            elif pod_phase == 'Failed':
-                if pod_name not in completed_pods:
-                    logger.info("{} is in Failed phase".format(pod_name))
-                    log_describe_pod(pod_name, pod_run_id)
-                    upload_logs_for_pod(pod_run_id, pod_name, "/tmp/run-logs.txt")
-                    upload_logs_for_pod(pod_run_id, pod_name, "/tmp/sidecar-logs.txt",
-                                        container_name=side_car_container)
-                    update_mlflow_run(pod_run_id, "FAILED")
-                    completed_pods.add(pod_name)
-            elif pod_phase == 'Unknown':
-                logger.warning("{} is in Unknown phase".format(pod_name))
-                log_describe_pod(pod_name, pod_run_id)
-                completed_pods.add(pod_name)
-            else:
-                logger.warning("{} is in unfamiliar phase {}".format(pod_name, pod_phase))
-                log_describe_pod(pod_name, pod_run_id)
-        else:
-            ## Pod status not available, check job status
-            logger.warning('Pod status not available for ' + pod_name + ", find job status for job " + job_name)
-            #Check for failed job first (more likely job failed)
-            job_status_cmd = ['kubectl', 'wait', 'job/' + job_name, "--for=condition=failed", "--timeout=1s"]
-            try:
-                job_status = subprocess.check_output(job_status_cmd)
-                if 'condition met' in job_status:
-                    update_mlflow_run(pod_run_id, "FAILED")
-                    completed_pods.add(pod_name)
-            except Exception as ex:
-                logger.warning("Failed to get pods status: " + str(ex))
-                return
-    return
-
-
-def get_pod_run_mapping(run_job_pod_dict):
-    return {x[1]: (run_id, x[0]) for run_id, x in run_job_pod_dict.items() if x[1] is not None}
-
-
-def read_token(token_file):
-    with open(token_file, 'r') as tfh:
-        token_file_content = tfh.read()
-        for token_line in token_file_content.splitlines():
-            if token_line.startswith('Token='):
-                return token_line[6:]
-    return None
-
-
-def launch_dag_controller():
-    if 'DAG_EXECUTION_ID' not in os.environ:
-        logger.info('Not a dag execution, skip dag controller')
-        return
-    infinstor_token = read_token('/root/.concurrent/token')
-    mlflow_parallels_uri = os.environ['MLFLOW_CONCURRENT_URI']
-    dag_execution_id = os.environ['DAG_EXECUTION_ID']
-    dagid = os.environ['DAGID']
-    periodic_run_name = os.environ.get('PERIODIC_RUN_NAME')
-    periodic_run_frequency = os.getenv('PERIODIC_RUN_FREQUENCY')
-    periodic_run_start_time = os.getenv('PERIODIC_RUN_START_TIME')
-    periodic_run_end_time = os.getenv('PERIODIC_RUN_END_TIME')
-
-    execute_dag_url = mlflow_parallels_uri.rstrip('/') + '/api/2.0/mlflow/parallels/execdag'
-    logger.info(execute_dag_url)
-    headers = {'Content-Type': 'application/json', 'Authorization': infinstor_token}
-    body = {'dagid': dagid, 'dag_execution_id': dag_execution_id, "periodic_run_name": periodic_run_name}
-    if periodic_run_frequency:
-      body['periodic_run_frequency'] = periodic_run_frequency
-    if periodic_run_start_time:
-      body['periodic_run_start_time'] = periodic_run_start_time
-    if periodic_run_end_time:
-      body['periodic_run_end_time'] = periodic_run_end_time
-    attempts_left = max_attempts = 3
-    while attempts_left > 0:
-        attempts_left -= 1
-        try:
-            response = requests.post(execute_dag_url, json=body, headers = headers)
-            logger.info(f"DAG Controller response: {response}")
-            return
-        except Exception as ex:
-            logger.warning(str(ex))
-            print(f'Exception in dag controller call, retry {attempts_left} more times')
-            if attempts_left > 0:
-                ##wait before retrying
-                time.sleep(10 * 2 ** (max_attempts - attempts_left))
-    else:
-        raise Exception("Dag Controller launch failed multiple times")
 
 
 def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_commit):
@@ -490,14 +360,8 @@ def launch_mlflow_commands(cmd_list:List[Tuple[str, List[str]]]) -> Dict[str, Tu
                 logger.info('STDERR:\n{}'.format(stderr.decode('utf-8')))
             else:
                 logger.info('STDERR: None')
-            job_name = get_mlflow_param(run_id, 'kubernetes.job_name')
-            if not job_name:
-                logger.error("Could not obtain job name")
-                fail_exit(parent_run_id)
-            logger.info("Job name for run_id {} is {}".format(run_id, job_name))
-            run_job_dict[run_id] = (job_name, None)
         remaining = remaining[batch_size:]
-    return run_job_dict
+    return
 
 
 def main(run_id_list, input_data_specs, parent_run_id):
@@ -537,55 +401,9 @@ def main(run_id_list, input_data_specs, parent_run_id):
                 mlflow_cmd.append(k + '=' + v)
         mlflow_cmd_list.append((run_id, mlflow_cmd))
 
-    procs_dict = launch_mlflow_commands(mlflow_cmd_list)
+    launch_mlflow_commands(mlflow_cmd_list)
 
-    time.sleep(30)
-    #get the pod name from the jobs
-    completed_pods = set()
-    success_pods = set()
-    prev_complete = len(completed_pods)
-    for _ in range(100):
-        for run_id in run_id_list:
-            job_name, pod_name = procs_dict[run_id]
-            if not pod_name:
-                get_pod_name_cmd = ['kubectl', 'get', 'pods', '--selector=job-name=' + job_name,
-                                    "--output=jsonpath={.items[*].metadata.name}"]
-                try:
-                    pod_name = subprocess.check_output(get_pod_name_cmd)
-                    pod_name = pod_name.decode('utf-8')
-                    procs_dict[run_id] = (job_name, pod_name)
-                    logger.info("run_id, job name, pod name = {}, {}, {}".format(run_id, job_name, pod_name))
-                except Exception :
-                    logger.warning("Waiting to get pod name..")
-        pods_run_dict = get_pod_run_mapping(procs_dict)
-        fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods)
-        if len(completed_pods) == len(run_id_list):
-            logger.info("All pods completed, exiting bootstrap")
-            break
-        upload_logs_for_pod(parent_run_id, os.environ['MY_POD_NAME'], os.environ['BOOTSTRAP_LOG_FILE'])
-        time.sleep(10)
-        if len(completed_pods) > prev_complete:
-            launch_dag_controller()
-            prev_complete = len(completed_pods)
-
-    pods_run_dict = get_pod_run_mapping(procs_dict)
-    if len(completed_pods) < len(run_id_list):
-        while True:
-            fetch_upload_pod_status_logs(pods_run_dict, completed_pods, success_pods)
-            upload_logs_for_pod(parent_run_id, os.environ['MY_POD_NAME'], os.environ['BOOTSTRAP_LOG_FILE'])
-            if len(completed_pods) > prev_complete:
-                launch_dag_controller()
-                prev_complete = len(completed_pods)
-            if len(completed_pods) == len(run_id_list):
-                logger.info("All pods completed, exiting bootstrap")
-                break
-            time.sleep(30)
-
-    if len(success_pods) == len(run_id_list):
-        logger.info("All tasks succeeded")
-    else:
-        logger.info("Some tasks failed")
-
+    time.sleep(5)
     upload_logs_for_pod(parent_run_id, os.environ['MY_POD_NAME'], os.environ['BOOTSTRAP_LOG_FILE'])
 
 
@@ -604,6 +422,5 @@ if __name__ == '__main__':
     logger.info("Input data specs: " + str(input_data_specs))
     logger.info("Run id list: " + str(run_id_list))
     main(run_id_list, input_data_specs, parent_run_id)
-    launch_dag_controller()
     logger.info("End")
     exit(0)
