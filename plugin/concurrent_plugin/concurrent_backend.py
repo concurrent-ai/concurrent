@@ -524,6 +524,8 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         if os.getenv('PERIODIC_RUN_END_TIME'):
           env_vars['PERIODIC_RUN_END_TIME'] = os.getenv('PERIODIC_RUN_END_TIME')
         env_vars['MLFLOW_CONCURRENT_URI'] = os.getenv('MLFLOW_CONCURRENT_URI')
+        env_vars['DAG_EXECUTION_ID'] = os.getenv('DAG_EXECUTION_ID')
+        env_vars['DAGID'] = os.getenv('DAGID')
         job_template = mlflow.projects.kubernetes._get_kubernetes_job_definition(
             project_name, image_tag, image_digest, _get_run_command(command), env_vars, job_template
         )
