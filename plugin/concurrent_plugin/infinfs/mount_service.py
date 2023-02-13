@@ -157,8 +157,12 @@ def fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace):
     pod_info = k8s_client.read_namespaced_pod(pod_name, pod_namespace)
     pod_phase = pod_info.status.phase
     print("pod_phase: ", pod_phase)
-    task_container_name = pod_info.spec.containers[0].name
-    side_car_container_name = pod_info.spec.containers[1].name
+    if pod_info.spec.containers[1].name.startswith('sidecar-'):
+        side_car_container_name = pod_info.spec.containers[1].name
+        task_container_name = pod_info.spec.containers[0].name
+    else:
+        task_container_name = pod_info.spec.containers[1].name
+        side_car_container_name = pod_info.spec.containers[0].name
     if pod_phase:
         if pod_phase == 'Pending':
             logger.info("{} is in Pending phase. Waiting".format(pod_name))
@@ -202,7 +206,10 @@ def get_task_exit_code(k8s_client, pod_name, pod_namespace, num_attempt=1):
     max_attempts = 3
     pod_info = k8s_client.read_namespaced_pod(pod_name, pod_namespace)
     try:
-        exitCode = pod_info.status.container_statuses[0].state.terminated.exit_code
+        if pod_info.spec.containers[1].name.startswith('sidecar-'):
+            exitCode = pod_info.status.container_statuses[0].state.terminated.exit_code
+        else:
+            exitCode = pod_info.status.container_statuses[1].state.terminated.exit_code
         logger.info("Task container finished with exitCode " + str(exitCode))
         return exitCode
     except Exception as ex:
