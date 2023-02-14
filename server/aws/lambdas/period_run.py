@@ -148,6 +148,7 @@ def get_previous_run_status(cognito_username, periodic_run_info):
             return 'failed', periodic_run_start_time, periodic_run_end_time
         else:
             return None, None, None
+    return None, None, None
 
 
 def get_drop_dead_time(period_type):
