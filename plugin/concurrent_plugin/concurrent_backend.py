@@ -39,6 +39,7 @@ from mlflow.utils.mlflow_tags import (
 import mlflow.projects.kubernetes
 from mlflow.projects.kubernetes import KubernetesSubmittedRun, _get_run_command, _load_kube_context
 import kubernetes
+import kubernetes.client
 from concurrent_plugin.login import get_conf, get_token, get_token_file_obj, get_env_var
 
 _logger = logging.getLogger(__name__)
@@ -369,6 +370,27 @@ class PluginConcurrentProjectBackend(AbstractBackend):
 
     def run_eks_on_local(self, backend_type, project_uri, entry_point, params,
             version, backend_config, tracking_store_uri, experiment_id, project, active_run, work_dir):
+        """
+        builds the docker image if needed, creates a k8s job, which then runs the docker image for the MLProject
+
+        _extended_summary_
+
+        Args:
+            backend_type (_type_): _description_
+            project_uri (_type_): _description_
+            entry_point (_type_): _description_
+            params (_type_): _description_
+            version (_type_): _description_
+            backend_config (_type_): _description_
+            tracking_store_uri (_type_): _description_
+            experiment_id (_type_): _description_
+            project (_type_): _description_
+            active_run (_type_): _description_
+            work_dir (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         kube_context = backend_config.get('kube-context')
         repository_uri = backend_config.get('repository-uri')
         git_commit = backend_config.get('git-commit')
@@ -545,6 +567,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         sec.type = 'Opaque'
         sec.data = {'token': tok}
         core_api_instance.create_namespaced_secret(namespace=job_namespace, body=sec)
+        
         aws_creds = base64.b64encode(open(os.path.join(expanduser('~'), '.aws', 'credentials'), "r").read().encode('utf-8')).decode('utf-8')
         awscreds_secret_name = 'awscredsfile-' + active_run.info.run_id
         try:
@@ -556,6 +579,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         sec1.type = 'Opaque'
         sec1.data = {'credentials': aws_creds}
         core_api_instance.create_namespaced_secret(namespace=job_namespace, body=sec1)
+        
         _logger.info('run_eks_job: input_data_spec = ' + str(input_data_spec))
         if input_data_spec:
             input_spec_name = 'inputdataspec-' + active_run.info.run_id
@@ -571,11 +595,16 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             core_api_instance.create_namespaced_secret(namespace=job_namespace, body=sec2)
 
         volume_mounts = [
-                    kubernetes.client.V1VolumeMount(mount_path='/root/.concurrent', name='parallels-token-file'),
-                    kubernetes.client.V1VolumeMount(mount_path='/root/.aws', name='aws-creds-file')
+                    kubernetes.client.V1VolumeMount(mount_path='/root/.concurrent', name='parallels-token-file'), 
+                    # use V1VolumeMount.subpath since we may want to mount /root/.aws/config further below
+                    kubernetes.client.V1VolumeMount(mount_path='/root/.aws/credentials', name='aws-creds-file', sub_path='credentials')
                 ]
         if input_data_spec:
             volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/root/.concurrent-data', name=input_spec_name))
+        # if AWS IAM Roles Anywhere is configured, set it up
+        if os.getenv("IAM_ROLES_ANYWHERE_SECRET_NAME"):
+            volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/root/.aws-iam-roles-anywhere', name='iam-roles-anywhere-volume'))
+            volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/root/.aws/config', name='iam-roles-anywhere-volume', sub_path='awsCredentialConfigFile'))
 
         ##Add volume for fuse mounts, side car volume is setup with 'Bidirectional' mount propagation
         side_car_volume_mounts = volume_mounts.copy()
@@ -599,7 +628,11 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         if input_data_spec:
             job_template["spec"]["template"]["spec"]["volumes"].append(
                     kubernetes.client.V1Volume(name=input_spec_name, secret=kubernetes.client.V1SecretVolumeSource(secret_name=input_spec_name)))
-
+        # if AWS IAM Roles Anywhere is configured, set it up
+        if os.getenv("IAM_ROLES_ANYWHERE_SECRET_NAME"):
+            job_template["spec"]["template"]["spec"]["volumes"].append(
+                kubernetes.client.V1Volume(name="iam-roles-anywhere-volume", secret=kubernetes.client.V1SecretVolumeSource(secret_name=os.getenv("IAM_ROLES_ANYWHERE_SECRET_NAME"))))
+            
         _logger.info('run_eks_job: job_template=' + str(job_template))
         api_instance = kubernetes.client.BatchV1Api()
         resp = api_instance.create_namespaced_job(namespace=job_namespace, body=job_template, pretty=True)
