@@ -22,7 +22,7 @@ RUN curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cl
 ENV PATH="${PATH}:/google-cloud-sdk/bin"
 RUN gcloud components install docker-credential-gcr
 
-RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip awscliv2.zip && ./aws/install && python3 -m pip install --no-cache-dir --upgrade pip && python3 -m pip -V &&  python3 -m pip install --no-cache-dir docker mlflow boto3 kubernetes && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip awscliv2.zip && ./aws/install && python3 -m pip install --no-cache-dir --upgrade pip && python3 -m pip -V &&  python3 -m pip install --no-cache-dir docker mlflow boto3 kubernetes && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && curl --output /root/aws_signing_helper  https://rolesanywhere.amazonaws.com/releases/1.0.4/X86_64/Linux/aws_signing_helper && chmod a+x /root/aws_signing_helper
 
 ADD ./bootstrap.sh /usr/local/bin/bootstrap.sh
 RUN chmod +x /usr/local/bin/bootstrap.sh
@@ -30,13 +30,8 @@ ADD ./bootstrap-version.txt /usr/local/bin/bootstrap-version.txt
 ADD ./task_launcher.py /usr/local/bin/task_launcher.py
 
 #ARG IGNORECACHE=1
-#ARG CONCURRENT_PLUGIN=concurrent-plugin
-#RUN echo "$IGNORECACHE" && python3 -m pip install --no-cache-dir ${CONCURRENT_PLUGIN}
-# To test with a modified concurrent_plugin without pushing to pypi,
-# copy the <concurrent>/plugin directory here, modify it, then
-# comment out the line above and uncomment the two lines below
-#ADD ./plugin /tmp/plugin
-#RUN cd /tmp/plugin && python3 ./setup.py sdist bdist_wheel && pip3 install dist/concurrent_plugin-[0-9].[0-9].[0-9]*-py3-none-any.whl
+
+# Note: concurrent-plugin is installed by bootstrap.sh and not in this Dockerfile anymore.  So installing concurrent-plugin here is of no use.
 
 RUN echo $(pip list)
 VOLUME /var/lib/docker
