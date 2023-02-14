@@ -240,6 +240,7 @@ def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_
         _PROJECT_TAR_ARCHIVE_NAME,
         _GENERATED_DOCKERFILE_NAME
     )
+    # image tag for the image
     version_string = ":" + git_commit[:7] if git_commit else ""
     image_uri = repository_uri + version_string
     dockerfile = (
@@ -344,6 +345,7 @@ def launch_mlflow_commands(cmd_list:List[Tuple[str, List[str]]]) -> Dict[str, Tu
         procs_dict = {}
         cmds_to_run = remaining[:batch_size]
         for run_id, cmd in cmds_to_run:
+            # If 'env' kwarg to Popen() is not None, it must be a mapping that defines the environment variables for the new process; these are used instead of the default behavior of inheriting the current process’ environment
             proc:subprocess.Popen = subprocess.Popen(cmd, cwd=os.environ['MLFLOW_PROJECT_DIR'],
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             logger.info("Launched mlflow cmd: " + str(cmd))

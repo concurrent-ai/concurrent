@@ -11,6 +11,7 @@ import io
 import json
 import os
 import logging
+from typing import List, Tuple
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(process)d - %(name)s - %(levelname)s - %(message)s")
 
@@ -216,7 +217,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         endpoint (_type_): _description_
         cert_auth (_type_): _description_
         cluster_arn (_type_): _description_
-        item (_type_): example: {"backend-type": "HPE", "kube-context": "isstage23-cluster-1", "kube-namespace": "parallelsns", "resources.requests.memory": "1024Mi", "kube-client-location": "backend"}
+        item (_type_): This is the POST data for runProject along with other added keys.  example: {"backend-type": "HPE", "kube-context": "isstage23-cluster-1", "kube-namespace": "parallelsns", "resources.requests.memory": "1024Mi", "kube-client-location": "backend"}
         eks_access_key_id (_type_): _description_
         eks_secret_access_key (_type_): _description_
         eks_session_token (_type_): _description_
@@ -344,9 +345,9 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         cmap.data['ADDITIONAL_PACKAGES'] = subs['additionalPackages']['S']
     if 'additionalImports' in subs:
         cmap.data['ADDITIONAL_IMPORTS'] = subs['additionalImports']['S']
-    core_v1_api:kubernetes_client.CoreV1Api = kubernetes_client.CoreV1Api(api_client=api_client.ApiClient(configuration=con))
-    core_v1_api.create_namespaced_config_map(namespace=namespace, body=cmap)
-
+    # this is the command that'll be used to install concurrent in the bootstrap and the mlflow project pod.  Set this in subscribers table to something similar to "pip install --no-cache-dir --upgrade http://xyz.com/packages/concurrent-plugin/concurrent_plugin-0.3.27-py3-none-any.whl"
+    if 'concurrentPluginPipInstallCmd' in sub: cmap.data['CONCURRENT_PLUGIN_PIP_INSTALL_CMD'] = subs['concurrentPluginPipInstallCmd']
+        
     tokfile_contents = 'Token=' + item['parallels_token'] + '\n'
     if backend_type == 'eks':
         credsfile_contents = '[default]\naws_access_key_id=' + eks_access_key_id + '\n' + 'aws_secret_access_key=' + eks_secret_access_key + '\n'
@@ -364,8 +365,11 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         credsfile_contents = '# AWS Credentials file unused for ' + backend_type
         gce_keyfile_contents = 'GCE Keyfile unused for ' + backend_type
         
+    core_v1_api:kubernetes_client.CoreV1Api = kubernetes_client.CoreV1Api(api_client=api_client.ApiClient(configuration=con))
     volume_mounts, volumes = setup_secrets(backend_type, core_v1_api, namespace, tokfile_contents, credsfile_contents,
-                                           gce_keyfile_contents, hpe_cluster_config, run_input_spec_map_encoded)
+                                           gce_keyfile_contents, hpe_cluster_config, run_input_spec_map_encoded,subs, cmap)
+
+    core_v1_api.create_namespaced_config_map(namespace=namespace, body=cmap)
 
     if 'bootstrapImage' in subs:
         bootstrap_image = subs['bootstrapImage']['S']
@@ -603,7 +607,7 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
 
 
 def setup_secrets(backend_type:str, core_api_instance:kubernetes_client.CoreV1Api, job_namespace, tokfile_contents, credsfile_contents,
-                  gce_keyfile_contents, hpe_cluster_config:HpeClusterConfig, run_input_spec_map_encoded):
+                  gce_keyfile_contents, hpe_cluster_config:HpeClusterConfig, run_input_spec_map_encoded, subs:dict, cmap:kubernetes_client.V1ConfigMap) -> Tuple[List[kubernetes_client.V1VolumeMount], List[kubernetes_client.V1Volume]]:
     """
     _summary_
 
@@ -618,6 +622,8 @@ def setup_secrets(backend_type:str, core_api_instance:kubernetes_client.CoreV1Ap
         gce_keyfile_contents (_type_): _description_
         hpe_cluster_config (HpeClusterConfig): cannot be None.  Can be an empty instance
         run_input_spec_map_encoded (_type_): _description_
+        subs (dict): subscriber information
+        cmap (kubernetes.client.V1ConfigMap): the config map to add entries into, if needed
     """
     tok = base64.b64encode(tokfile_contents.encode('utf-8')).decode('utf-8')
     unique_suffix = str(uuid.uuid4())
@@ -687,7 +693,6 @@ def setup_secrets(backend_type:str, core_api_instance:kubernetes_client.CoreV1Ap
         core_api_instance.delete_namespaced_secret(namespace=job_namespace, name=hpe_secret_name)
     except:
         pass
-
     # then create the secret
     hpe_secret_name = 'hpekubeconfig-' + unique_suffix
     # Note: hpe_cluster_config cannot be None.
@@ -718,20 +723,58 @@ metadata:
     sec3.data = {'taskinfo': run_input_spec_map_encoded}
     core_api_instance.create_namespaced_secret(namespace=job_namespace, body=sec3)
 
-    return \
-        [
+    # setup iam roles anywhere credentials, if needed
+    iam_roles_anywhere_secret_name:str = None
+    setup_roles_anywhere:bool = 'iamRolesAnywhereCert' in subs
+    if setup_roles_anywhere:
+        iam_roles_anywhere_secret_name = "iam-roles-anywhere-" + unique_suffix
+        # pass the secret name as an environment variable to the bootstrap pod
+        cmap.data['IAM_ROLES_ANYWHERE_SECRET_NAME'] = iam_roles_anywhere_secret_name
+        # do not use the profile [default] since the MLFlow project pod uses [default] in ~/.aws/credentials.  this [default] in ~/.aws/credentials is setup by concurrent_plugin.concurrent_backend.run_eks_job()
+        aws_cred_config_file = f"""
+[profile subscriber_infinlogs_iam_roles_anywhere]
+credential_process = /root/aws_signing_helper credential-process --certificate /root/.aws-iam-roles-anywhere/iamRolesAnywhereCert --private-key /root/.aws-iam-roles-anywhere/iamRolesAnywhereCertPrivateKey --trust-anchor-arn {subs['iamRolesAnyWhereTrustAnchorArn']['S']} --profile-arn  {subs['iamRolesAnywhereProfileArn']['S']} --role-arn {subs['iamRolesAnywhereRoleArn']['S']}
+"""
+        roles_anywhere_secret_yaml:io.StringIO = io.StringIO(f"""
+apiVersion: v1
+kind: Secret
+type: Opaque
+data:
+    iamRolesAnywhereCert: {base64.b64encode(subs['iamRolesAnywhereCert']['S'].encode('utf-8')).decode('utf-8')}
+    iamRolesAnywhereCertPrivateKey: {base64.b64encode(subs['iamRolesAnywhereCertPrivateKey']['S'].encode('utf-8')).decode('utf-8')}
+    awsCredentialConfigFile: {base64.b64encode(aws_cred_config_file.encode('utf-8')).decode('utf-8')}
+stringData:
+    iamRolesAnyWhereTrustAnchorArn: {subs['iamRolesAnyWhereTrustAnchorArn']['S']}
+    iamRolesAnywhereProfileArn: {subs['iamRolesAnywhereProfileArn']['S']}
+    iamRolesAnywhereRoleArn: {subs['iamRolesAnywhereRoleArn']['S']}
+metadata:
+    name: {iam_roles_anywhere_secret_name}
+    namespace: {job_namespace}
+        """)
+        res_list:list = kubernetes.utils.create_from_yaml(core_api_instance.api_client, yaml_objects=[yaml.safe_load(roles_anywhere_secret_yaml)], namespace=job_namespace, verbose=True)
+        logger.info(f"kubernetes.utils.create_from_yaml(): roles_anywhere_secret_yaml={roles_anywhere_secret_yaml}\nres_list={res_list}")
+    
+    v1_volume_mounts:List = [
         kubernetes_client.V1VolumeMount(mount_path='/root/.concurrent', name='parallels-token-file'),
         kubernetes_client.V1VolumeMount(mount_path='/root/.aws', name='aws-creds-file'),
         kubernetes_client.V1VolumeMount(mount_path='/root/.gce', name='gce-key-file'),
         kubernetes_client.V1VolumeMount(mount_path='/root/.taskinfo', name='taskinfo-file'),
         kubernetes_client.V1VolumeMount(mount_path='/root/.kube', name='hpe-secret-volume')
-        ], [
+        ]
+    if setup_roles_anywhere: 
+        v1_volume_mounts.append(kubernetes_client.V1VolumeMount(mount_path='/root/.aws-iam-roles-anywhere', name='iam-roles-anywhere-volume'))
+    
+    v1_volumes:List = [
         kubernetes_client.V1Volume(name="parallels-token-file", secret=kubernetes_client.V1SecretVolumeSource(secret_name=token_secret_name)),
         kubernetes_client.V1Volume(name="aws-creds-file", secret=kubernetes_client.V1SecretVolumeSource(secret_name=awscredsfilename)),
         kubernetes_client.V1Volume(name="gce-key-file", secret=kubernetes_client.V1SecretVolumeSource(secret_name=gce_secret_name)),
         kubernetes_client.V1Volume(name="taskinfo-file", secret=kubernetes_client.V1SecretVolumeSource(secret_name=taskinfo_secret_name)),
         kubernetes_client.V1Volume(name="hpe-secret-volume", secret=kubernetes_client.V1SecretVolumeSource(secret_name=hpe_secret_name))
         ]
+    if setup_roles_anywhere: 
+        v1_volumes.append(kubernetes_client.V1Volume(name="iam-roles-anywhere-volume", secret=kubernetes_client.V1SecretVolumeSource(secret_name=iam_roles_anywhere_secret_name)))
+    
+    return v1_volume_mounts, v1_volumes
 
 if __name__ == '__main__':
     try:

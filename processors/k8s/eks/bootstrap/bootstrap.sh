@@ -323,7 +323,9 @@ ENDPY
 get_xform() {
   
   if (cd /tmp/workdir; git clone "$XFORMNAME" >& /tmp/git.log.$$) ; then
+    # CINTO is similar to Cloning into 'xxxxxxx'  abcdef
     if CINTO=`grep 'Cloning into' /tmp/git.log.$$` ; then
+      # extract the subdirectory into which the clone was done
       export USE_SUBDIR=`echo $CINTO | sed -e "s/^Cloning into '//"|sed -e "s/'.*$//"`/
       if [ x"$XFORM_PATH" != "x" ] ; then
           export USE_SUBDIR=${USE_SUBDIR}${XFORM_PATH}/
@@ -383,13 +385,10 @@ if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
   done
 fi
 
+# pass the full concurrent pip install command into bootstrap.sh instead of just the plugin version.  this will allow installation of the package from other sources such as http://xyz.com:9876/packages/concurrent-plugin/concurrent_plugin-0.3.27-py3-none-any.whl
+[ -z $CONCURRENT_PLUGIN_PIP_INSTALL_CMD ] && CONCURRENT_PLUGIN_PIP_INSTALL_CMD="pip install --no-cache-dir --upgrade concurrent-plugin"
 # Install latest concurrent-plugin
-if [ x"$CONCURRENT_PLUGIN_VERSION" == "x" ] ; then
-  pip install --upgrade concurrent-plugin
-  CONCURRENT_PLUGIN_VERSION=`get_python_package_version concurrent-plugin`
-else
-  pip install concurrent-plugin==$CONCURRENT_PLUGIN_VERSION
-fi
+$CONCURRENT_PLUGIN_PIP_INSTALL_CMD
 
 mkdir -p /tmp/workdir/.concurrent/project_files
 
@@ -453,12 +452,14 @@ logit "DOCKER_IMAGE for MLproject is ${DOCKER_IMAGE}"
 logit "Add additional dependencies to Dockerfile"
 (cd /tmp/workdir/${USE_SUBDIR}; echo " " >> Dockerfile)
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt update" >> Dockerfile)
-(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt install -y libfuse-dev" >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt install -y libfuse-dev curl" >> Dockerfile)
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install --ignore-installed PyYAML" >> Dockerfile)
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip uninstall -y concurrent-plugin" >> Dockerfile)
-(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install --no-cache-dir concurrent-plugin==${CONCURRENT_PLUGIN_VERSION}" >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN $CONCURRENT_PLUGIN_PIP_INSTALL_CMD" >> Dockerfile)
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install boto3" >> Dockerfile)
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install psutil" >> Dockerfile)
+# install the aws_signing_helper needed for AWS IAM roles anywhere
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN curl --output /root/aws_signing_helper  https://rolesanywhere.amazonaws.com/releases/1.0.4/X86_64/Linux/aws_signing_helper && chmod a+x /root/aws_signing_helper" >> Dockerfile)
 if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
   for i in $(echo ${ADDITIONAL_PACKAGES} | tr "," "\n")
   do
@@ -534,7 +535,7 @@ fi
 
 MLFLOW_PROJECT_DIR=/tmp/workdir/${USE_SUBDIR}
 
-# Note: we are uploading the modified Dockerfile here
+# Note: we are uploading the modified Dockerfile here.  If this script runs again, with the same artificat location (with this same mlflow run id), it will force a rebuild of the MLproject environment image due to this modified docker file
 log_mlflow_artifact ${PARENT_RUN_ID} ${MLFLOW_PROJECT_DIR} '.concurrent/project_files'
 
 # Next, repository for full image, i.e. MLproject env base plus project code/data
