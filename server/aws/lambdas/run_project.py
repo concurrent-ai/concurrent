@@ -346,7 +346,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     if 'additionalImports' in subs:
         cmap.data['ADDITIONAL_IMPORTS'] = subs['additionalImports']['S']
     # this is the command that'll be used to install concurrent in the bootstrap and the mlflow project pod.  Set this in subscribers table to something similar to "pip install --no-cache-dir --upgrade http://xyz.com/packages/concurrent-plugin/concurrent_plugin-0.3.27-py3-none-any.whl"
-    if 'concurrentPluginPipInstallCmd' in sub: cmap.data['CONCURRENT_PLUGIN_PIP_INSTALL_CMD'] = subs['concurrentPluginPipInstallCmd']
+    if 'concurrentPluginPipInstallCmd' in subs: cmap.data['CONCURRENT_PLUGIN_PIP_INSTALL_CMD'] = subs['concurrentPluginPipInstallCmd']['S']
         
     tokfile_contents = 'Token=' + item['parallels_token'] + '\n'
     if backend_type == 'eks':
