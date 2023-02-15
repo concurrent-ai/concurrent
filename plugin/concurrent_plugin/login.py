@@ -282,7 +282,8 @@ def get_token(client_id, region, force_renew):
 def get_env_var():
     muri = os.getenv('MLFLOW_CONCURRENT_URI')
     if not muri:
-        raise Exception('Please set environment variable MLFLOW_CONCURRENT_URI and try again')
+        print('Error: Please set environment variable MLFLOW_CONCURRENT_URI and try again')
+        exit(1)
     pmuri = urlparse(muri)
     if (pmuri.scheme.lower() != 'https'):
         raise Exception("Error: MLFLOW_CONCURRENT_URI must be set to https://<concurrent_server>:<mlflow_concurrent_port>/")
