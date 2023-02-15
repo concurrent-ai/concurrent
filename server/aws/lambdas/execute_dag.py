@@ -10,6 +10,7 @@ from urllib.parse import urlparse, unquote
 import concurrent.futures
 import zlib
 import base64
+import traceback
 
 from utils import get_cognito_user, get_service_conf, create_request_context, get_custom_token
 import period_run, lock_utils, dag_utils, run_project
@@ -113,7 +114,7 @@ def execute_dag(event, context):
     if 'dagParamsJson' in run_params:
         dagParamsJsonRuntime = json.loads(run_params['dagParamsJson'])
 
-    print(cognito_username, dag_id, dag_execution_id)
+    print(f"cognito_username={cognito_username}, dag_id={dag_id}, dag_execution_id={dag_execution_id}")
 
     experiment_id = run_params.get('experiment_id')
 
@@ -135,7 +136,7 @@ def execute_dag(event, context):
             experiment_id = dag_json['experiment_id']
 
         if not experiment_id:
-            raise('Experiment id not defined')
+            raise(Exception('Experiment id not defined'))
 
         dag_name = dag_json['name']
 
@@ -145,7 +146,7 @@ def execute_dag(event, context):
 
     else:
         dag_json = dag_utils.fetch_dag_details(cognito_username, dag_id)
-        print(dag_json)
+        print(f"dag_json={dag_json}")
 
         if dagParamsJsonRuntime:
             dag_json = override_dag_runtime_params(dag_json, dagParamsJsonRuntime)
@@ -338,6 +339,10 @@ def execute_dag(event, context):
             return respond(None, rv)
         else:
             return rv
+    except Exception as e:
+        print(f"execute_dag(): Caught exception: {e}")
+        traceback.print_exc()
+        raise e
     finally:
         release_row_lock(lock_key)
 
@@ -347,7 +352,7 @@ def acquire_idle_row_lock(dag_id, dag_execution_id):
     locked = lock_utils.acquire_idle_row_lock(DAG_EXECUTION_TABLE, dag_exec_key)
     if not locked:
         print("No lock, cannot proceed")
-        raise ("Could not acquire lock, row not idle for too long")
+        raise (Exception("Could not acquire lock, row not idle for too long"))
 
     lock_lease_time = int(time.time())
     return dag_exec_key, lock_lease_time
@@ -394,7 +399,8 @@ def update_dag_run_status(cognito_username, groups, dag_id, auth_info, dag_execu
         return True
     except Exception as ex:
         status_msg = 'caught while updating dag status' + str(ex)
-        raise(status_msg)
+        traceback.print_exc()
+        raise(Exception(status_msg))
 
 def get_graph_struct(dag_json):
     """
@@ -685,7 +691,8 @@ def update_dag_exec_runtime_info(cognito_username, groups, dag_id, auth_info, da
         return True
     except Exception as ex:
         status_msg = 'caught while updating dag status' + str(ex)
-        raise(status_msg)
+        traceback.print_exc()
+        raise(Exception(status_msg))
 
 
 

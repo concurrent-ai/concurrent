@@ -367,6 +367,7 @@ def query_clusters_info_by_owner(owner):
 
 def query_user_accessible_clusters(cognito_username, groups:list):
     is_admin = is_user_admin(cognito_username)
+    # list of tuples; each tuple is (k8s cluster_name, k8s_namespace_in_cluster)
     cluster_list = []
     hash_key = get_cluster_access_hash_key()
     range_key_prefix = get_cluster_access_range_key_prefix('user', cognito_username)
