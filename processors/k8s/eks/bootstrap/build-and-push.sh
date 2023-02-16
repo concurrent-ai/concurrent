@@ -19,7 +19,7 @@ docker_repo="parallels-eks-bootstrap-test"
 
 # tag with both 'latest' and 'timestamp'.  will allow referring to an older image using the timestamp tag if needed.
 for image_tag in latest $(date +'%Y%m%d_%H%M%S' ) ; do
-  echo "Pushing tag $image_tag to repo $docker_repo"
+  echo "Pushing image with tag '$image_tag' to docker repo '$docker_repo'"
   docker tag parallels-eks-bootstrap public.ecr.aws/k7c5t9s7/${docker_repo}:${image_tag}
   docker push public.ecr.aws/k7c5t9s7/${docker_repo}:${image_tag}
 done;
