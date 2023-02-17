@@ -323,7 +323,6 @@ def execute_dag(event, context):
                     lock_lease_time = renew_lock(lock_key, lock_lease_time)
             except Exception as ex:
                 logger.warning("Failure in launching nodes: " + str(ex))
-                import traceback
                 logger.warning(traceback.format_exc())
                 #release_row_lock(lock_key)
                 return respond("Node launch failed", dict())
