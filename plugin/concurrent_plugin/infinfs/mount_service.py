@@ -1,14 +1,19 @@
 import socket
 import time
 import os
+import traceback
+from typing import Any, Union
 from concurrent_plugin.infinfs import infinmount
 import json
+import yaml
 from mlflow.tracking import MlflowClient
 import psutil
 from concurrent_plugin.concurrent_backend import MOUNT_SERVICE_READY_MARKER_FILE
 import logging
 import requests
 import subprocess
+# importing it as kubernetes.client since 'client' is used in the code in some places as the Mlflow client.  this mlflow 'client' conflicts with 'from kubernetes import client'.  Need to cleanup.
+import kubernetes.client
 from kubernetes import client, config
 
 logger = logging.getLogger()
@@ -118,7 +123,7 @@ def launch_dag_controller():
         raise Exception("Dag Controller launch failed multiple times")
 
 
-def upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, tmp_log_file, container_name):
+def upload_logs_for_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, pod_namespace, tmp_log_file, container_name):
     try:
         pod_logs = k8s_client.read_namespaced_pod_log(pod_name, pod_namespace, container=container_name)
         with open(tmp_log_file, "w") as fh:
@@ -138,23 +143,65 @@ def update_mlflow_run(run_id, status):
     client = MlflowClient()
     client.set_terminated(run_id, status)
 
+def _filter_empty_in_dict_list_scalar(dict_list_scalar:Union[list, dict, Any]):
+    try:
+        # depth first traveral
+        if isinstance(dict_list_scalar, dict):
+            keys_to_del:list = []
+            for k in dict_list_scalar.keys():  
+                _filter_empty_in_dict_list_scalar(dict_list_scalar[k])
+                
+                # check if the 'key' is now None or empty.  If so, remove the 'key'
+                if not dict_list_scalar[k]: 
+                    # RuntimeError: dictionary changed size during iteration
+                    # dict_list_scalar.pop(k)
+                    keys_to_del.append(k)
+            
+            # now delete the keys from the map
+            for k in keys_to_del:
+                dict_list_scalar.pop(k)
+        elif isinstance(dict_list_scalar, list):
+            i = 0; length = len(dict_list_scalar)
+            while i < length: 
+                _filter_empty_in_dict_list_scalar(dict_list_scalar[i])
+            
+                # check if element is now None or empty.  If so, remove the element from the list
+                if not dict_list_scalar[i]:
+                    dict_list_scalar.remove(dict_list_scalar[i])
+                    i -= 1; length -= 1
+                
+                i += 1
+        else: # must be a non container like int, str, datatime.datetime
+            pass
+    except Exception as e:
+        # some excpetion, just log it..
+        print(f"_filter_empty_in_dict_list_scalar(): Caught exception: {e}")
+        traceback.print_exc()
 
-def log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info):
+def log_describe_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, pod_namespace, pod_info:kubernetes.client.V1Pod):
     describe_file = "/tmp/describe-" + pod_name + ".txt"
     try:
-        events = k8s_client.list_namespaced_event(pod_namespace, field_selector=f'involvedObject.name={pod_name}')
+        events:kubernetes.client.V1EventList = k8s_client.list_namespaced_event(pod_namespace, field_selector=f'involvedObject.name={pod_name}')
         with open(describe_file, "w") as fh:
-            fh.write(str(pod_info))
-            fh.write(str(events))
+            pod_info_dict:dict = pod_info.to_dict()
+            # remove metadata/managed_fields key
+            pod_info_dict['metadata'].pop('managed_fields')            
+            _filter_empty_in_dict_list_scalar(pod_info_dict)
+            fh.write(yaml.safe_dump(pod_info_dict))
+            
+            events_dict:dict = events.to_dict()
+            # remove metadata/managed_fields key
+            events_dict['metadata'].pop('managed_fields')            
+            _filter_empty_in_dict_list_scalar(events_dict)
+            fh.write(yaml.safe_dump(events_dict))
         client = MlflowClient()
         client.log_artifact(run_id, describe_file, artifact_path='.concurrent/logs')
     except Exception as ex:
         logger.warning('Failed to log describe pod, try again later: ' + str(ex))
         return
 
-
-def fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace):
-    pod_info = k8s_client.read_namespaced_pod(pod_name, pod_namespace)
+def fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name, pod_namespace):
+    pod_info:client.V1Pod = k8s_client.read_namespaced_pod(pod_name, pod_namespace)
     pod_phase = pod_info.status.phase
     print("pod_phase: ", pod_phase)
     if pod_info.spec.containers[1].name.startswith('sidecar-'):
@@ -230,7 +277,7 @@ if __name__ == '__main__':
     start_time = time.time()
     print("Environment #", os.environ)
     config.load_incluster_config()
-    k8s_client = client.CoreV1Api()
+    k8s_client:client.CoreV1Api = client.CoreV1Api()
     run_id = os.getenv('MLFLOW_RUN_ID')
     pod_name = os.getenv('MY_POD_NAME')
     pod_namespace = os.getenv('MY_POD_NAMESPACE')
