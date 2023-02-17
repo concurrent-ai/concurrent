@@ -385,10 +385,16 @@ if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
   done
 fi
 
+DEFAULT_CONCURRENT_PLUGIN_PIP_INSTALL_CMD="pip install --no-cache-dir --upgrade concurrent-plugin"
 # pass the full concurrent pip install command into bootstrap.sh instead of just the plugin version.  this will allow installation of the package from other sources such as http://xyz.com:9876/packages/concurrent-plugin/concurrent_plugin-0.3.27-py3-none-any.whl
-[ -z $CONCURRENT_PLUGIN_PIP_INSTALL_CMD ] && CONCURRENT_PLUGIN_PIP_INSTALL_CMD="pip install --no-cache-dir --upgrade concurrent-plugin"
-# Install latest concurrent-plugin
-$CONCURRENT_PLUGIN_PIP_INSTALL_CMD
+if [ -n "$CONCURRENT_PLUGIN_PIP_INSTALL_CMD" ]; then
+    echo "Executing $CONCURRENT_PLUGIN_PIP_INSTALL_CMD"
+    $CONCURRENT_PLUGIN_PIP_INSTALL_CMD
+else
+    echo "Executing $DEFAULT_CONCURRENT_PLUGIN_PIP_INSTALL_CMD"
+    $DEFAULT_CONCURRENT_PLUGIN_PIP_INSTALL_CMD
+    CONCURRENT_PLUGIN_VERSION=`get_python_package_version concurrent-plugin`
+fi    
 
 mkdir -p /tmp/workdir/.concurrent/project_files
 
@@ -455,7 +461,11 @@ logit "Add additional dependencies to Dockerfile"
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt install -y libfuse-dev curl" >> Dockerfile)
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install --ignore-installed PyYAML" >> Dockerfile)
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip uninstall -y concurrent-plugin" >> Dockerfile)
+if [ -n "$CONCURRENT_PLUGIN_PIP_INSTALL_CMD" ]; then
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN $CONCURRENT_PLUGIN_PIP_INSTALL_CMD" >> Dockerfile)
+else
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN $DEFAULT_CONCURRENT_PLUGIN_PIP_INSTALL_CMD==$CONCURRENT_PLUGIN_VERSION" >> Dockerfile)
+fi
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install boto3" >> Dockerfile)
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install psutil" >> Dockerfile)
 # install the aws_signing_helper needed for AWS IAM roles anywhere
