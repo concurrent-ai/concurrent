@@ -6,6 +6,9 @@ set -ex
 
 scriptdir=`dirname $0`
 
+# remove any earlier built wheels
+ls dist/*.whl && rm -iv dist/*.whl
+
 # build the wheel
 python3 setup.py sdist bdist_wheel; 
 
