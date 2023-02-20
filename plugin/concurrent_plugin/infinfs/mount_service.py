@@ -185,13 +185,13 @@ def log_describe_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, p
         with open(describe_file, "w") as fh:
             pod_info_dict:dict = pod_info.to_dict()
             # remove metadata/managed_fields key
-            pod_info_dict['metadata'].pop('managed_fields')            
+            if pod_info_dict.get('metadata') and pod_info_dict.get('metadata').get('managed_fields'): pod_info_dict['metadata'].pop('managed_fields')            
             _filter_empty_in_dict_list_scalar(pod_info_dict)
             fh.write(yaml.safe_dump(pod_info_dict))
             
             events_dict:dict = events.to_dict()
             # remove metadata/managed_fields key
-            events_dict['metadata'].pop('managed_fields')            
+            if events_dict.get('metadata') and events_dict.get('metadata').get('managed_fields'): events_dict['metadata'].pop('managed_fields')
             _filter_empty_in_dict_list_scalar(events_dict)
             fh.write(yaml.safe_dump(events_dict))
         client = MlflowClient()
