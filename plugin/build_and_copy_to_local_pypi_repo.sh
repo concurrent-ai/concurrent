@@ -19,6 +19,7 @@ python3 setup.py sdist bdist_wheel;
 ls ~/packages/concurrent-plugin/*.whl && rm -iv ~/packages/concurrent-plugin/*.whl
 
 # copy the wheel to the private pypi server
-cp -ivp dist/concurrent_plugin-$(python3 setup.py --version)-py3-none-any.whl ~/packages/concurrent-plugin/
+wheel_name=concurrent_plugin-$(python3 setup.py --version)-py3-none-any.whl
+cp -ivp dist/$wheel_name ~/packages/concurrent-plugin/
 
-echo "Use the URL: http://cvat.infinstor.com:9876/packages/concurrent-plugin/concurrent_plugin-<version>-py3-none-any.whl"
+echo "Use the URL: http://cvat.infinstor.com:9876/packages/concurrent-plugin/$wheel_name"
