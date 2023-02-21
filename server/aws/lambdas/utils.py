@@ -1,3 +1,5 @@
+import datetime
+import traceback
 import boto3
 import botocore
 from botocore.exceptions import ClientError
@@ -7,6 +9,35 @@ import time
 import json
 import uuid
 import random
+import io
+
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
+
+from typing import Any, TYPE_CHECKING, Tuple, Union
+if TYPE_CHECKING:
+    from mypy_boto3_dynamodb import DynamoDBClient
+    from mypy_boto3_dynamodb.type_defs import ExecuteStatementOutputTypeDef
+else:
+    DynamoDBClient = object
+    ExecuteStatementOutputTypeDef = object
+
+if TYPE_CHECKING:
+    from mypy_boto3_acm_pca import ACMPCAClient
+    from mypy_boto3_acm_pca.type_defs import IssueCertificateResponseTypeDef, ValidityTypeDef, GetCertificateResponseTypeDef, ListCertificateAuthoritiesResponseTypeDef, CertificateAuthorityTypeDef, CertificateAuthorityConfigurationTypeDef
+    from mypy_boto3_acm_pca.waiter import CertificateIssuedWaiter
+    
+    from mypy_boto3_sts import STSClient
+    from mypy_boto3_sts.type_defs import AssumeRoleResponseTypeDef
+else:
+    ACMPCAClient=object
+    IssueCertificateResponseTypeDef=object; ValidityTypeDef=object; GetCertificateResponseTypeDef=object; ListCertificateAuthoritiesResponseTypeDef=object; CertificateAuthorityTypeDef=object
+    CertificateIssuedWaiter=object; CertificateAuthorityConfigurationTypeDef=object
+    
+    STSClient = object
+    AssumeRoleResponseTypeDef = object
 
 PARALLELS_SCHEMA_VERSION = 'v000'
 DAG_INFO_TABLE = os.environ['DAG_TABLE']
@@ -120,14 +151,14 @@ def add_cognito_user_specific_configs(subs, cognito_username):
     return
 
 subscriber_info_cache = {}
-def get_subscriber_info(cognito_username):
+def get_subscriber_info(cognito_username:str, ignore_cache:bool=False):
     """ returns 
     success: a boolean to indicate success r failure
     status: a string to indicate reason for failure if any
     item: a row from infinstor-subscriber ddb table
     """
     global subscriber_info_cache
-    if cognito_username in subscriber_info_cache:
+    if not ignore_cache and cognito_username in subscriber_info_cache:
         print("Found subscriber info in cache: " + str(subscriber_info_cache[cognito_username]))
         return subscriber_info_cache[cognito_username]
     success, status, conf = get_service_conf()
@@ -187,6 +218,55 @@ def get_subscriber_info(cognito_username):
             add_cognito_user_specific_configs(subs, cognito_username)
             subscriber_info_cache[cognito_username] = (success, status, subs)
         return success, status, subs
+
+def update_subscriber_info(cognito_username:str, customer_id:str, product_code:str, update_dict:dict) -> Tuple[bool, Union[str, list]]:
+    """
+    updates the infinstor-subscriber table.  Also refreshes subscriber_info_cache with the updated values.
+
+    Args:
+        cognito_username (str): _description_
+        subs_ddb_item (dict): _description_
+        update_dict (dict): dict with ddb item's field_name, field_value.  These will be used to create a PartiQL update statement
+
+    Returns:
+        Tuple[bool, Union[str, list]]: returns the tuple (success=True|False, string (error string on error) or list (the updated subscriber ddb items) )
+    """
+    try:
+        # CREATE TABLE infinstor-Subscribers (customerId STRING HASH KEY, productCode STRING RANGE KEY, userName STRING, THROUGHPUT (0, 0))GLOBAL ALL INDEX ('username-GSI', userName, productCode, THROUGHPUT (0, 0));
+        #
+        # https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ql-reference.update.html
+        # UPDATE  table  
+        # [SET | REMOVE]  path  [=  data] […]
+        # WHERE condition [RETURNING returnvalues]
+        # <returnvalues>  ::= [ALL OLD | MODIFIED OLD | ALL NEW | MODIFIED NEW] *
+        set_clauses:str = ""
+        for key,val in update_dict.items():
+            set_clauses = set_clauses + f" SET {key}='{val}' "
+        # Note: table name must be double quoted due to the use of '-' in the name: infinstor-Subscribers
+        # Error: ValidationException: Where clause does not contain a mandatory equality on all key attributes
+        update_stmt:str = f"UPDATE \"{os.environ['SUBSCRIBERS_TABLE']}\" {set_clauses} WHERE customerId = '{customer_id}' AND productCode = '{product_code}' RETURNING ALL NEW *"
+        print(f"Executing update_stmt for subscriber {cognito_username} = {update_stmt}")
+        
+        ddb_client:DynamoDBClient
+        _ , _, ddb_client = get_ddb_boto3_client_parallels(cognito_username)
+        if not ddb_client: return False, "Unable to get ddb_client for service"
+        
+        # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html#DynamoDB.Client.execute_statement
+        # https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/API_ExecuteStatement.html
+        # response = {'Items': [{...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, {...}, ...], 'ResponseMetadata': {'RequestId': 'CHBDU0TEJ6UH82VNOMPA9F8I3NVV4KQNSO5AEMVJF66Q9ASUAAJG', 'HTTPStatusCode': 200, 'HTTPHeaders': {...}, 'RetryAttempts': 0}}
+        exec_stmt_resp:ExecuteStatementOutputTypeDef = ddb_client.execute_statement(Statement=update_stmt)
+        ddb_http_status_code:int = exec_stmt_resp.get('ResponseMetadata').get('HTTPStatusCode')
+        if ddb_http_status_code != 200: return False, f"dynamodb http status code={ddb_http_status_code} headers={exec_stmt_resp['ResponseMetadata'].get('HTTPHeaders')}"
+        
+        success:bool; err_str:str; sub_ddb_item:dict
+        # force update the subscriber_info_cache used by get_subscriber_info
+        success, err_str, sub_ddb_item = get_subscriber_info(cognito_username, ignore_cache=True)
+        
+        return (True, [sub_ddb_item]) if success else (False, f"get_subscriber_info() error={err_str}")
+    except Exception as e:
+        print(f"Exception caught during ddb update subscriber: {e}")
+        traceback.print_exc()
+        return False, str(e)
 
 def get_custom_token(cognito_username, groups):
     """ generate message uuid and custom token """
@@ -254,7 +334,18 @@ def create_request_context(cognito_username):
     return request_context
 
 
-def get_ddb_boto3_client_parallels(cognito_username):
+def get_ddb_boto3_client_parallels(cognito_username) -> Tuple[str, str, DynamoDBClient]:
+    """
+    _summary_
+
+    _extended_summary_
+
+    Args:
+        cognito_username (_type_): _description_
+
+    Returns:
+        Tuple[str, str, DynamoDBClient]: returns 'DAG_INFO_TABLE' name, PARALLELS_SCHEMA_VERSION, DynamoDBClient
+    """
     #client, _ = get_ddb_boto3_client(cognito_username)
     #return DAG_INFO_TABLE, PARALLELS_SCHEMA_VERSION, client
     return DAG_INFO_TABLE, PARALLELS_SCHEMA_VERSION, boto3.client('dynamodb')
@@ -281,3 +372,165 @@ def is_user_admin(cognito_username):
 def get_subscriber_name(cognito_username):
     success, status, subs = get_subscriber_info(cognito_username)
     return subs['userName']['S']
+
+def _cert_expired(cert_pem:str) -> bool:
+    # https://cryptography.io/en/latest/x509/reference/#cryptography.x509.load_pem_x509_certificate
+    cert:x509.Certificate = x509.load_pem_x509_certificate(cert_pem.encode('utf-8'))
+    
+    return False if datetime.datetime.now() > cert.not_valid_before and datetime.datetime.now() < cert.not_valid_after else True
+
+def get_or_renew_and_update_iam_roles_anywhere_certs(cognito_user_name:str, subs_ddb_item:dict) -> Tuple[str, str, str]:
+    """
+    renews the certificates if needed;  updates the certs in infinstor-subscribers table; also updates the passed subs_ddb_item dict with new certificate values
+
+    _extended_summary_
+
+    Args:
+        cognito_user_name (str): _description_
+        subs_ddb_item (dict): existing subscriber ddb item with 'customerId', 'productCode', 'iamRolesAnywhereCertArn', 'iamRolesAnywhereCert' and 'iamRolesAnywhereCertPrivateKey' set in it
+
+    Returns:
+        Tuple[str, str, str]: returns the tuple cert_private_key, cert_arn, cert
+    """
+    cert_priv_key:str = subs_ddb_item['iamRolesAnywhereCertPrivateKey']['S'] if subs_ddb_item.get('iamRolesAnywhereCertPrivateKey') else None
+    cert:str = subs_ddb_item['iamRolesAnywhereCert']['S'] if subs_ddb_item.get('iamRolesAnywhereCert') else None
+    cert_arn:str = subs_ddb_item['iamRolesAnywhereCertArn']['S'] if subs_ddb_item.get('iamRolesAnywhereCertArn') else None
+    
+    if not cert or _cert_expired(cert):
+        cert_priv_key, cert_arn, cert = _generate_certificate(cognito_user_name, subs_ddb_item)
+        
+        success:bool; err_str_or_items_list:Union[str, list]
+        success, err_str_or_items_list = update_subscriber_info(cognito_user_name, subs_ddb_item['customerId']['S'], subs_ddb_item['productCode']['S'], {'iamRolesAnywhereCertPrivateKey':cert_priv_key, 'iamRolesAnywhereCert':cert, 'iamRolesAnywhereCertArn':cert_arn})
+        if not success: 
+            print(f"Error: unable to update subscriber table: {err_str_or_items_list}")
+            return None, None, None
+        
+        # update the subscriber ddb item.  accommodate the case where these keys were not present in subs_ddb_item dict ( do not use subs_ddb_item['iamRolesAnywhereCertPrivateKey']['S'] ).
+        subs_ddb_item['iamRolesAnywhereCertPrivateKey'] = {'S':cert_priv_key}
+        subs_ddb_item['iamRolesAnywhereCert'] = {'S': cert }
+        subs_ddb_item['iamRolesAnywhereCertArn'] = { 'S':  cert_arn } 
+        
+    
+    return cert_priv_key, cert_arn, cert
+
+def _generate_certificate(cognito_username:str, subs_ddb_item:dict) -> Tuple[str, str, str]:
+    """
+    _summary_
+
+    _extended_summary_
+
+    Args:
+        cognito_username (str): _description_
+        subs_ddb_item (dict): _description_
+
+    Returns:
+        Tuple[str, str, str]: returns the generated private key, certificate arn and the certificate for the specified cognito_username
+    """
+    # https://www.misterpki.com/python-csr/ (uses 'cryptography' module; use this; see One Note > Python 2 > Python Cryptography)
+    # https://cryptography.io/en/latest/x509/tutorial/ (tutorial to create a CSR and other x509 operations)
+    # https://gist.github.com/Zeerg/0b0313d22124d3e8b478 (uses 'PyOpenSSL' module; do not use this; see One Note > Python 2 > Python Cryptography)
+
+    # Generate the RSA private key
+    key:RSAPrivateKey = generate_private_key(public_exponent=65537, key_size=2048)
+    print(f"key={key}")
+
+    # https://cryptography.io/en/latest/x509/tutorial/ 
+    # write the private key out
+    key_string_io:io.StringIO = io.StringIO()
+    # https://cryptography.io/en/latest/hazmat/primitives/asymmetric/rsa/#module-cryptography.hazmat.primitives.asymmetric.rsa
+    # encryption_algorithm=serialization.BestAvailableEncryption(b"passphrase")
+    key_string_io.write(key.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.TraditionalOpenSSL, encryption_algorithm=serialization.NoEncryption()).decode("utf-8"))  
+    print(f"key_string_io.getvalue()={key_string_io.getvalue()}")
+
+    # https://cryptography.io/en/latest/x509/tutorial/ 
+    # Generate a CSR
+    csr = x509.CertificateSigningRequestBuilder().subject_name(x509.Name([
+        # Provide various details about who we are.
+        x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+        x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "California"),
+        x509.NameAttribute(NameOID.LOCALITY_NAME, "San Jose"),
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Infinstor"),
+        x509.NameAttribute(NameOID.COMMON_NAME, cognito_username), 
+        x509.NameAttribute(NameOID.EMAIL_ADDRESS, subs_ddb_item['emailId']['S'])
+    ])).add_extension(
+        x509.SubjectAlternativeName([
+            # Describe what sites we want this certificate for.
+            x509.DNSName(cognito_username)
+        ]),
+        critical=False,
+    # Sign the CSR with the private key.
+    ).sign(key, hashes.SHA256())
+    print(f"csr={csr}")
+
+    # write out the CSR
+    csr_bytes_io:io.BytesIO = io.BytesIO()
+    csr_bytes_io.write(csr.public_bytes(serialization.Encoding.PEM))
+    print(f"csr_bytes_io.getvalue()={csr_bytes_io.getvalue()}")
+
+    sts_client:STSClient = boto3.client("sts")
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sts.html#STS.Client.assume_role
+    assume_role_resp:AssumeRoleResponseTypeDef = sts_client.assume_role(RoleSessionName=f"Session-RoleForPrivateCAUserAccess-{cognito_username}", RoleArn="arn:aws:iam::019944623471:role/RoleForPrivateCAUserAccess", ExternalId="Infinstor@123")
+    
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/acm-pca.html
+    pca_client:ACMPCAClient = boto3.client("acm-pca",aws_access_key_id=assume_role_resp['Credentials']['AccessKeyId'], aws_secret_access_key=assume_role_resp['Credentials']['SecretAccessKey'], aws_session_token=assume_role_resp['Credentials']['SessionToken'])
+    
+    # CertificateAuthorities:
+    # - Arn: arn:aws:acm-pca:us-east-1:019944623471:certificate-authority/18cb0690-977e-45e2-92b3-26852dea695e
+    #   CertificateAuthorityConfiguration:
+    #     KeyAlgorithm: RSA_2048
+    #     SigningAlgorithm: SHA256WITHRSA
+    #     Subject:
+    #       CommonName: Infinstor Private CA
+    #       Locality: San Jose
+    #       Organization: Infinstor
+    #       State: California
+    #   CreatedAt: '2023-01-23T00:57:13.334000+05:30'
+    #   LastStateChangeAt: '2023-01-23T00:58:23.257000+05:30'
+    #   NotAfter: '2033-01-23T00:58:06+05:30'
+    #   NotBefore: '2023-01-22T23:58:21+05:30'
+    #   OwnerAccount: '019944623471'
+    #   RevocationConfiguration:
+    #     CrlConfiguration:
+    #       Enabled: false
+    #   Serial: '44423515497616197961984279020579877361'
+    #   Status: ACTIVE
+    #   Type: ROOT    
+    # 
+    # get the ARN for the private CA using the name "Infinstor Private CA"
+    ca_list:ListCertificateAuthoritiesResponseTypeDef = pca_client.list_certificate_authorities()
+    ca:CertificateAuthorityTypeDef
+    for ca in ca_list['CertificateAuthorities']:
+        ca_config:CertificateAuthorityConfigurationTypeDef = ca['CertificateAuthorityConfiguration']
+        if ca_config['Subject']['CommonName'].lower() == "Infinstor Private CA".lower(): 
+            cwSearch_pca_arn:str = ca['Arn']
+            
+    # aws acm-pca issue-certificate --certificate-authority-arn "arn:aws:acm-pca:us-east-1:019944623471:certificate-authority/18cb0690-977e-45e2-92b3-26852dea695e" --csr fileb://onpremsrv-csr-certificate_signing_request.pem --signing-algorithm "SHA256WITHRSA" --validity Value=7,Type="DAYS"
+    # 
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/acm-pca.html#ACMPCA.Client.issue_certificate
+    #
+    # issue_certificate(*, CertificateAuthorityArn: str, Csr: str | bytes | IO | StreamingBody, SigningAlgorithm: SigningAlgorithmType, Validity: ValidityTypeDef, ApiPassthrough: ApiPassthroughTypeDef = ..., TemplateArn: str = ..., ValidityNotBefore: ValidityTypeDef = ..., IdempotencyToken: str = ...) -> IssueCertificateResponseTypeDef
+    # ValidityTypeDef(Value=7, Type="DAYS")
+    # TemplateArn (string) -- Specifies a custom configuration template to use when issuing a certificate. If this parameter is not provided, Amazon Web Services Private CA defaults to the EndEntityCertificate/V1 template
+    issue_cert_resp:IssueCertificateResponseTypeDef = pca_client.issue_certificate(CertificateAuthorityArn=cwSearch_pca_arn, Csr=csr_bytes_io.getvalue(), SigningAlgorithm="SHA256WITHRSA", Validity={'Type':'DAYS', 'Value':7})
+    # response has the keys: CertificateArn and ResponseMetadata
+    print(f"issue_cert_resp={issue_cert_resp}")
+
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/acm-pca.html#ACMPCA.Waiter.CertificateIssued
+    waiter:CertificateIssuedWaiter = pca_client.get_waiter('certificate_issued')
+    # Polls ACMPCA.Client.get_certificate() every 3 seconds until a successful state is reached. An error is returned after 60 failed checks.
+    waiter.wait(CertificateAuthorityArn=cwSearch_pca_arn,   CertificateArn=issue_cert_resp["CertificateArn"])
+    print("Waiter finished waiting for certificate issuance")
+
+    # get the certificate.
+    # May see this error: RequestInProgressException: An error occurred (RequestInProgressException) when calling the GetCertificate operation: The request to issue certificate arn:aws:acm-pca:us-east-1:019944623471:certificate-authority/18cb0690-977e-45e2-92b3-26852dea695e/certificate/20105475bd547e7d92dcb7abc30a4647 is still in progress. Try again later.
+    # 
+    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/acm-pca.html#ACMPCA.Client.get_certificate
+    get_cert_resp:GetCertificateResponseTypeDef = pca_client.get_certificate(CertificateAuthorityArn=cwSearch_pca_arn, CertificateArn=issue_cert_resp["CertificateArn"])
+    # response has the keys: "Certificate", "CertificateChain", "ResponseMetadata"
+    print(f"get_cert_resp={get_cert_resp}")
+    # decode the "\n" in the certificate to actual new lines
+    cert_decoded = get_cert_resp['Certificate'].encode('utf-8').decode('unicode_escape')
+    print(f"get_cert_resp['certificate'].decode_as_unicode_escape={cert_decoded}")
+    
+    return key_string_io.getvalue(), issue_cert_resp["CertificateArn"], cert_decoded
+    
