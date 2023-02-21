@@ -37,6 +37,7 @@ from kubernetes.client.rest import ApiException
 import kubernetes.utils
 import yaml
 
+import utils
 # pylint: disable=logging-not-lazy,bad-indentation,broad-except
 
 logger = logging.getLogger()
@@ -366,7 +367,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         gce_keyfile_contents = 'GCE Keyfile unused for ' + backend_type
         
     core_v1_api:kubernetes_client.CoreV1Api = kubernetes_client.CoreV1Api(api_client=api_client.ApiClient(configuration=con))
-    volume_mounts, volumes = setup_secrets(backend_type, core_v1_api, namespace, tokfile_contents, credsfile_contents,
+    volume_mounts, volumes = setup_secrets(cognito_username, backend_type, core_v1_api, namespace, tokfile_contents, credsfile_contents,
                                            gce_keyfile_contents, hpe_cluster_config, run_input_spec_map_encoded,subs, cmap)
 
     core_v1_api.create_namespaced_config_map(namespace=namespace, body=cmap)
@@ -605,8 +606,8 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
                         None, None, empty_hpe_cluster_config, cognito_username, subs, con)
     return respond(None, {})
 
-
-def setup_secrets(backend_type:str, core_api_instance:kubernetes_client.CoreV1Api, job_namespace, tokfile_contents, credsfile_contents,
+    
+def setup_secrets(cognito_username:str, backend_type:str, core_api_instance:kubernetes_client.CoreV1Api, job_namespace, tokfile_contents, credsfile_contents,
                   gce_keyfile_contents, hpe_cluster_config:HpeClusterConfig, run_input_spec_map_encoded, subs:dict, cmap:kubernetes_client.V1ConfigMap) -> Tuple[List[kubernetes_client.V1VolumeMount], List[kubernetes_client.V1Volume]]:
     """
     _summary_
@@ -614,6 +615,7 @@ def setup_secrets(backend_type:str, core_api_instance:kubernetes_client.CoreV1Ap
     _extended_summary_
 
     Args:
+        cognito_username (str): cognito user name
         backend_type (str): _description_
         core_api_instance (kubernetes_client.CoreV1Api): _description_
         job_namespace (_type_): _description_
@@ -624,6 +626,12 @@ def setup_secrets(backend_type:str, core_api_instance:kubernetes_client.CoreV1Ap
         run_input_spec_map_encoded (_type_): _description_
         subs (dict): subscriber information
         cmap (kubernetes.client.V1ConfigMap): the config map to add entries into, if needed
+        
+    Returns:
+        Tuple[List[kubernetes_client.V1VolumeMount], List[kubernetes_client.V1Volume]]: returns the tuple (list_of_volume_mounts, list_of_volumes) on success; on error, returns (None, None)
+    
+    Raises:
+        An exception on failure
     """
     tok = base64.b64encode(tokfile_contents.encode('utf-8')).decode('utf-8')
     unique_suffix = str(uuid.uuid4())
@@ -727,6 +735,10 @@ metadata:
     iam_roles_anywhere_secret_name:str = None
     setup_roles_anywhere:bool = 'iamRolesAnywhereCert' in subs
     if setup_roles_anywhere:
+        cert_priv_key:str; cert_arn:str; cert:str
+        cert_priv_key, cert_arn, cert = utils.get_or_renew_and_update_iam_roles_anywhere_certs(cognito_username, subs)
+        if not cert_priv_key: raise Exception("Unable to issue certificate.  Check the logs for further details")
+        
         iam_roles_anywhere_secret_name = "iam-roles-anywhere-" + unique_suffix
         # pass the secret name as an environment variable to the bootstrap pod
         cmap.data['IAM_ROLES_ANYWHERE_SECRET_NAME'] = iam_roles_anywhere_secret_name
