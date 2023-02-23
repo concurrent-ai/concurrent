@@ -151,11 +151,11 @@ def add_cognito_user_specific_configs(subs, cognito_username):
     return
 
 subscriber_info_cache = {}
-def get_subscriber_info(cognito_username:str, ignore_cache:bool=False):
+def get_subscriber_info(cognito_username:str, ignore_cache:bool=False) -> Tuple[bool, str, dict]:
     """ returns 
-    success: a boolean to indicate success r failure
-    status: a string to indicate reason for failure if any
-    item: a row from infinstor-subscriber ddb table
+    success (bool): a boolean to indicate success r failure
+    status (str): a string to indicate reason for failure if any
+    item (dict): a row from infinstor-subscriber ddb table
     """
     global subscriber_info_cache
     if not ignore_cache and cognito_username in subscriber_info_cache:
@@ -259,7 +259,7 @@ def update_subscriber_info(cognito_username:str, customer_id:str, product_code:s
         if ddb_http_status_code != 200: return False, f"dynamodb http status code={ddb_http_status_code} headers={exec_stmt_resp['ResponseMetadata'].get('HTTPHeaders')}"
         
         success:bool; err_str:str; sub_ddb_item:dict
-        # force update the subscriber_info_cache used by get_subscriber_info
+        # force update the subscriber_info_cache used by get_subscriber_info()
         success, err_str, sub_ddb_item = get_subscriber_info(cognito_username, ignore_cache=True)
         
         return (True, [sub_ddb_item]) if success else (False, f"get_subscriber_info() error={err_str}")
