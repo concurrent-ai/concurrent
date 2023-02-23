@@ -15,6 +15,7 @@ import subprocess
 # importing it as kubernetes.client since 'client' is used in the code in some places as the Mlflow client.  this mlflow 'client' conflicts with 'from kubernetes import client'.  Need to cleanup.
 import kubernetes.client
 from kubernetes import client, config
+import dpath
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -125,6 +126,8 @@ def launch_dag_controller():
 
 def upload_logs_for_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, pod_namespace, tmp_log_file, container_name):
     try:
+        # possible fix if only partial logs are read and full logs can't be read. Note that using follow=True for a running pod may make it wait forever??
+        # https://github.com/kubernetes-client/python/issues/199: Passing follow=True to read_namespaced_pod_log makes it never return #199
         pod_logs = k8s_client.read_namespaced_pod_log(pod_name, pod_namespace, container=container_name)
         with open(tmp_log_file, "w") as fh:
             fh.write(pod_logs)
@@ -171,7 +174,7 @@ def _filter_empty_in_dict_list_scalar(dict_list_scalar:Union[list, dict, Any]):
                     i -= 1; length -= 1
                 
                 i += 1
-        else: # must be a non container like int, str, datatime.datetime
+        else: # this must be a non container, like int, str, datatime.datetime
             pass
     except Exception as e:
         # some excpetion, just log it..
@@ -190,10 +193,51 @@ def log_describe_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, p
             fh.write(yaml.safe_dump(pod_info_dict))
             
             events_dict:dict = events.to_dict()
-            # remove metadata/managed_fields key
-            if events_dict.get('metadata') and events_dict.get('metadata').get('managed_fields'): events_dict['metadata'].pop('managed_fields')
+            # api_version: v1
+            # kind: EventList
+            # metadata:
+            #   resource_version: '292715'
+            # items:            
+            # - count: 1
+            #   first_timestamp: 2023-02-22 05:17:20+00:00
+            #   involved_object:
+            #       api_version: v1
+            #       field_path: spec.containers{sidecar-35-16770430018230000000003}
+            #       kind: Pod
+            #       name: bird-species-2023-02-22-05-17-19-492406-692lg
+            #       namespace: parallelsns
+            #       resource_version: '106734654'
+            #       uid: 008a2e12-b37c-44ed-963f-c9104ccadb4b
+            #   last_timestamp: 2023-02-22 05:17:20+00:00
+            #   message: Created container sidecar-35-16770430018230000000003
+            #   metadata:
+            #       creation_timestamp: 2023-02-22 05:17:20+00:00
+            #       managed_fields:
+            #       - api_version: v1
+            #       fields_type: FieldsV1
+            #       manager: kubelet
+            #       operation: Update
+            #       time: 2023-02-22 05:17:20+00:00
+            #       name: bird-species-2023-02-22-05-17-19-492406-692lg.17460dc286d42b11
+            #       namespace: parallelsns
+            #       resource_version: '292711'
+            #       uid: 0d95e5e0-85a5-4bf7-8616-dc4eb586fb64
+            #   reason: Created
+            #   source:
+            #       component: kubelet
+            #       host: gke-isstage23-cluster-pool-2-vcpu-8gb-43f4db71-x4r5
+            #   type: Normal
+            # 
+            # remove unwanted fields from the eventList
+            for path_to_del in '/metadata/managed_fields','/items/*/metadata', '/items/*/involved_object':
+                try:
+                    # Given a obj, delete all elements that match the glob.  Returns the number of deleted objects. Raises PathNotFound if no paths are found to delete.
+                    dpath.delete(events_dict, path_to_del)
+                except dpath.PathNotFound as e:
+                    print(f"log_describe_pod(): path_to_del={path_to_del}; exception={e}")
             _filter_empty_in_dict_list_scalar(events_dict)
             fh.write(yaml.safe_dump(events_dict))
+            
         client = MlflowClient()
         client.log_artifact(run_id, describe_file, artifact_path='.concurrent/logs')
     except Exception as ex:
@@ -211,7 +255,7 @@ def fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name, 
         task_container_name = pod_info.spec.containers[1].name
         side_car_container_name = pod_info.spec.containers[0].name
     if pod_phase:
-        if pod_phase == 'Pending':
+        if pod_phase == 'Pending': 
             logger.info("{} is in Pending phase. Waiting".format(pod_name))
             log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
             upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/run-logs.txt",
@@ -227,16 +271,20 @@ def fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name, 
                                 container_name=side_car_container_name)
         elif pod_phase == 'Succeeded':
             logger.info("{} is in Succeeded phase".format(pod_name))
+            time.sleep(5)  # wait for a few seconds, without which the full logs are not fetched            
             log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
             upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/run-logs.txt",
                                 container_name=task_container_name)
+            time.sleep(5)  # wait for a few seconds, without which the full logs are not fetched            
             upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/sidecar-logs.txt",
                                 container_name=side_car_container_name)
         elif pod_phase == 'Failed':
             logger.info("{} is in Failed phase".format(pod_name))
+            time.sleep(5)  # wait for a few seconds, without which the full logs are not fetched            
             log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
             upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/run-logs.txt",
                                 container_name=task_container_name)
+            time.sleep(5)  # wait for a few seconds, without which the full logs are not fetched            
             upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/sidecar-logs.txt",
                                 container_name=side_car_container_name)
         elif pod_phase == 'Unknown':
