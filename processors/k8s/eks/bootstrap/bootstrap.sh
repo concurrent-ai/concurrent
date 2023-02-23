@@ -393,6 +393,7 @@ if [ -n "$CONCURRENT_PLUGIN_PIP_INSTALL_CMD" ]; then
 else
     echo "Executing $DEFAULT_CONCURRENT_PLUGIN_PIP_INSTALL_CMD"
     $DEFAULT_CONCURRENT_PLUGIN_PIP_INSTALL_CMD
+    # CONCURRENT_PLUGIN_VERSION is mandatory: without this the mlflow project container image will not be rebuilt when a new version of the plugin is published 
     CONCURRENT_PLUGIN_VERSION=`get_python_package_version concurrent-plugin`
 fi    
 
