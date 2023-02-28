@@ -41,11 +41,13 @@ pip install google-cloud-container
 # https://github.com/pyca/cryptography/issues/6390
 # https://stackoverflow.com/questions/69475140/lambda-function-failing-with-lib64-libc-so-6-version-glibc-2-18-not-found
 pip install cryptography==3.4.8
+pip install pipdeptree
 /bin/rm -f requirements.txt
 pip freeze > requirements.txt
 
 rm -rf package
 pip install --target package/python -r requirements.txt
+cp requirements.txt package/python
 
 echo "Before trimming: Current size of python lambda layer: $(du -s -m package | awk '{print $1}' ) MB"
 
