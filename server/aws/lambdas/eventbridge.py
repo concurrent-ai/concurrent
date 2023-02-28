@@ -168,6 +168,21 @@ def add_mod_periodicrun(event, context):
     token_info = get_custom_token(cognito_username, groups)
     custom_token="Custom {0}:{1}".format(token_info['queue_message_uuid'], token_info['token'])
 
+    # periodicRunJson : {
+    #                     "period": {
+    #                       "type": "once",
+    #                       "value": "30_11_8_2_*_2023"
+    #                     },
+    #                     "dagid": "DAG1675743944983",
+    #                     "periodic_run_name": "test2023-02-0815:13:56",
+    #                     "MLFLOW_TRACKING_URI": "infinstor://mlflow.xyz.com",
+    #                     "MLFLOW_CONCURRENT_URI": "https://concurrent.xyz.com",
+    #                     "MLFLOW_TRACKING_TOKEN": "eyJraW...",
+    #                     "experiment_id": "30"
+    #                   }
+    #        username : 'test-xxxx'
+    # periodicRunName : 'test2023-02-0815:13:56'
+    #     customToken : 'Custom 9d08473a-...'
     item={
         'username': {'S': cognito_username},
         'periodicRunName': {'S': periodic_run_name},
