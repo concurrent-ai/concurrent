@@ -273,13 +273,15 @@ for file in certs-cft.json mlflow-parallels-cft-template.yaml mlflow-parallels-c
     aws s3 cp $file s3://concurrentdist/cft/parallels-cft/"$NEW_CFT_VERSION"/$file
 done;
 
+echo "{" > /tmp/latest-software-versions.json.$$
+echo "  \"cft_version\": \"$NEW_CFT_VERSION\"," >> /tmp/latest-software-versions.json.$$
+echo "  \"concurrent_lambdas\": \"$NEW_CONCURRENT_LAMBDAS\"," >> /tmp/latest-software-versions.json.$$
+echo "  \"concurrent_ui\": \"$NEW_CONCURRENT_UI\"" >> /tmp/latest-software-versions.json.$$
+echo "}" >> /tmp/latest-software-versions.json.$$
+aws s3 cp /tmp/latest-software-versions.json.$$ s3://concurrentdist/cft/parallels-cft/"$NEW_CFT_VERSION"/software-versions.json
+
 if [ "$UPDATE_VERSION_JSON" == "true" ] ; then
   echo "Updating s3://concurrentdist/cft/parallels-cft/latest-software-versions.json"
-  echo "{" > /tmp/latest-software-versions.json.$$
-  echo "  \"cft_version\": \"$NEW_CFT_VERSION\"," >> /tmp/latest-software-versions.json.$$
-  echo "  \"concurrent_lambdas\": \"$NEW_CONCURRENT_LAMBDAS\"," >> /tmp/latest-software-versions.json.$$
-  echo "  \"concurrent_ui\": \"$NEW_CONCURRENT_UI\"" >> /tmp/latest-software-versions.json.$$
-  echo "}" >> /tmp/latest-software-versions.json.$$
   aws s3 cp /tmp/latest-software-versions.json.$$ s3://concurrentdist/cft/parallels-cft/latest-software-versions.json
 else
   echo "Not updating s3://concurrentdist/cft/parallels-cft/latest-software-versions.json"

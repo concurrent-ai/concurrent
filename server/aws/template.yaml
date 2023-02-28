@@ -1034,6 +1034,37 @@ Resources:
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
           STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
+  getlambdaconfiguration: # no _ in name. This is a custom REST API, not really an MLflow API
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: get_lambda_configuration.get_lambda_configuration
+      CodeUri: lambdas/.
+      Description: >-
+       get basic info the lambda configuration
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/concurrent/get_lambda_configuration
+            Method: ANY
+            Auth:
+              Authorizer: NONE
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
    
 Outputs:
   MlflowParallelsApiId:
