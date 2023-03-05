@@ -16,6 +16,7 @@ import subprocess
 import kubernetes.client
 from kubernetes import client, config
 import dpath
+from datetime import datetime
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -37,41 +38,8 @@ def parse_mount_request(data):
     return req['mount_path'], req['mount_spec'], shadow_path, use_cache
 
 
-def check_pid(pid):
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False
-
-
-##Returns true if any task is active
-def check_pids():
-    task_processes = []
-    for proc in psutil.process_iter():
-        pid = proc.pid
-        with open('/proc/' + str(pid) + '/cmdline') as inf:
-            cmdline = inf.read()
-            if 'mount_main' in cmdline or 'mount_service' in cmdline:
-                continue
-            if 'python' in cmdline:
-                task_processes.append(pid)
-
-    if not task_processes:
-        return False
-
-    some_tasks_active = False
-    for pid in task_processes:
-        alive = check_pid(pid)
-        if alive:
-            some_tasks_active = True
-            break
-    return some_tasks_active
-
-
 def print_info(*args):
-    print(*args)
-
+    print(str(datetime.utcnow()), *args, flush=True)
 
 def mount_service_ready():
     ##Create empty marker file
@@ -245,57 +213,40 @@ def log_describe_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, p
         return
 
 def fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name, pod_namespace):
-    pod_info:client.V1Pod = k8s_client.read_namespaced_pod(pod_name, pod_namespace)
-    pod_phase = pod_info.status.phase
-    print("pod_phase: ", pod_phase)
-    if pod_info.spec.containers[1].name.startswith('sidecar-'):
-        side_car_container_name = pod_info.spec.containers[1].name
-        task_container_name = pod_info.spec.containers[0].name
-    else:
-        task_container_name = pod_info.spec.containers[1].name
-        side_car_container_name = pod_info.spec.containers[0].name
-    if pod_phase:
-        if pod_phase == 'Pending': 
-            logger.info("{} is in Pending phase. Waiting".format(pod_name))
-            log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
-            upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/run-logs.txt",
-                                container_name=task_container_name)
-            upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, f"/tmp/sidecar-logs.txt",
-                                container_name=side_car_container_name)
-        elif pod_phase == 'Running':
-            logger.info("{} is in Running phase. Waiting".format(pod_name))
-            log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
-            upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/run-logs.txt",
-                                container_name=task_container_name)
-            upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/sidecar-logs.txt",
-                                container_name=side_car_container_name)
-        elif pod_phase == 'Succeeded':
-            logger.info("{} is in Succeeded phase".format(pod_name))
-            time.sleep(5)  # wait for a few seconds, without which the full logs are not fetched            
-            log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
-            upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/run-logs.txt",
-                                container_name=task_container_name)
-            time.sleep(5)  # wait for a few seconds, without which the full logs are not fetched            
-            upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/sidecar-logs.txt",
-                                container_name=side_car_container_name)
-        elif pod_phase == 'Failed':
-            logger.info("{} is in Failed phase".format(pod_name))
-            time.sleep(5)  # wait for a few seconds, without which the full logs are not fetched            
-            log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
-            upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/run-logs.txt",
-                                container_name=task_container_name)
-            time.sleep(5)  # wait for a few seconds, without which the full logs are not fetched            
-            upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/sidecar-logs.txt",
-                                container_name=side_car_container_name)
-        elif pod_phase == 'Unknown':
-            logger.warning("{} is in Unknown phase".format(pod_name))
-            log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
+    try:
+        pod_info:client.V1Pod = k8s_client.read_namespaced_pod(pod_name, pod_namespace)
+        if pod_info.spec.containers[1].name.startswith('sidecar-'):
+            sidecar_index = 1
+            task_index = 0
         else:
-            logger.warning("{} is in unfamiliar phase {}".format(pod_name, pod_phase))
-            log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
-    else:
-        return
-
+            sidecar_index = 0
+            task_index = 1
+        task_container_name = pod_info.spec.containers[task_index].name
+        side_car_container_name = pod_info.spec.containers[sidecar_index].name
+        log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
+        upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/run-logs.txt",
+                            container_name=task_container_name)
+        upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, f"/tmp/sidecar-logs.txt",
+                            container_name=side_car_container_name)
+        task_container_status = pod_info.status
+        container_statuses = task_container_status.container_statuses
+        task = container_statuses[task_index]
+        task_container_state = task.state
+        if task_container_state.running:
+            print(f"Task container is in running state. Continuing to loop")
+            return True
+        elif task_container_state.terminated:
+            print(f"Task container is in terminated state. Exiting loop")
+            return False
+        elif task_container_state.waiting:
+            print(f"Task container is in waiting state. Continuing to loop")
+            return True
+        else:
+            print(f"Task container is in unknown state. Continuing to loop")
+            return True
+    except Exception as ex:
+        print(f"fetch_upload_pod_status_logs: caught {ex}. Continuing to loop")
+        return True # continue looping
 
 def get_task_exit_code(k8s_client, pod_name, pod_namespace, num_attempt=1):
     max_attempts = 3
@@ -331,10 +282,10 @@ if __name__ == '__main__':
     pod_namespace = os.getenv('MY_POD_NAMESPACE')
     dag_execution_id = os.getenv('DAG_EXECUTION_ID')
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(10)
+        s.settimeout(15)
         s.bind((HOST, PORT))
-        print('Mount/Monitor service starting for runid {0}, and podname {1}'.format(run_id, pod_name))
-        print('Listening on port {}:{}'.format(HOST, PORT))
+        print('Mount/Monitor service starting for runid {0}, and podname {1}'.format(run_id, pod_name), flush=True)
+        print('Listening on port {}:{}'.format(HOST, PORT), flush=True)
         s.listen()
         mount_service_ready()
         while True:
@@ -342,10 +293,11 @@ if __name__ == '__main__':
             try:
                 conn, addr = s.accept()
             except socket.timeout:
+                print_info('accept timed out')
                 pass
             else:
                 with conn:
-                    print(f"Connected by {addr}")
+                    print_info(f"Connected by {addr}")
                     data = conn.recv(1024*16)
                     if not data:
                         time.sleep(1)
@@ -361,25 +313,17 @@ if __name__ == '__main__':
                         print_info('Exception in mounting: '+str(ex))
                         response = str(ex).encode('utf-8')
                     conn.send(response)
-            ##Check if tasks are alive
-            curr_time = time.time()
-            if curr_time - start_time > 30:
-                tasks_alive = check_pids()
-                if tasks_alive:
-                    if last_upload_time + 30 < curr_time:
-                        fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace)
-                        last_upload_time = curr_time
+            if not fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace):
+                print_info("Task process done, exiting mount service")
+                exitCode = get_task_exit_code(k8s_client, pod_name, pod_namespace)
+                if exitCode == 0:
+                    update_mlflow_run(run_id, "FINISHED")
                 else:
-                    print_info("Task process done, exiting mount service")
-                    exitCode = get_task_exit_code(k8s_client, pod_name, pod_namespace)
-                    if exitCode == 0:
-                        update_mlflow_run(run_id, "FINISHED")
-                    else:
-                        update_mlflow_run(run_id, "FAILED")
-                    fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace)
-                    if dag_execution_id:
-                        launch_dag_controller()
-                    else:
-                        logger.info('Not a dag execution, skip dag controller')
-                    exit(0)
+                    update_mlflow_run(run_id, "FAILED")
+                fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace)
+                if dag_execution_id:
+                    launch_dag_controller()
+                else:
+                    print_info('Not a dag execution, skip dag controller')
+                exit(0)
 
