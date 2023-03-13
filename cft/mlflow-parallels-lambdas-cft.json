@@ -73,7 +73,8 @@
     }
   },
   "Conditions": {
-    "isNotInfinstorMlflowServerType": { "Fn::Not": [ { "Fn::Equals": [ {"Ref": "MlflowServerType"}, "infinstor" ] } ] }
+    "isNotInfinstorMlflowServerType": { "Fn::Not": [ { "Fn::Equals": [ {"Ref": "MlflowServerType"}, "infinstor" ] } ] },
+    "doCreateDnsEntry": { "Fn::Not": [ { "Fn::Equals": [ { "Fn::ImportValue": "mlflow-parallels-certs:Route53HostedZoneId" }, "Unused" ] } ] }
   },
   "Resources":{
     "ServiceConfTableResource": {
@@ -356,6 +357,7 @@
     "DnsEntry": {
       "Type": "AWS::Route53::RecordSet",
       "DependsOn": "MLflowParallelsService",
+      "Condition": "doCreateDnsEntry",
       "Properties": {
           "HostedZoneId": { "Fn::ImportValue": "mlflow-parallels-certs:Route53HostedZoneId" },
           "ResourceRecords": [
