@@ -27,6 +27,11 @@
       "Type" : "String",
       "Default" : "parallels"
     },
+    "MlflowParallelsCertificateArnParam" : {
+      "Description" : "If not null, the supplied ARN will be used. Otherwise a new cert will be created",
+      "Type" : "String",
+      "Default" : "parallels"
+    },
     "MlflowServerType" : {
       "Type" : "String",
       "Description": "The Mlflow Server type that mlflow server is to work with.",
@@ -34,11 +39,13 @@
       }
   },
   "Conditions": {
-    "isNotInfinstorMlflowServerType": { "Fn::Not": [ { "Fn::Equals": [ {"Ref": "MlflowServerType"}, "infinstor" ] } ] }
+    "isNotInfinstorMlflowServerType": { "Fn::Not": [ { "Fn::Equals": [ {"Ref": "MlflowServerType"}, "infinstor" ] } ] },
+    "doCreateMlflowParallelsCertificate": { "Fn::Equals": [ {"Ref": "MlflowParallelsCertificateArnParam"}, "" ] }
   },
   "Resources":{
     "MlflowParallelsCertificate":{
       "Type":"AWS::CertificateManager::Certificate",
+      "Condition": "doCreateMlflowParallelsCertificate" ,
       "Properties":{
         "DomainName": {"Fn::Join": [ ".", [ {"Ref": "MlflowParallelsDnsName"}, {"Ref": "MlflowParallelsDomain"} ] ]},
         "CertificateTransparencyLoggingPreference" : "ENABLED",
@@ -69,6 +76,7 @@
     "MlflowParallelsCertificateARN" : {
       "Description" : "ARN of newly created certificate for mlflow.mflow-parallels_DOMAIN",
       "Value" :  { "Ref" : "MlflowParallelsCertificate" },
+      "Value" :  { "Fn::If": ["doCreateMlflowParallelsCertificate", { "Ref" : "MlflowParallelsCertificate" }, { "Ref" : "MlflowParallelsCertificateArnParam" }] },
       "Export" : {
         "Name": "mlflow-parallels-certs:MlflowParallelsCertificateARN"
       }
