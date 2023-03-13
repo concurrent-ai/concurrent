@@ -207,7 +207,7 @@ Resources:
         MlflowParallelsDomain: !Ref MlflowParallelsDomain
         MlflowServerType: !Ref MlflowServerType
         UseBoundaryPolicy: !Ref UseBoundaryPolicy
-        BoundaryPolicyARN: !If [ EmptyBoundaryPolicyArn, Unused, !Ref BoundaryPolicyARN ]
+        BoundaryPolicyARN: !If [ EmptyBoundaryPolicyArn, Unused, !Ref BoundaryPolicyARN ] # Dont change Unused to anything else, we make decisions later on based on this
         MlflowParallelsUiDnsName: !Ref MlflowParallelsUiDnsName
         MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
         CognitoUserPoolId: !Ref CognitoUserPoolId
