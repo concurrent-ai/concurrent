@@ -148,6 +148,10 @@ Parameters:
     Description: "is this a single tenant install(default) or multi-tenant"
     AllowedValues: [true,false]
     Default: true
+  MlflowParallelsCertificateArnParam:
+    Type: String
+    Description: "If not null, the provided certificate will be used. Otherwise a new cert will be created"
+    Default: ""
 Mappings:
   MlflowServerTypeMap:
     infinstor:
@@ -193,6 +197,7 @@ Resources:
         MlflowParallelsUiCertArn: !Ref MlflowParallelsUiCertArn
         MlflowParallelsDnsName: !Ref MlflowParallelsDnsName
         MlflowServerType: !Ref MlflowServerType
+        MlflowParallelsCertificateArnParam: !Ref MlflowParallelsCertificateArnParam
   cognito:
     Type: AWS::CloudFormation::Stack
     DependsOn: certs
