@@ -64,7 +64,11 @@
     "BoundaryPolicyARN" : {
       "Description" : "ARN of the boundary policy to use for the IAM Role created for the mlflow-parallels service. Ignored if UseBoundaryPolicy above is false",
       "Type" : "String"
-    }    
+    },
+    "Route53HostedZoneId" : {
+      "Description" : "The Route 53 Hosted Zone ID for the Base Domain",
+      "Type" : "String"
+    }
   },
   "Mappings" : {
     "RegionMap" : {
@@ -74,7 +78,7 @@
   },
   "Conditions": {
     "isNotInfinstorMlflowServerType": { "Fn::Not": [ { "Fn::Equals": [ {"Ref": "MlflowServerType"}, "infinstor" ] } ] },
-    "doCreateDnsEntry": { "Fn::Not": [ { "Fn::Equals": [ { "Fn::ImportValue": "mlflow-parallels-certs:Route53HostedZoneId" }, "Unused" ] } ] }
+    "doCreateDnsEntry": { "Fn::Not": [ { "Fn::Equals": [ { "Ref": "Route53HostedZoneId" }, "Unused" ] } ] }
   },
   "Resources":{
     "ServiceConfTableResource": {
@@ -359,7 +363,7 @@
       "DependsOn": "MLflowParallelsService",
       "Condition": "doCreateDnsEntry",
       "Properties": {
-          "HostedZoneId": { "Fn::ImportValue": "mlflow-parallels-certs:Route53HostedZoneId" },
+          "HostedZoneId": { "Ref": "Route53HostedZoneId" },
           "ResourceRecords": [
             {"Fn::GetAtt": [ "MLflowParallelsService", "Outputs.MlflowParallelsApiDomainName"]}
           ],
