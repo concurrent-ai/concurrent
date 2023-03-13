@@ -234,6 +234,7 @@ Resources:
         storageCredentialsTable: !Ref storageCredentialsTable
         UseBoundaryPolicy: !Ref UseBoundaryPolicy
         BoundaryPolicyARN: !Ref BoundaryPolicyARN
+        Route53HostedZoneId: !Ref Route53HostedZoneId
   staticfiles:
     Type: AWS::CloudFormation::Stack
     DependsOn: mlflowParallelsLambda
