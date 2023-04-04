@@ -48,8 +48,10 @@ def period_run(event, context):
     logger.info(os.environ)
     logger.info('## EVENT')
     logger.info(event)
+    
+    # allow invocation of period_run() from api gateway and event bridge --> sql --> period_run()
+    item = json.loads(event.get('body')) if event.get('httpMethod') else event
 
-    item = event
     periodic_run_id = item['periodic_run_id']
     logger.info('periodic_run_id=' + str(periodic_run_id))
     username = item['username']

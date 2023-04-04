@@ -1,10 +1,11 @@
+from dataclasses import dataclass
 import logging
 import json
 import os
-import uuid
 import time
 import copy
 from datetime import datetime, timezone
+from typing import Any, List
 import boto3
 from urllib.parse import urlparse, unquote
 import concurrent.futures
@@ -13,12 +14,14 @@ import base64
 import traceback
 
 from utils import get_cognito_user, get_service_conf, create_request_context, get_custom_token
-import period_run, lock_utils, dag_utils, run_project
+import lock_utils, dag_utils, run_project
 from mlflow_utils import call_create_run, fetch_run_id_info, update_run, create_experiment, \
     log_mlflow_artifact, log_params
 import ddb_mlflow_parallels_txns as ddb_txns
 
 from kubernetes.client.exceptions import ApiException
+
+#pylint: disable=logging-not-lazy,broad-except,logging-fstring-interpolation
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -69,6 +72,27 @@ def extract_run_params(body):
         run_params = json.loads(body)
     return run_params
 
+@dataclass
+class FutureDetails:    
+    f: concurrent.futures.Future 
+    """ Future for the run_project() invocation of the node with id 'nid'"""
+    nid: str
+    """ the id of the node """
+    polling_finished:bool
+    """ whether this future needs to be still polled, to check if its execution has finished or not (if earlier polling timedout, it hasn't finished execution (either successful execution or error)) """
+
+def _futures_to_be_polled(futures:List[FutureDetails]) -> List[FutureDetails]:
+    """
+    given a list of 'FutureDetails', return the list of 'futures' that need to be still polled for its finish (earlier polling resulted in a timeout)
+
+    Args:
+        futures (List[FutureDetails]): above
+
+    Returns:
+        List[FutureDetails]: see above
+    """
+    return [ fut_det for fut_det in futures if not fut_det.polling_finished ]
+    
 def execute_dag(event, context):
     logger.info('## ENVIRONMENT VARIABLES')
     logger.info(os.environ)
@@ -117,7 +141,8 @@ def execute_dag(event, context):
     print(f"cognito_username={cognito_username}, dag_id={dag_id}, dag_execution_id={dag_execution_id}")
 
     experiment_id = run_params.get('experiment_id')
-
+    
+    # if dag is already executing and execute_dag() callback invoked by executing dag's nodes
     if dag_execution_id:
         lock_key, lock_lease_time = acquire_idle_row_lock(dag_id, dag_execution_id)
         dag_exec_record = dag_utils.fetch_dag_execution_info(cognito_username, groups, dag_id, dag_execution_id)
@@ -144,7 +169,7 @@ def execute_dag(event, context):
             and dagParamsJsonRuntime['recovery'].lower() == 'true':
             dag_json = override_dag_runtime_params_for_recovery(dag_json, dagParamsJsonRuntime, dag_execution_status)
 
-    else:
+    else:  # a dag execution is starting with an invocation of execute_dag()
         dag_json = dag_utils.fetch_dag_details(cognito_username, dag_id)
         print(f"dag_json={dag_json}")
 
@@ -203,6 +228,7 @@ def execute_dag(event, context):
         log_mlflow_artifact(cognito_username, groups, auth_info, parent_run_id, dag_exec_details_artifact, '.concurrent', dag_utils.DAG_RUNTIME_ARTIFACT)
         lock_key, lock_lease_time = acquire_idle_row_lock(dag_id, dag_execution_id)
 
+    # if lambda was invoked using http (api gateway), then make an asynchronous invocation using boto3 lambda invocation to avoid a blocked call
     if httpOperation:
         release_row_lock(lock_key)
         logger.info("Invoke a separate lambda asynchronously and return")
@@ -220,6 +246,7 @@ def execute_dag(event, context):
         logger.info("A separate lambda invoked, returning http response: " + str(rv))
         return respond(None, rv)
 
+    # if lambda was invoked directly using boto3 client (async call above).  This is the asynchronous execution of the lambda that happens after a http invocation above
     try:
         incoming_dag_graph, outgoing_graph, node_dict, edge_dict = get_graph_struct(dag_json)
         node_statuses, lock_lease_time = fetch_node_status(cognito_username, groups, auth_info, node_dict, dag_execution_status['nodes'],
@@ -251,8 +278,10 @@ def execute_dag(event, context):
                 nodes_group_by_original[n] = [n]
 
         print(f'Nodes ready to run {ready_to_run}')
+        executor:concurrent.futures.ThreadPoolExecutor
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = []
+            # list of tuples of (Future, node_id, finished_polling).  The Future represents the asynchronous run_project() call for the node with id=node_id
+            futures:List[FutureDetails] = []
             try:
                 for orig_node, node_list_to_run in nodes_group_by_original.items():
                     ## All nodes in node_list_to_run are identical except input split,
@@ -282,7 +311,7 @@ def execute_dag(event, context):
                     run_input_spec_map_encoded = base64.b64encode(zlib.compress(
                         json.dumps(run_input_spec_map).encode('utf-8'))).decode('utf-8')
 
-                    launch_future = executor.submit(launch_bootstrap_run_project, cognito_username, orig_node, auth_info,
+                    launch_future:concurrent.futures.Future = executor.submit(launch_bootstrap_run_project, cognito_username, orig_node, auth_info,
                                                     run_input_spec_map_encoded, artifact_uri, xformname, xform_params,
                                                     experiment_id, periodic_run_frequency, instance_type,
                                                     periodic_run_name, dag_execution_info, xform_path=xform_path,
@@ -290,13 +319,37 @@ def execute_dag(event, context):
                                                     parallelization=parallelization, k8s_params=k8s_params,
                                                     periodic_run_start_time=periodic_run_start_time,
                                                     periodic_run_end_time=periodic_run_end_time)
-                    futures.append((launch_future, n))
-                for f, nid in futures:
-                    logger.debug("Look for future result for node {}".format(nid))
+                    futures.append(FutureDetails(launch_future, n, False))
+                
+                fut_to_be_polled:List[FutureDetails] = _futures_to_be_polled(futures)
+                # do not poll and wait for each future to complete execution (either a return value or an exception raised), if future.result() 
+                # times out.  This is because the lock is coarse grained (obtained at the entry to execute_dag() and released when it exits) and 
+                # waiting for the completion of a future (call to run_project() may take 10 minutes to finish execution, say if api server is 
+                # unreachable) may lock out all other callers of execute_dag() for the same dag_id.  Essentially, the call back from the k8s pod 
+                # into execute_dag() can be locked out and will fail.  Downside of not polling until completion is that the result of the long 
+                # running futures will not be logged: either their return value or any exceptions they raise.
+                # while fut_to_be_polled:
+                logger.info(f"fut_to_be_polled={fut_to_be_polled}")
+                for future_dets in fut_to_be_polled:
+                    f, nid, polling_finished = future_dets.f, future_dets.nid, future_dets.polling_finished
+                    logger.info("Polling future for result from node with nid={}".format(nid))
+                    # we have finished polling if future.result() returns any value or if it raises any exception other than TimeoutError
+                    polling_finished = True
                     try:
-                        f.result(timeout=30)
-                    except concurrent.futures.TimeoutError as tx:
-                        logger.warning('Ignoring timeout for nid ' + str(nid))
+                        # Returns:
+                        #     The result of the call that the future represents.
+                        # Raises:
+                        #     CancelledError: If the future was cancelled.
+                        #     TimeoutError: If the future didn't finish executing before the given
+                        #         timeout.
+                        #     Exception: If the call raised then that exception will be raised.
+                        logger.info(f"checking future for nid={nid}")
+                        retval:Any = f.result(timeout=30); 
+                        logger.info(f"future for nid={nid} returned value={retval}")
+                    except concurrent.futures.TimeoutError:
+                        logger.warning(f'Timedout when polling for result from node with nid = {nid}.  Will try polling again')
+                        # we have finished polling if future.result() returns any value or if it raises any exception other than TimeoutError
+                        polling_finished = False
                     except ApiException as apex:
                         emsg = None
                         st = -1
@@ -308,19 +361,24 @@ def execute_dag(event, context):
                                 if jsb['details']['kind'] == 'namespaces':
                                     emsg = 'Namespace does not exist'
                                     logger.warning('Namespace does not exist')
-                            except:
-                                emsg = 'Unable to parse error body into json'
-                                logger.warning('Unable to parse error body into json')
+                            except Exception as e:
+                                emsg = f'Unable to parse error body into json: e={e}'
+                                logger.warning(f'Unable to parse error body into json: e={e}', exc_info=e)
                         if nid in dag_execution_status['nodes']:
-                            logger.warning('Marking run_id ' + dag_execution_status['nodes'][nid]['run_id'] + ' as FAILED')
-                            dag_execution_status['nodes'][nid]['status'] = 'FAILED'
-                            update_run(cognito_username, groups, auth_info, dag_execution_status['nodes'][nid]['run_id'], 'FAILED')
-                            log_mlflow_artifact(cognito_username, groups, auth_info, dag_execution_status['nodes'][nid]['run_id'],
-                                    {"status": apex.status, "message": str(emsg), "body": str(apex.body), "reason": str(apex.reason)},
-                                    '.concurrent/logs', 'run-logs.txt')
+                            _update_dag_status_mlflow_run_status_upload_logs(cognito_username, groups, dag_execution_status, auth_info, nid, {"status": apex.status, "message": str(emsg), "body": str(apex.body), "reason": str(apex.reason)})
                         else:
                             logger.warning('Hmm. ' + str(nid) + ' not in dag_execution_status?')
+                    except Exception as e:
+                        logger.error(f"Caught exception e={e} for nid={nid}",exc_info=e)
+                        _update_dag_status_mlflow_run_status_upload_logs(cognito_username, groups, dag_execution_status, auth_info, nid, {"message": str(e)})
+
+                    # update the future with polling finished or not
+                    future_dets.polling_finished = polling_finished
+                    # time.sleep(3)
+
                     lock_lease_time = renew_lock(lock_key, lock_lease_time)
+                
+                # fut_to_be_polled = _futures_to_be_polled(futures)
             except Exception as ex:
                 logger.warning("Failure in launching nodes: " + str(ex))
                 logger.warning(traceback.format_exc())
@@ -344,6 +402,14 @@ def execute_dag(event, context):
         raise e
     finally:
         release_row_lock(lock_key)
+
+def _update_dag_status_mlflow_run_status_upload_logs(cognito_username, groups, dag_execution_status, auth_info, nid, err_dict:dict):
+    logger.warning('Marking run_id ' + dag_execution_status['nodes'][nid]['run_id'] + ' as FAILED')
+    dag_execution_status['nodes'][nid]['status'] = 'FAILED'
+    update_run(cognito_username, groups, auth_info, dag_execution_status['nodes'][nid]['run_id'], 'FAILED')
+    log_mlflow_artifact(cognito_username, groups, auth_info, dag_execution_status['nodes'][nid]['run_id'], 
+                                            err_dict,
+                                            '.concurrent/logs', 'run-logs.txt')
 
 
 def acquire_idle_row_lock(dag_id, dag_execution_id):
@@ -410,19 +476,19 @@ def get_graph_struct(dag_json):
     outgoing_graph = dict()
     node_dict = dict()
     for entry in dag_json['nodes']:
-        node = entry['id']
-        incoming_graph[node] = list()
-        outgoing_graph[node] = list()
-        node_dict[node] = entry
+        node_id = entry['id']
+        incoming_graph[node_id] = list()
+        outgoing_graph[node_id] = list()
+        node_dict[node_id] = entry
 
     edge_dict = {}
     for edge in dag_json['edges']:
-        a = edge['source']
-        b = edge['target']
+        a_id = edge['source']
+        b_id = edge['target']
 
-        edge_dict[(a,b)] = edge
-        incoming_graph[b].append(a)
-        outgoing_graph[a].append(b)
+        edge_dict[(a_id,b_id)] = edge
+        incoming_graph[b_id].append(a_id)
+        outgoing_graph[a_id].append(b_id)
 
     return incoming_graph, outgoing_graph, node_dict, edge_dict
 
