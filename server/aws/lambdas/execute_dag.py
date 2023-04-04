@@ -79,9 +79,18 @@ class FutureDetails:
     nid: str
     """ the id of the node """
     polling_finished:bool
-    """ whether polling to check this future is finished or not """
+    """ whether this future needs to be still polled, to check if its execution has finished or not (if earlier polling timedout, it hasn't finished execution (either successful execution or error)) """
 
 def _futures_to_be_polled(futures:List[FutureDetails]) -> List[FutureDetails]:
+    """
+    given a list of 'FutureDetails', return the list of 'futures' that need to be still polled for its finish (earlier polling resulted in a timeout)
+
+    Args:
+        futures (List[FutureDetails]): above
+
+    Returns:
+        List[FutureDetails]: see above
+    """
     return [ fut_det for fut_det in futures if not fut_det.polling_finished ]
     
 def execute_dag(event, context):
@@ -313,57 +322,63 @@ def execute_dag(event, context):
                     futures.append(FutureDetails(launch_future, n, False))
                 
                 fut_to_be_polled:List[FutureDetails] = _futures_to_be_polled(futures)
-                while fut_to_be_polled:
-                    logger.info(f"fut_to_be_polled={fut_to_be_polled}")
-                    for future_dets in fut_to_be_polled:
-                        f, nid, polling_finished = future_dets.f, future_dets.nid, future_dets.polling_finished
-                        logger.info("Polling future for result from node with nid={}".format(nid))
+                # do not poll and wait for each future to complete execution (either a return value or an exception raised), if future.result() 
+                # times out.  This is because the lock is coarse grained (obtained at the entry to execute_dag() and released when it exits) and 
+                # waiting for the completion of a future (call to run_project() may take 10 minutes to finish execution, say if api server is 
+                # unreachable) may lock out all other callers of execute_dag() for the same dag_id.  Essentially, the call back from the k8s pod 
+                # into execute_dag() can be locked out and will fail.  Downside of not polling until completion is that the result of the long 
+                # running futures will not be logged: either their return value or any exceptions they raise.
+                # while fut_to_be_polled:
+                logger.info(f"fut_to_be_polled={fut_to_be_polled}")
+                for future_dets in fut_to_be_polled:
+                    f, nid, polling_finished = future_dets.f, future_dets.nid, future_dets.polling_finished
+                    logger.info("Polling future for result from node with nid={}".format(nid))
+                    # we have finished polling if future.result() returns any value or if it raises any exception other than TimeoutError
+                    polling_finished = True
+                    try:
+                        # Returns:
+                        #     The result of the call that the future represents.
+                        # Raises:
+                        #     CancelledError: If the future was cancelled.
+                        #     TimeoutError: If the future didn't finish executing before the given
+                        #         timeout.
+                        #     Exception: If the call raised then that exception will be raised.
+                        logger.info(f"checking future for nid={nid}")
+                        retval:Any = f.result(timeout=30); 
+                        logger.info(f"future for nid={nid} returned value={retval}")
+                    except concurrent.futures.TimeoutError:
+                        logger.warning(f'Timedout when polling for result from node with nid = {nid}.  Will try polling again')
                         # we have finished polling if future.result() returns any value or if it raises any exception other than TimeoutError
-                        polling_finished = True
-                        try:
-                            # Returns:
-                            #     The result of the call that the future represents.
-                            # Raises:
-                            #     CancelledError: If the future was cancelled.
-                            #     TimeoutError: If the future didn't finish executing before the given
-                            #         timeout.
-                            #     Exception: If the call raised then that exception will be raised.
-                            logger.info(f"checking future for nid={nid}")
-                            retval:Any = f.result(timeout=30); 
-                            logger.info(f"future for nid={nid} returned value={retval}")
-                        except concurrent.futures.TimeoutError:
-                            logger.warning(f'Timedout when polling for result from node with nid = {nid}.  Will try polling again')
-                            # we have finished polling if future.result() returns any value or if it raises any exception other than TimeoutError
-                            polling_finished = False
-                        except ApiException as apex:
-                            emsg = None
-                            st = -1
-                            if apex.status == 404:
-                                st = 404
-                                logger.warning("404 not found error while submitting bootstrap for " + str(nid))
-                                try:
-                                    jsb = json.loads(apex.body)
-                                    if jsb['details']['kind'] == 'namespaces':
-                                        emsg = 'Namespace does not exist'
-                                        logger.warning('Namespace does not exist')
-                                except Exception as e:
-                                    emsg = f'Unable to parse error body into json: e={e}'
-                                    logger.warning(f'Unable to parse error body into json: e={e}', exc_info=e)
-                            if nid in dag_execution_status['nodes']:
-                                _update_dag_status_mlflow_run_status_upload_logs(cognito_username, groups, dag_execution_status, auth_info, nid, {"status": apex.status, "message": str(emsg), "body": str(apex.body), "reason": str(apex.reason)})
-                            else:
-                                logger.warning('Hmm. ' + str(nid) + ' not in dag_execution_status?')
-                        except Exception as e:
-                            logger.error(f"Caught exception e={e} for nid={nid}",exc_info=e)
-                            _update_dag_status_mlflow_run_status_upload_logs(cognito_username, groups, dag_execution_status, auth_info, nid, {"message": str(e)})
+                        polling_finished = False
+                    except ApiException as apex:
+                        emsg = None
+                        st = -1
+                        if apex.status == 404:
+                            st = 404
+                            logger.warning("404 not found error while submitting bootstrap for " + str(nid))
+                            try:
+                                jsb = json.loads(apex.body)
+                                if jsb['details']['kind'] == 'namespaces':
+                                    emsg = 'Namespace does not exist'
+                                    logger.warning('Namespace does not exist')
+                            except Exception as e:
+                                emsg = f'Unable to parse error body into json: e={e}'
+                                logger.warning(f'Unable to parse error body into json: e={e}', exc_info=e)
+                        if nid in dag_execution_status['nodes']:
+                            _update_dag_status_mlflow_run_status_upload_logs(cognito_username, groups, dag_execution_status, auth_info, nid, {"status": apex.status, "message": str(emsg), "body": str(apex.body), "reason": str(apex.reason)})
+                        else:
+                            logger.warning('Hmm. ' + str(nid) + ' not in dag_execution_status?')
+                    except Exception as e:
+                        logger.error(f"Caught exception e={e} for nid={nid}",exc_info=e)
+                        _update_dag_status_mlflow_run_status_upload_logs(cognito_username, groups, dag_execution_status, auth_info, nid, {"message": str(e)})
 
-                        # update the future with polling finished or not
-                        future_dets.polling_finished = polling_finished
-                        time.sleep(3)
+                    # update the future with polling finished or not
+                    future_dets.polling_finished = polling_finished
+                    # time.sleep(3)
 
-                        lock_lease_time = renew_lock(lock_key, lock_lease_time)
-                    
-                    fut_to_be_polled = _futures_to_be_polled(futures)
+                    lock_lease_time = renew_lock(lock_key, lock_lease_time)
+                
+                # fut_to_be_polled = _futures_to_be_polled(futures)
             except Exception as ex:
                 logger.warning("Failure in launching nodes: " + str(ex))
                 logger.warning(traceback.format_exc())
