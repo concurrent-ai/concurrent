@@ -68,6 +68,8 @@ fail_exit() {
   exit 255
 }
 
+# trap: trap [-lp] [[arg] signal_spec ...]
+#
 # If a SIGNAL_SPEC is EXIT (0) ARG is executed on exit from the shell.  
 # If a SIGNAL_SPEC is DEBUG, ARG is executed before every simple command.  
 # If a SIGNAL_SPEC is RETURN, ARG is executed each time a shell function or a  script run by the . or source builtins finishes executing.  
