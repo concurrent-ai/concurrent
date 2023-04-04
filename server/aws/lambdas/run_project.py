@@ -30,7 +30,7 @@ from tempfile import NamedTemporaryFile, mkstemp
 
 from utils import get_service_conf, get_subscriber_info, get_cognito_user, get_custom_token
 from kube_clusters import query_user_accessible_clusters
-from kubernetes import client, config, dynamic
+from kubernetes import config
 from kubernetes.client import models as k8s
 from kubernetes.client import api_client, Configuration
 from kubernetes.client.rest import ApiException
@@ -38,7 +38,7 @@ import kubernetes.utils
 import yaml
 
 import utils
-# pylint: disable=logging-not-lazy,bad-indentation,broad-except
+# pylint: disable=logging-not-lazy,bad-indentation,broad-except,logging-fstring-interpolation
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -118,7 +118,7 @@ def lookup_gke_cluster_config(cognito_username, groups, kube_cluster_name, subs)
     return gke_location_type, gke_location, gke_project_id, gke_creds
 
 
-def run_project_gke(cognito_username, groups, context, subs, item, service_conf): # pylint: disable=unused-argument
+def run_project_gke(cognito_username, groups, context, subs, item, service_conf:dict): # pylint: disable=unused-argument
     logger.info("run_project_gke: Running in kube. item=" + str(item) + ', service_conf=' + str(service_conf))
     if not 'kube_context' in item:
         return respond(ValueError('Project Backend Configuration must include kube_context'))
@@ -127,7 +127,7 @@ def run_project_gke(cognito_username, groups, context, subs, item, service_conf)
     gke_location_type, gke_location, gke_project_id, gke_creds \
         = lookup_gke_cluster_config(cognito_username, groups, gke_cluster_name, subs)
 
-    fd, creds_file_path = mkstemp(suffix='.json', text=True)
+    _, creds_file_path = mkstemp(suffix='.json', text=True)
     with open(creds_file_path, 'w') as tmp_creds_file:
         print('{}'.format(gke_creds), file=tmp_creds_file)
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = creds_file_path
@@ -150,11 +150,17 @@ def run_project_gke(cognito_username, groups, context, subs, item, service_conf)
     configuration.ssl_ca_cert = ca_cert.name
     configuration.api_key_prefix['authorization'] = 'Bearer'
     configuration.api_key['authorization'] = creds.token
+    # if GKE cluster is in 'RECONCILING' state, api server may not be reachable.  Wait for the api server to recover for 10 minutes.  Note that execute_dag(), which calls run_project(), will not retry this call again
+    # https://github.com/kubernetes-client/python/pull/780; https://github.com/swagger-api/swagger-codegen/pull/9284/files
+    api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 5  # each retry timeout is 2 minutes (from faiure logs); so 10 minutes
+    configuration.retries = api_server_retries
 
-    cfg = kubernetes_client.ApiClient(configuration)
-    k8s_client = kubernetes_client.BatchV1Api(cfg)
-    ret = k8s_client.list_job_for_all_namespaces()
-    logger.info(ret)
+    # cfg = kubernetes_client.ApiClient(configuration)
+    # k8s_client = kubernetes_client.BatchV1Api(cfg)        
+    # # comment since it can overload the api server if there are 1000s of jobs.  
+    # # Raises ApiException if can't connect and times out??
+    # ret:kubernetes_client.V1JobList = k8s_client.list_job_for_all_namespaces()
+    # logger.info(utils.filter_empty_in_dict_list_scalar(ret.to_dict()))
 
     _kickoff_bootstrap('gke', response.endpoint, response.master_auth.cluster_ca_certificate, None,
                     item, None, None, None, None, None, None, None, None, None,
@@ -166,12 +172,12 @@ def _create_prio_class(con, name, val, global_default, preemption_policy=None):
     api_resp = None
     api_instance = kubernetes_client.SchedulingV1Api(api_client=api_client.ApiClient(configuration=con))
     try:
-        api_resp = api_instance.read_priority_class(name)
+        api_resp:kubernetes_client.V1PriorityClass = api_instance.read_priority_class(name)
     except ApiException as ae:
         print('While reading ' + str(name) + ', caught ' + str(ae))
         _do_create_prio_class(con, name, val, global_default, preemption_policy=preemption_policy)
     else:
-        print('Successfully read priority class ' + str(name) + ': ' + str(api_resp))
+        print(f'Successfully read priority class name={name} api_resp={ yaml.safe_dump(utils.filter_empty_in_dict_list_scalar(api_resp.to_dict()))}')
         return
 
 def _do_create_prio_class(con, name, val, global_default, preemption_policy=None):
@@ -180,11 +186,11 @@ def _do_create_prio_class(con, name, val, global_default, preemption_policy=None
     body = kubernetes_client.V1PriorityClass(value=val, metadata=kubernetes_client.V1ObjectMeta(name=name),
                                              global_default=global_default, preemption_policy=preemption_policy)
     try:
-        api_resp = api_instance.create_priority_class(body)
+        api_resp:kubernetes_client.V1PriorityClass = api_instance.create_priority_class(body)
     except ApiException as ae:
         print('While creating ' + str(name) + ', caught ' + str(ae))
     else:
-        print('Successfully created priority class ' + str(name) + ': ' + str(api_resp))
+        print(f'Successfully created priority class name = {name}; api_resp = { yaml.safe_dump(utils.filter_empty_in_dict_list_scalar(api_resp.to_dict())) }')
 
 def _create_prio_classes(con):
     _create_prio_class(con, 'concurrent-high-non-preempt-prio', 1000, False, preemption_policy='Never')
@@ -412,13 +418,11 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         )
     )
     try:
-        arv = core_v1_api.create_namespaced_pod(namespace=namespace,body=pod)
+        arv:kubernetes_client.V1Pod = core_v1_api.create_namespaced_pod(namespace=namespace,body=pod)
     except Exception as ex:
         logger.error('kickoff_bootstrap: create_namespaced_pod of bootstrap caught ' + str(ex))
     else:
-        logger.info('kickoff_bootstrap: create_namespaced_pod of bootstrap returned api_ver=' + str(arv.api_version)
-            + ', kind=' + str(arv.kind) + ', metadata=' + str(arv.metadata)
-            + ', spec=' + str(arv.spec) + ', status=' + str(arv.status))
+        logger.info(f'kickoff_bootstrap: create_namespaced_pod of bootstrap returned api_ver={ yaml.safe_dump(utils.filter_empty_in_dict_list_scalar(arv.to_dict())) }')
 
 
 def lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, subs):
@@ -470,7 +474,7 @@ def _lookup_hpe_cluster_config(cognito_username:str, groups:list, kube_cluster_n
         subs['hpeContainerRegistryUri']['S'] if 'hpeContainerRegistryUri' in subs else None
     )
 
-def _run_project_hpe(cognito_username:str, groups, context, subs:dict, reqbody:dict, service_conf:dict):
+def _run_project_hpe(cognito_username:str, groups, context, subs:dict, reqbody:dict, service_conf:dict):  #pylint: disable=unused-argument
     """
     _summary_
 
@@ -493,6 +497,10 @@ def _run_project_hpe(cognito_username:str, groups, context, subs:dict, reqbody:d
         
     # create a kube config from its string representation
     kube_config:Configuration = Configuration()
+    # api server may not be reachable.  Wait for the api server to recover for 10 minutes.  Note that execute_dag(), which calls run_project(), will not retry this call again
+    # https://github.com/kubernetes-client/python/pull/780; https://github.com/swagger-api/swagger-codegen/pull/9284/files
+    api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 5  # each retry timeout is 2 minutes (from faiure logs); so 10 minutes    
+    kube_config.retries = api_server_retries
     # Loads authentication and cluster information from kube-config file and stores them in kubernetes.client.configuration.
     # config_file: Name of the kube-config file.
     # client_configuration: The kubernetes.client.Configuration to set configs to.
@@ -502,7 +510,7 @@ def _run_project_hpe(cognito_username:str, groups, context, subs:dict, reqbody:d
     
     return respond(None, {})
 
-def run_project_eks(cognito_username, groups, context, subs, item, service_conf):
+def run_project_eks(cognito_username, groups, context, subs, item, service_conf):   # pylint: disable=unused-argument
     logger.info("run_project: Running in kube. item=" + str(item) + ', service_conf=' + str(service_conf))
     if not 'kube_context' in item:
         return respond(ValueError('Project Backend Configuration must include kube_context'))
@@ -545,7 +553,7 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
     print('run_mlflow_project_kube: cluster_arn=' + str(cluster_arn))
 
     # write kube config file
-    cdir = tempfile.mkdtemp();
+    cdir = tempfile.mkdtemp()
     with open(os.path.join(cdir, 'config'), "w") as fh:
         fh.write('apiVersion: v1\n')
         fh.write('clusters:\n')
@@ -581,7 +589,11 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
         fh.write('        - name: "EKS_CLUSTER_NAME"\n')
         fh.write('          value: "' + kube_cluster_name + '"\n')
     logger.debug(open(os.path.join(cdir, 'config')).read())
-    con = type.__call__(Configuration)
+    con:Configuration = type.__call__(Configuration)
+    # api server may not be reachable.  Wait for the api server to recover for 10 minutes.  Note that execute_dag(), which calls run_project(), will not retry this call again
+    # https://github.com/kubernetes-client/python/pull/780; https://github.com/swagger-api/swagger-codegen/pull/9284/files
+    api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 5  # each retry timeout is 2 minutes (from faiure logs); so 10 minutes
+    con.retries = api_server_retries
     # con.debug = True
     config.load_kube_config(config_file=os.path.join(cdir, 'config'), client_configuration=con)
     # hand off job to kube. First, delete existing ConfigMap, create new ConfigMap
@@ -608,7 +620,7 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
 
     
 def setup_secrets(cognito_username:str, backend_type:str, core_api_instance:kubernetes_client.CoreV1Api, job_namespace, tokfile_contents, credsfile_contents,
-                  gce_keyfile_contents, hpe_cluster_config:HpeClusterConfig, run_input_spec_map_encoded, subs:dict, cmap:kubernetes_client.V1ConfigMap) -> Tuple[List[kubernetes_client.V1VolumeMount], List[kubernetes_client.V1Volume]]:
+                  gce_keyfile_contents, hpe_cluster_config:HpeClusterConfig, run_input_spec_map_encoded, subs:dict, cmap:kubernetes_client.V1ConfigMap) -> Tuple[List[kubernetes_client.V1VolumeMount], List[kubernetes_client.V1Volume]]:   # pylint: disable=unused-argument
     """
     _summary_
 
@@ -638,7 +650,7 @@ def setup_secrets(cognito_username:str, backend_type:str, core_api_instance:kube
     token_secret_name = 'parallelstokenfile-' + unique_suffix
     try:
         core_api_instance.delete_namespaced_secret(namespace=job_namespace, name=token_secret_name)
-    except:
+    except Exception:
         pass
 
     # - apiVersion: v1
@@ -646,7 +658,7 @@ def setup_secrets(cognito_username:str, backend_type:str, core_api_instance:kube
     #     # custom token
     #     token: xxxx
     # kind: Secret
-    # type: Opaque
+    # Type: Opaque
     # metadata:
     #     creationTimestamp: "2022-07-17T21:18:55Z"
     #     name: parallelstokenfile
@@ -670,12 +682,12 @@ def setup_secrets(cognito_username:str, backend_type:str, core_api_instance:kube
     #     namespace: default
     #     resourceVersion: "13575017"
     #     uid: ca514c11-42c9-4f8b-bdb1-04ec98f59139
-    # type: Opaque
+    # Type: Opaque
     aws_creds = base64.b64encode(credsfile_contents.encode('utf-8')).decode('utf-8')
     awscredsfilename = 'awscredsfile-' + unique_suffix
     try:
         core_api_instance.delete_namespaced_secret(namespace=job_namespace, name=awscredsfilename)
-    except:
+    except Exception:
         pass
     sec1 = kubernetes_client.V1Secret()
     sec1.metadata = kubernetes_client.V1ObjectMeta(name=awscredsfilename, namespace=job_namespace)
@@ -687,7 +699,7 @@ def setup_secrets(cognito_username:str, backend_type:str, core_api_instance:kube
     gce_keyfile = base64.b64encode(gce_keyfile_contents.encode('utf-8')).decode('utf-8')
     try:
         core_api_instance.delete_namespaced_secret(namespace=job_namespace, name=gce_secret_name)
-    except:
+    except Exception:
         pass
     sec2 = kubernetes_client.V1Secret()
     sec2.metadata = kubernetes_client.V1ObjectMeta(name=gce_secret_name, namespace=job_namespace)
@@ -695,14 +707,14 @@ def setup_secrets(cognito_username:str, backend_type:str, core_api_instance:kube
     sec2.data = {'key.json': gce_keyfile}
     core_api_instance.create_namespaced_secret(namespace=job_namespace, body=sec2)
     
+    hpe_secret_name = 'hpekubeconfig-' + unique_suffix
     # setup creds for HPE.  
     # first delete the current secret
     try:
         core_api_instance.delete_namespaced_secret(namespace=job_namespace, name=hpe_secret_name)
-    except:
+    except Exception:
         pass
     # then create the secret
-    hpe_secret_name = 'hpekubeconfig-' + unique_suffix
     # Note: hpe_cluster_config cannot be None.
     hpe_cred_secret_yaml:io.StringIO = io.StringIO(f"""
 apiVersion: v1
@@ -718,12 +730,12 @@ metadata:
     namespace: {job_namespace}
         """)
     res_list:list = kubernetes.utils.create_from_yaml(core_api_instance.api_client, yaml_objects=[yaml.safe_load(hpe_cred_secret_yaml)], namespace=job_namespace, verbose=True)
-    logger.info(f"kubernetes.utils.create_from_yaml(): hpe_cred_secret_yaml={hpe_cred_secret_yaml}\nres_list={res_list}")
+    logger.info(f"kubernetes.utils.create_from_yaml(): hpe_cred_secret_yaml={hpe_cred_secret_yaml}\nres_list={ res_list }")
 
     taskinfo_secret_name = 'taskinfo-' + unique_suffix
     try:
         core_api_instance.delete_namespaced_secret(namespace=job_namespace, name=taskinfo_secret_name)
-    except:
+    except Exception:
         pass
     sec3 = kubernetes_client.V1Secret()
     sec3.metadata = kubernetes_client.V1ObjectMeta(name=taskinfo_secret_name, namespace=job_namespace)
@@ -735,8 +747,8 @@ metadata:
     iam_roles_anywhere_secret_name:str = None
     setup_roles_anywhere:bool = 'iamRolesAnywhereCert' in subs
     if setup_roles_anywhere:
-        cert_priv_key:str; cert_arn:str; cert:str
-        cert_priv_key, cert_arn, cert = utils.get_or_renew_and_update_iam_roles_anywhere_certs(cognito_username, subs)
+        cert_priv_key:str
+        cert_priv_key, _, _ = utils.get_or_renew_and_update_iam_roles_anywhere_certs(cognito_username, subs)
         if not cert_priv_key: raise Exception("Unable to issue certificate.  Check the logs for further details")
         
         iam_roles_anywhere_secret_name = "iam-roles-anywhere-" + unique_suffix

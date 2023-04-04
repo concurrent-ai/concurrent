@@ -115,6 +115,12 @@ def update_mlflow_run(run_id, status):
     client.set_terminated(run_id, status)
 
 def _filter_empty_in_dict_list_scalar(dict_list_scalar:Union[list, dict, Any]):
+    """
+    given a 'dict' or 'list' as input, removes all elements in these containers that are empty: scalars with None, strings that are '', lists and dicts that are empty.  Note that the filtering is in-place: modifies the passed list or dict
+
+    Args:
+        dict_list_scalar (Union[list, dict, Any]): see above
+    """
     try:
         # depth first traveral
         if isinstance(dict_list_scalar, dict):
@@ -124,7 +130,7 @@ def _filter_empty_in_dict_list_scalar(dict_list_scalar:Union[list, dict, Any]):
                 
                 # check if the 'key' is now None or empty.  If so, remove the 'key'
                 if not dict_list_scalar[k]: 
-                    # RuntimeError: dictionary changed size during iteration
+                    # cannont do dict.pop(): RuntimeError: dictionary changed size during iteration
                     # dict_list_scalar.pop(k)
                     keys_to_del.append(k)
             
@@ -136,7 +142,7 @@ def _filter_empty_in_dict_list_scalar(dict_list_scalar:Union[list, dict, Any]):
             while i < length: 
                 _filter_empty_in_dict_list_scalar(dict_list_scalar[i])
             
-                # check if element is now None or empty.  If so, remove the element from the list
+                # check if element is now None (if scalar) or empty (if list or dict).  If so, remove the element from the list
                 if not dict_list_scalar[i]:
                     dict_list_scalar.remove(dict_list_scalar[i])
                     i -= 1; length -= 1
