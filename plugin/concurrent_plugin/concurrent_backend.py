@@ -554,6 +554,8 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         job_name = job_template["metadata"]["name"]
         job_namespace = job_template["metadata"]["namespace"]
         _load_kube_context(context=kube_context)
+        kubernetes.client.configuration.retries = 10
+        print(f'run_eks_job: Overrode default kubernetes.client.configuration.retries to 10')
 
         core_api_instance = kubernetes.client.CoreV1Api()
         tok = base64.b64encode(get_token_file_obj('r').read().encode('utf-8')).decode('utf-8')
