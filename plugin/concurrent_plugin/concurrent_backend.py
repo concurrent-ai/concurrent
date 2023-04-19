@@ -617,7 +617,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                                                     name='sharedmount',
                                                     mount_propagation='Bidirectional'))
 
-        job_template["spec"]["ttlSecondsAfterFinished"] = 600
+        job_template["spec"]["ttlSecondsAfterFinished"] = 7200
         job_template["spec"]["template"]["spec"]["containers"][0]["volumeMounts"] = volume_mounts
         if len(job_template["spec"]["template"]["spec"]["containers"]) > 1: # sidecar container is present
             job_template["spec"]["template"]["spec"]["containers"][1]["volumeMounts"] = side_car_volume_mounts
