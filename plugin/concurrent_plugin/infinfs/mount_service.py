@@ -282,6 +282,8 @@ if __name__ == '__main__':
     start_time = time.time()
     print("Environment #", os.environ)
     config.load_incluster_config()
+    print('Setting k8s client configuration item retries to 10', flush=True)
+    kubernetes.client.configuration.retries = 10
     k8s_client:client.CoreV1Api = client.CoreV1Api()
     run_id = os.getenv('MLFLOW_RUN_ID')
     pod_name = os.getenv('MY_POD_NAME')
