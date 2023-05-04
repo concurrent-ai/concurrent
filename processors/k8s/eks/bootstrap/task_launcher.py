@@ -68,10 +68,6 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
             fh.write("            cpu: \"{}\"\n".format(os.environ['RESOURCES_REQUESTS_CPU']))
         if "RESOURCES_REQUESTS_MEMORY" in os.environ:
             fh.write("            memory: \"{}\"\n".format(os.environ['RESOURCES_REQUESTS_MEMORY']))
-        if "RESOURCES_REQUESTS_EPHEMERAL_STORAGE" in os.environ:
-            fh.write("            ephemeral-storage: \"{}\"\n".format(os.environ['RESOURCES_REQUESTS_EPHEMERAL_STORAGE']))
-        else:
-            fh.write("            ephemeral-storage: \"8Gi\"\n")
         if "RESOURCES_REQUESTS_HUGEPAGES" in os.environ:
             HP_SIZE, HP_VALUE = os.environ['RESOURCES_REQUESTS_HUGEPAGES'].split('/')[:2]
             fh.write("            hugepages-{}: \"{}\"\n".format(HP_SIZE, HP_VALUE))
