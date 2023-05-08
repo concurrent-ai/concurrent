@@ -17,6 +17,7 @@ import kubernetes.client
 from kubernetes import client, config
 import dpath
 from datetime import datetime
+import atexit
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -24,6 +25,15 @@ logger.setLevel(logging.INFO)
 
 FUSE_DEBUG_FILE = '/tmp/fuse_debug.log'
 VERBOSE = False
+
+mlflow_run_status = None
+
+def cleanup_atexit(run_id):
+    if mlflow_run_status:
+      print(f"mount_service: atexit. mlflow_run_status={mlflow_run_status}. Doing nothing", flush=True)
+    else:
+      print(f"mount_service: atexit. WARN mlflow_run_status not set. Calling update_mlflow_run for FAILED", flush=True)
+      update_mlflow_run(run_id, "FAILED")
 
 def parse_mount_request(data):
     req = json.loads(data.decode('utf-8'))
@@ -280,12 +290,13 @@ if __name__ == '__main__':
     PORT = 7963
     last_upload_time = time.time()
     start_time = time.time()
+    run_id = os.getenv('MLFLOW_RUN_ID')
+    atexit.register(cleanup_atexit, run_id)
     print("Environment #", os.environ)
     config.load_incluster_config()
     print('Setting k8s client configuration item retries to 10', flush=True)
     kubernetes.client.configuration.retries = 10
     k8s_client:client.CoreV1Api = client.CoreV1Api()
-    run_id = os.getenv('MLFLOW_RUN_ID')
     pod_name = os.getenv('MY_POD_NAME')
     pod_namespace = os.getenv('MY_POD_NAMESPACE')
     dag_execution_id = os.getenv('DAG_EXECUTION_ID')
@@ -326,8 +337,10 @@ if __name__ == '__main__':
                 exitCode = get_task_exit_code(k8s_client, pod_name, pod_namespace)
                 if exitCode == 0:
                     update_mlflow_run(run_id, "FINISHED")
+                    mlflow_run_status = "FINISHED"
                 else:
                     update_mlflow_run(run_id, "FAILED")
+                    mlflow_run_status = "FAILED"
                 fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace)
                 if dag_execution_id:
                     launch_dag_controller()
