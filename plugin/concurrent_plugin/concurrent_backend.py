@@ -316,14 +316,6 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                 body['resources.requests.memory'] = backend_config['resources.requests.memory']
             if "resources.requests.hugepages" in backend_config:
                 body['resources.requests.hugepages'] = backend_config['resources.requests.hugepages']
-            if "resources.requests.ephemeral-storage" in backend_config:
-                body['resources.requests.ephemeral-storage'] = backend_config['resources.requests.ephemeral-storage']
-            else:
-                body['resources.requests.ephemeral-storage'] = '8Gi'
-            if "resources.limits.ephemeral-storage" in backend_config:
-                body['resources.limits.ephemeral-storage'] = backend_config['resources.limits.ephemeral-storage']
-            else:
-                body['resources.limits.ephemeral-storage'] = '10Gi'
             if "resources.requests.nvidia.com/gpu" in backend_config:
                 body['resources.requests.nvidia.com/gpu'] = backend_config['resources.requests.nvidia.com/gpu']
             if 'kube-namespace' in backend_config:
