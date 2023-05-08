@@ -17,7 +17,6 @@ import kubernetes.client
 from kubernetes import client, config
 import dpath
 from datetime import datetime
-import atexit
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -27,13 +26,6 @@ FUSE_DEBUG_FILE = '/tmp/fuse_debug.log'
 VERBOSE = False
 
 mlflow_run_status = None
-
-def cleanup_atexit(run_id):
-    if mlflow_run_status:
-      print(f"mount_service: atexit. mlflow_run_status={mlflow_run_status}. Doing nothing", flush=True)
-    else:
-      print(f"mount_service: atexit. WARN mlflow_run_status not set. Calling update_mlflow_run for FAILED", flush=True)
-      update_mlflow_run(run_id, "FAILED")
 
 def parse_mount_request(data):
     req = json.loads(data.decode('utf-8'))
@@ -291,60 +283,70 @@ if __name__ == '__main__':
     last_upload_time = time.time()
     start_time = time.time()
     run_id = os.getenv('MLFLOW_RUN_ID')
-    atexit.register(cleanup_atexit, run_id)
-    print("Environment #", os.environ)
-    config.load_incluster_config()
-    print('Setting k8s client configuration item retries to 10', flush=True)
-    kubernetes.client.configuration.retries = 10
-    k8s_client:client.CoreV1Api = client.CoreV1Api()
-    pod_name = os.getenv('MY_POD_NAME')
-    pod_namespace = os.getenv('MY_POD_NAMESPACE')
-    dag_execution_id = os.getenv('DAG_EXECUTION_ID')
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(15)
-        s.bind((HOST, PORT))
-        print('Mount/Monitor service starting for runid {0}, and podname {1}'.format(run_id, pod_name), flush=True)
-        print('Listening on port {}:{}'.format(HOST, PORT), flush=True)
-        s.listen()
-        mount_service_ready()
-        while True:
-            print_info('Waiting for request..')
-            try:
-                conn, addr = s.accept()
-            except socket.timeout:
-                print_info('accept timed out')
-                pass
-            else:
-                with conn:
-                    print_info(f"Connected by {addr}")
-                    data = conn.recv(1024*16)
-                    if not data:
-                        time.sleep(1)
-                        continue
-                    try:
-                        mount_path, mount_spec, shadow_path, use_cache = parse_mount_request(data)
-                        print_info("mount request {}, {}, {}, {}".format(
-                            mount_path, mount_spec, shadow_path, use_cache))
-                        infinmount.perform_mount(mount_path, mount_spec, shadow_path=shadow_path, use_cache=use_cache)
-                        response = "success".encode('utf-8')
-                        print_info("mount successful")
-                    except Exception as ex:
-                        print_info('Exception in mounting: '+str(ex))
-                        response = str(ex).encode('utf-8')
-                    conn.send(response)
-            if not fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace):
-                print_info("Task process done, exiting mount service")
-                exitCode = get_task_exit_code(k8s_client, pod_name, pod_namespace)
-                if exitCode == 0:
-                    update_mlflow_run(run_id, "FINISHED")
-                    mlflow_run_status = "FINISHED"
+    try:
+        print("Environment #", os.environ)
+        config.load_incluster_config()
+        print('Setting k8s client configuration item retries to 10', flush=True)
+        kubernetes.client.configuration.retries = 10
+        k8s_client:client.CoreV1Api = client.CoreV1Api()
+        pod_name = os.getenv('MY_POD_NAME')
+        pod_namespace = os.getenv('MY_POD_NAMESPACE')
+        dag_execution_id = os.getenv('DAG_EXECUTION_ID')
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(15)
+            s.bind((HOST, PORT))
+            print('Mount/Monitor service starting for runid {0}, and podname {1}'.format(run_id, pod_name), flush=True)
+            print('Listening on port {}:{}'.format(HOST, PORT), flush=True)
+            s.listen()
+            mount_service_ready()
+            while True:
+                print_info('Waiting for request..')
+                try:
+                    conn, addr = s.accept()
+                except socket.timeout:
+                    print_info('accept timed out')
+                    pass
                 else:
-                    update_mlflow_run(run_id, "FAILED")
-                    mlflow_run_status = "FAILED"
-                fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace)
-                if dag_execution_id:
-                    launch_dag_controller()
-                else:
-                    print_info('Not a dag execution, skip dag controller')
+                    with conn:
+                        print_info(f"Connected by {addr}")
+                        data = conn.recv(1024*16)
+                        if not data:
+                            time.sleep(1)
+                            continue
+                        try:
+                            mount_path, mount_spec, shadow_path, use_cache = parse_mount_request(data)
+                            print_info("mount request {}, {}, {}, {}".format(
+                                mount_path, mount_spec, shadow_path, use_cache))
+                            infinmount.perform_mount(mount_path, mount_spec, shadow_path=shadow_path, use_cache=use_cache)
+                            response = "success".encode('utf-8')
+                            print_info("mount successful")
+                        except Exception as ex:
+                            print_info('Exception in mounting: '+str(ex))
+                            response = str(ex).encode('utf-8')
+                        conn.send(response)
+                if not fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace):
+                    print_info("Task process done, exiting mount service")
+                    exitCode = get_task_exit_code(k8s_client, pod_name, pod_namespace)
+                    if exitCode == 0:
+                        update_mlflow_run(run_id, "FINISHED")
+                        mlflow_run_status = "FINISHED"
+                    else:
+                        update_mlflow_run(run_id, "FAILED")
+                        mlflow_run_status = "FAILED"
+                    fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace)
+                    if dag_execution_id:
+                        launch_dag_controller()
+                    else:
+                        print_info('Not a dag execution, skip dag controller')
+                    exit(0)
+    except Exception as e1:
+        if mlflow_run_status:
+            print(f"mount_service: Caught {e1}. mlflow_run_status={mlflow_run_status}. Doing nothing", flush=True)
+            if mlflow_run_status == "FINISHED":
                 exit(0)
-
+            else:
+                exit(255)
+        else:
+            print(f"mount_service: Caught {e1} WARN mlflow_run_status not set. Calling update_mlflow_run for FAILED", flush=True)
+            update_mlflow_run(run_id, "FAILED")
+            exit(255)
