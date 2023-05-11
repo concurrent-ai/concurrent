@@ -618,6 +618,25 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                                                     mount_propagation='Bidirectional'))
 
         job_template["spec"]["ttlSecondsAfterFinished"] = 7200
+
+        # Sometimes when auto-scaling is on, pods need to get rescheduled due to node scaledown.
+        # The following snippet configures the rescheduling policy
+        # See https://kubernetes.io/docs/concepts/workloads/controllers/job/#pod-failure-policy
+        job_template["spec"]["template"]["spec"]["restartPolicy"] = "Never"
+        job_template["spec"]["backoffLimit"] = 6
+        podFailurePolicy = {"rules": [
+                                        {
+                                            "action": "FailJob",
+                                            "onExitCodes": {"operator": "NotIn", "values": [0]}
+                                        },
+                                        {
+                                            "action": "Ignore",
+                                            "onPodConditions": [{"type": "DisruptionTarget"}]
+                                        }
+                                     ]
+                           }
+        job_template["spec"]["podFailurePolicy"] = podFailurePolicy
+
         job_template["spec"]["template"]["spec"]["containers"][0]["volumeMounts"] = volume_mounts
         if len(job_template["spec"]["template"]["spec"]["containers"]) > 1: # sidecar container is present
             job_template["spec"]["template"]["spec"]["containers"][1]["volumeMounts"] = side_car_volume_mounts
