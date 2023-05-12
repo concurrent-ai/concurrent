@@ -168,19 +168,32 @@ def get_dag_execution_list(cognito_username, dagid):
     expression_attr_vals = {
         ":di" : {"S" : dagid}
     }
-
-    response = client.query(TableName=DAG_EXECUTION_TABLE,
+    rv = []
+    exclusive_start_key = None
+    while True:
+        if exclusive_start_key:
+            response = client.query(TableName=DAG_EXECUTION_TABLE,
+                            ProjectionExpression="dag_execution_id, authInfo, update_time, start_time, parent_run_id",
+                            KeyConditionExpression=key_condition_expression,
+                            ExpressionAttributeValues=expression_attr_vals,
+                            ExclusiveStartKey=exclusive_start_key
+                            )
+        else:
+            response = client.query(TableName=DAG_EXECUTION_TABLE,
                             ProjectionExpression="dag_execution_id, authInfo, update_time, start_time, parent_run_id",
                             KeyConditionExpression=key_condition_expression,
                             ExpressionAttributeValues=expression_attr_vals
                             )
-    if response and response.get('Items'):
-        result = []
-        for item in response.get('Items'):
-            result.append(get_projections(item))
-        return result
-    else:
-        return []
+        if response and response.get('Items'):
+            for item in response.get('Items'):
+                rv.append(get_projections(item))
+            if response.get('LastEvaluatedKey'):
+                exclusive_start_key = response.get('LastEvaluatedKey')
+                continue
+            else:
+                return rv
+        else:
+            return rv
 
 def get_projections(item):
     result =  {
