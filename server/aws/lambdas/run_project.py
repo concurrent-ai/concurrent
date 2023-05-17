@@ -354,6 +354,11 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         cmap.data['ADDITIONAL_IMPORTS'] = subs['additionalImports']['S']
     # this is the command that'll be used to install concurrent in the bootstrap and the mlflow project pod.  Set this in subscribers table to something similar to "pip install --no-cache-dir --upgrade http://xyz.com/packages/concurrent-plugin/concurrent_plugin-0.3.27-py3-none-any.whl"
     if 'concurrentPluginPipInstallCmd' in subs: cmap.data['CONCURRENT_PLUGIN_PIP_INSTALL_CMD'] = subs['concurrentPluginPipInstallCmd']['S']
+    # this is used to set the ttlSecondsAfterFinished for the kubernetes job launched for the mlflow project.  Set this in subscribers table 
+    if 'concurrentKubeJobTemplateTtl' in subs: cmap.data['CONCURRENT_KUBE_JOB_TEMPLATE_TTL'] = subs['concurrentKubeJobTemplateTtl']['S']
+    if 'concurrentPrivilegedMlflowContainer' in subs: cmap.data['CONCURRENT_PRIVILEGED_MLFLOW_CONTAINER'] = subs['concurrentPrivilegedMlflowContainer']['S']
+    # PYTHONUNBUFFERED is an environment variable in Python that can be used to disable output buffering for all streams. When this variable is set to a non-empty string, Python automatically sets the PYTHONUNBUFFERED flag, which forces Python to disable buffering for sys.stdout and sys.stderr.
+    cmap.data['PYTHONUNBUFFERED'] = 'true'
         
     tokfile_contents = 'Token=' + item['parallels_token'] + '\n'
     if backend_type == 'eks':
