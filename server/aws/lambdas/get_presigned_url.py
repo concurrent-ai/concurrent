@@ -4,14 +4,12 @@ import os
 import logging
 import uuid
 from urllib.parse import urlparse, quote, unquote
-import datetime
 
 from utils import get_cognito_user
-from os.path import sep
 import boto3
 from storage_credentials import query_storage_credentials
-
-import base64
+import botocore
+import botocore.client
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -39,7 +37,7 @@ def get_presigned_url(event, context):
     if (operation != 'GET'):
         return respond(ValueError('Unsupported method ' + str(operation)))
 
-    cognito_username, groups = get_cognito_user(event)
+    cognito_username, _ = get_cognito_user(event)
 
     qs = event['queryStringParameters']
     logger.info(qs)
@@ -93,10 +91,13 @@ def get_presigned_url(event, context):
             RoleSessionName=str(uuid.uuid4()))
 
     credentials = assumed_role_object['Credentials']
+    # https://stackoverflow.com/questions/57950613/boto3-generate-presigned-url-signaturedoesnotmatch-error; 
+    # to avoid this error from generate_presigned_url('list_objects_v2'): <Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match the signature you provided. Check your key and signing method.</Message>    
     client = boto3.client("s3",
         aws_access_key_id=credentials['AccessKeyId'],
         aws_secret_access_key=credentials['SecretAccessKey'],
-        aws_session_token=credentials['SessionToken']
+        aws_session_token=credentials['SessionToken'],
+        config=botocore.client.Config(signature_version='s3v4')
     )
 
     ps_url = client.generate_presigned_url(method, Params=params, ExpiresIn = (24*60*60))
