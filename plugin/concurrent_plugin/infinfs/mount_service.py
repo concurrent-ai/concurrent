@@ -116,7 +116,7 @@ def update_mlflow_run(run_id, status):
     client = MlflowClient()
     client.set_terminated(run_id, status)
 
-def _filter_empty_in_dict_list_scalar(dict_list_scalar:Union[list, dict, Any]):
+def _filter_empty_in_dict_list_scalar(dict_list_scalar:Union[list, dict, Any]) -> Union[list, dict, Any]:
     """
     given a 'dict' or 'list' as input, removes all elements in these containers that are empty: scalars with None, strings that are '', lists and dicts that are empty.  Note that the filtering is in-place: modifies the passed list or dict
 
@@ -139,6 +139,8 @@ def _filter_empty_in_dict_list_scalar(dict_list_scalar:Union[list, dict, Any]):
             # now delete the keys from the map
             for k in keys_to_del:
                 dict_list_scalar.pop(k)
+            
+            return dict_list_scalar
         elif isinstance(dict_list_scalar, list):
             i = 0; length = len(dict_list_scalar)
             while i < length: 
@@ -150,8 +152,9 @@ def _filter_empty_in_dict_list_scalar(dict_list_scalar:Union[list, dict, Any]):
                     i -= 1; length -= 1
                 
                 i += 1
+            return dict_list_scalar
         else: # this must be a non container, like int, str, datatime.datetime
-            pass
+            return dict_list_scalar
     except Exception as e:
         # some excpetion, just log it..
         print(f"_filter_empty_in_dict_list_scalar(): Caught exception: {e}")
@@ -220,7 +223,7 @@ def log_describe_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, p
         logger.warning('Failed to log describe pod, try again later: ' + str(ex))
         return
 
-def fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name, pod_namespace):
+def _fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name, pod_namespace, log_suffix:int):
     try:
         pod_info:client.V1Pod = k8s_client.read_namespaced_pod(pod_name, pod_namespace)
         if pod_info.spec.containers[1].name.startswith('sidecar-'):
@@ -232,9 +235,9 @@ def fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name, 
         task_container_name = pod_info.spec.containers[task_index].name
         side_car_container_name = pod_info.spec.containers[sidecar_index].name
         log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
-        upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/run-logs.txt",
+        upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, f"/tmp/run-logs-{log_suffix}.txt",
                             container_name=task_container_name)
-        upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, f"/tmp/sidecar-logs.txt",
+        upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, f"/tmp/sidecar-logs-{log_suffix}.txt",
                             container_name=side_car_container_name)
         task_container_status = pod_info.status
         container_statuses = task_container_status.container_statuses
@@ -253,7 +256,7 @@ def fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name, 
             print(f"Task container is in unknown state. Continuing to loop")
             return True
     except Exception as ex:
-        print(f"fetch_upload_pod_status_logs: caught {ex}. Continuing to loop")
+        print(f"_fetch_upload_pod_status_logs: caught {ex}. Continuing to loop")
         return True # continue looping
 
 def get_task_exit_code(k8s_client, pod_name, pod_namespace, num_attempt=1):
@@ -299,6 +302,7 @@ if __name__ == '__main__':
             print('Listening on port {}:{}'.format(HOST, PORT), flush=True)
             s.listen()
             mount_service_ready()
+            i = 0
             while True:
                 print_info('Waiting for request..')
                 try:
@@ -324,7 +328,7 @@ if __name__ == '__main__':
                             print_info('Exception in mounting: '+str(ex))
                             response = str(ex).encode('utf-8')
                         conn.send(response)
-                if not fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace):
+                if not _fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace, int(i/12)):   # i/12 so that we don't create a new log once every 15 seconds
                     print_info("Task process done, exiting mount service")
                     exitCode = get_task_exit_code(k8s_client, pod_name, pod_namespace)
                     if exitCode == 0:
@@ -333,12 +337,13 @@ if __name__ == '__main__':
                     else:
                         update_mlflow_run(run_id, "FAILED")
                         mlflow_run_status = "FAILED"
-                    fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace)
+                    _fetch_upload_pod_status_logs(k8s_client, run_id, pod_name, pod_namespace, int(i/12))   # i/12 so that we don't create a new log once every 15 seconds
                     if dag_execution_id:
                         launch_dag_controller()
                     else:
                         print_info('Not a dag execution, skip dag controller')
                     exit(0)
+                i+=1
     except Exception as e1:
         if mlflow_run_status:
             print(f"mount_service: Caught {e1}. mlflow_run_status={mlflow_run_status}. Doing nothing", flush=True)

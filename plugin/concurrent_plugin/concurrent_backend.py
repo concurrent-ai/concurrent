@@ -239,9 +239,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
     def run_eks_on_backend(self, run_id, backend_type, bucket_name, path_in_bucket, work_dir, project_uri, entry_point, params,
             version, backend_config, tracking_store_uri, experiment_id, project, active_run):
         """
-        _summary_
-
-        _extended_summary_
+        calls the run_project() REST API to run the MLProject, instead of running the MLProject locally.  
 
         Args:
             run_id (_type_): _description_
@@ -372,8 +370,6 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             version, backend_config, tracking_store_uri, experiment_id, project, active_run, work_dir):
         """
         builds the docker image if needed, creates a k8s job, which then runs the docker image for the MLProject
-
-        _extended_summary_
 
         Args:
             backend_type (_type_): _description_
@@ -548,6 +544,9 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         env_vars['MLFLOW_CONCURRENT_URI'] = os.getenv('MLFLOW_CONCURRENT_URI')
         env_vars['DAG_EXECUTION_ID'] = os.getenv('DAG_EXECUTION_ID')
         env_vars['DAGID'] = os.getenv('DAGID')
+        # PYTHONUNBUFFERED is an environment variable in Python that can be used to disable output buffering for all streams. When this variable is set to a non-empty string, Python automatically sets the PYTHONUNBUFFERED flag, which forces Python to disable buffering for sys.stdout and sys.stderr.
+        if os.getenv("PYTHONUNBUFFERED"): env_vars['PYTHONUNBUFFERED'] = os.getenv("PYTHONUNBUFFERED")
+        
         job_template = mlflow.projects.kubernetes._get_kubernetes_job_definition(
             project_name, image_tag, image_digest, _get_run_command(command), env_vars, job_template
         )
@@ -617,8 +616,14 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                                                     name='sharedmount',
                                                     mount_propagation='Bidirectional'))
 
-        job_template["spec"]["ttlSecondsAfterFinished"] = 7200
-
+        job_template["spec"]["ttlSecondsAfterFinished"] = int(os.getenv("CONCURRENT_KUBE_JOB_TEMPLATE_TTL", "7200"))
+        
+        if os.getenv("CONCURRENT_PRIVILEGED_MLFLOW_CONTAINER"): 
+            # create 'securityContext' if needed
+            if not job_template["spec"]["template"]["spec"]["containers"][0].get('securityContext'):
+                job_template["spec"]["template"]["spec"]["containers"][0]['securityContext'] = {}
+            job_template["spec"]["template"]["spec"]["containers"][0]['securityContext']['privileged'] = True
+            
         # Sometimes when auto-scaling is on, pods need to get rescheduled due to node scaledown.
         # The following snippet configures the rescheduling policy
         # See https://kubernetes.io/docs/concepts/workloads/controllers/job/#pod-failure-policy
