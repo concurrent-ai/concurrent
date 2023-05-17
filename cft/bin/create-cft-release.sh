@@ -85,6 +85,17 @@ echo 'Current CFT Version:' $CFT_VERSION
 echo 'Current Concurrent Lambdas: ' $CONCURRENT_LAMBDAS_VERSION
 echo 'Current Concurrent UI: ' $CONCURRENT_UI_VERSION
 
+help_str="Usage: $0 
+    new_cft_version=a.b.c                           manually tag a.b.c in git repo; a.b.c is only used to create the cft directory in s3
+    [overwrite_cft]                                 
+    [update_version_json]
+    [concurrent_lambdas=new:a.b.c|existing:x.y.z]   tag x.y.z must pre-exist in git repo
+    [concurrent_ui=new:a.b.c|existing:x.y.z]        tag x.y.z must pre-exist in git repo
+    
+    Note: $0 must be executed in concurrent.git/cft directory
+"
+
+# validate specified arguments and extract values from specified arguments
 for var in "$@"
 do
     if [[ $var == new_cft_version* ]] ; then
@@ -118,18 +129,24 @@ do
     elif [[ $var == update_version_json ]] ; then
       UPDATE_VERSION_JSON=true
       echo "Updating latest-software-versions.json"
+    elif [[ $var == "--help" ]] ; then
+      printf "%s" "$help_str"
+      exit 255
     else
       echo "Error. Unknown parameter $var"
-      printf "Usage: $0 new_cft_version=a.b.c\n\t[overwrite_cft]\n\t[update_version_json]\n\t[concurrent_lambdas=new:a.b.c|existing:x.y.z]\n\t[concurrent_ui=new:a.b.c|existing:x.y.z]\n"
+      printf "%s" "$help_str"
       exit 255
     fi
 done
 
 if [ x$NEW_CFT_VERSION == "x" ] ; then
   echo "Error. new_cft_version must be specified"
-  printf "Usage: $0 new_cft_version=a.b.c\n\t[overwrite_cft]\n\t[update_version_json]\n\t[concurrent_lambdas=new:a.b.c|existing:x.y.z]\n\t[concurrent_ui=new:a.b.c|existing:x.y.z]\n"
+  printf "%s" "$help_str"
   exit 255
 fi
+
+# make sure we are in concurrent.git/cft directory.  If not, copy cft files operation, done further below, will fail
+[ ! -f certs-cft.json ] && { echo "Error: ensure that $0 is executed from concurrent.git/cft directory: can't find certs-cft.json: exiting"; exit 1; }
 
 aws s3 ls s3://concurrentdist/cft/parallels-cft/$NEW_CFT_VERSION/ >& /dev/null
 if [ $? == 0 ] ; then
@@ -145,6 +162,7 @@ if [ ! -d workdir ] ; then
   /bin/mkdir workdir
 fi
 
+# build concurrent lambda
 if [ x$NEW_CONCURRENT_LAMBDAS != "x" ] ; then
   echo "Building and publishing new Concurrent Lambdas version $NEW_CONCURRENT_LAMBDAS"
   CONCURRENT_US_EAST_1_APPID=`get_concurrent_appid us-east-1`
@@ -223,6 +241,7 @@ else
   NEW_CONCURRENT_LAMBDAS=$CONCURRENT_LAMBDAS_VERSION
 fi
 
+# build concurrent ui
 if [ x$NEW_CONCURRENT_UI != "x" ] ; then
   echo "Building and Updating Concurrent UI version=$NEW_CONCURRENT_UI"
   if [ -d workdir/mlflow-noproxy ] ; then
