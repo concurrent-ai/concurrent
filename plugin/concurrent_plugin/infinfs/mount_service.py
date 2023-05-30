@@ -1,14 +1,13 @@
 import socket
 import time
 import os
-import traceback
-from typing import Any, Union
 from concurrent_plugin.infinfs import infinmount
 import json
 import yaml
 from mlflow.tracking import MlflowClient
 import psutil
 from concurrent_plugin.concurrent_backend import MOUNT_SERVICE_READY_MARKER_FILE
+import concurrent_plugin.utils
 import logging
 import requests
 import subprocess
@@ -113,52 +112,9 @@ def upload_logs_for_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name
 
 
 def update_mlflow_run(run_id, status):
+    logger.info(f"update_mlflow_run(): updating mlflow run-id={run_id} with status={status}")
     client = MlflowClient()
     client.set_terminated(run_id, status)
-
-def _filter_empty_in_dict_list_scalar(dict_list_scalar:Union[list, dict, Any]) -> Union[list, dict, Any]:
-    """
-    given a 'dict' or 'list' as input, removes all elements in these containers that are empty: scalars with None, strings that are '', lists and dicts that are empty.  Note that the filtering is in-place: modifies the passed list or dict
-
-    Args:
-        dict_list_scalar (Union[list, dict, Any]): see above
-    """
-    try:
-        # depth first traveral
-        if isinstance(dict_list_scalar, dict):
-            keys_to_del:list = []
-            for k in dict_list_scalar.keys():  
-                _filter_empty_in_dict_list_scalar(dict_list_scalar[k])
-                
-                # check if the 'key' is now None or empty.  If so, remove the 'key'
-                if not dict_list_scalar[k]: 
-                    # cannont do dict.pop(): RuntimeError: dictionary changed size during iteration
-                    # dict_list_scalar.pop(k)
-                    keys_to_del.append(k)
-            
-            # now delete the keys from the map
-            for k in keys_to_del:
-                dict_list_scalar.pop(k)
-            
-            return dict_list_scalar
-        elif isinstance(dict_list_scalar, list):
-            i = 0; length = len(dict_list_scalar)
-            while i < length: 
-                _filter_empty_in_dict_list_scalar(dict_list_scalar[i])
-            
-                # check if element is now None (if scalar) or empty (if list or dict).  If so, remove the element from the list
-                if not dict_list_scalar[i]:
-                    dict_list_scalar.remove(dict_list_scalar[i])
-                    i -= 1; length -= 1
-                
-                i += 1
-            return dict_list_scalar
-        else: # this must be a non container, like int, str, datatime.datetime
-            return dict_list_scalar
-    except Exception as e:
-        # some excpetion, just log it..
-        print(f"_filter_empty_in_dict_list_scalar(): Caught exception: {e}")
-        traceback.print_exc()
 
 def log_describe_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, pod_namespace, pod_info:kubernetes.client.V1Pod):
     describe_file = "/tmp/describe-" + pod_name + ".txt"
@@ -168,7 +124,7 @@ def log_describe_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, p
             pod_info_dict:dict = pod_info.to_dict()
             # remove metadata/managed_fields key
             if pod_info_dict.get('metadata') and pod_info_dict.get('metadata').get('managed_fields'): pod_info_dict['metadata'].pop('managed_fields')            
-            _filter_empty_in_dict_list_scalar(pod_info_dict)
+            concurrent_plugin.utils.filter_empty_in_dict_list_scalar(pod_info_dict)
             fh.write(yaml.safe_dump(pod_info_dict))
             
             events_dict:dict = events.to_dict()
@@ -213,8 +169,8 @@ def log_describe_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, p
                     # Given a obj, delete all elements that match the glob.  Returns the number of deleted objects. Raises PathNotFound if no paths are found to delete.
                     dpath.delete(events_dict, path_to_del)
                 except dpath.PathNotFound as e:
-                    print(f"log_describe_pod(): path_to_del={path_to_del}; exception={e}")
-            _filter_empty_in_dict_list_scalar(events_dict)
+                    print(f"log_describe_pod(): path_to_del={path_to_del}; exception={e}; ignoring exception and continuing..")
+            concurrent_plugin.utils.filter_empty_in_dict_list_scalar(events_dict)
             fh.write(yaml.safe_dump(events_dict))
             
         client = MlflowClient()
@@ -239,10 +195,36 @@ def _fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name,
                             container_name=task_container_name)
         upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, f"/tmp/sidecar-logs-{log_suffix}.txt",
                             container_name=side_car_container_name)
-        task_container_status = pod_info.status
-        container_statuses = task_container_status.container_statuses
-        task = container_statuses[task_index]
-        task_container_state = task.state
+        # status:
+        #   conditions:
+        #   - lastProbeTime: null
+        #     .
+        #     .
+        #   containerStatuses:
+        #   - containerID: containerd://9e180784bc5b47d294c022e055b36de7b11b8f297740580ae44ba69b5c56a6b7
+        #     .
+        #     .
+        #     name: sidecar-xxxx
+        #     state:
+        #       running:
+        #         startedAt: "2023-05-26T06:38:17Z"
+        #   - containerID: containerd://23c749e123d44b928429cf4193108976f2f479ad4a830b1745e894a2bb67a34f
+        #     .
+        #     .
+        #     name: userbucket-xxxx
+        #     state:
+        #       terminated:
+        #         containerID: containerd://23c749e123d44b928429cf4193108976f2f479ad4a830b1745e894a2bb67a34f
+        #         exitCode: 0
+        #         .
+        #         .
+        pod_info_status = pod_info.status
+        container_statuses = pod_info_status.container_statuses
+        # recompute task_index and sidecar_index for the array 'status/container_statuses'.  Earlier computed index using 'spec/containers' will not always be valid for this array .
+        task_index=0; sidecar_index=1
+        if container_statuses[0].name.startswith('sidecar-'): sidecar_index=0; task_index=1
+        task_cont_status = container_statuses[task_index]
+        task_container_state = task_cont_status.state
         if task_container_state.running:
             print(f"Task container is in running state. Continuing to loop")
             return True
@@ -261,9 +243,10 @@ def _fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name,
 
 def get_task_exit_code(k8s_client, pod_name, pod_namespace, num_attempt=1):
     max_attempts = 3
-    pod_info = k8s_client.read_namespaced_pod(pod_name, pod_namespace)
+    pod_info:client.V1Pod = k8s_client.read_namespaced_pod(pod_name, pod_namespace)
     try:
-        if pod_info.spec.containers[1].name.startswith('sidecar-'):
+        # see yaml further above for pod/status/containter_statuses structure
+        if pod_info.status.container_statuses[1].name.startswith('sidecar-'):
             exitCode = pod_info.status.container_statuses[0].state.terminated.exit_code
         else:
             exitCode = pod_info.status.container_statuses[1].state.terminated.exit_code
