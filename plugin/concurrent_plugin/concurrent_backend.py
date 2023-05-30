@@ -10,6 +10,7 @@ from requests.exceptions import HTTPError
 from urllib.parse import urlparse
 import base64
 import uuid
+import concurrent_plugin.utils
 
 # Use lazy % or % formatting in logging functionspylint(logging-format-interpolation)
 # Use lazy % or .format() or % formatting in logging functionspylint(logging-fstring-interpolation)
@@ -17,6 +18,7 @@ import uuid
 
 from mlflow.projects.backend.abstract_backend import AbstractBackend
 import mlflow.tracking as tracking
+import mlflow.entities
 from mlflow.entities import RunStatus
 from mlflow.utils.git_utils import get_git_commit, get_git_repo_url
 from mlflow.projects.submitted_run import SubmittedRun
@@ -41,6 +43,7 @@ from mlflow.projects.kubernetes import KubernetesSubmittedRun, _get_run_command,
 import kubernetes
 import kubernetes.client
 from concurrent_plugin.login import get_conf, get_token, get_token_file_obj, get_env_var
+from typing import List
 
 _logger = logging.getLogger(__name__)
 
@@ -162,9 +165,28 @@ def upload_objects(run_id, bucket_name, path_in_bucket, local_path):
         _logger.info(str(err))
 
 class PluginConcurrentProjectBackend(AbstractBackend):
-    def run(self, project_uri, entry_point, params,
-            version, backend_config, tracking_uri, experiment_id):
+    def run(self, project_uri:str, entry_point:str, params:str,
+            version:str, backend_config:dict, tracking_uri:str, experiment_id:str):
+        """
+        for the specified 'project_uri', fetches the MLproject details into a 'working_dir'.  the fetched MLproject is then run locally or remotely using run_project() REST API
 
+        _extended_summary_
+
+        Args:
+            project_uri (str): the URI for MLFlow project file (MLproject) to be run
+            entry_point (str): entry point specified in the MLFlow project file (MLproject)
+            params (str): params specified in the MLflow project file (MLproject)
+            version (str): _description_
+            backend_config (dict): See run_eks_on_backend() for documentation
+            tracking_uri (str): MLFlow tracking URI
+            experiment_id (str): MLFlow Experiment ID
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            _type_: _description_
+        """
         if (verbose):
             _logger.info("PluginConcurrentProjectBackend: Entered. project_uri=" + str(project_uri)\
                 + ", entry_point=" + str(entry_point)\
@@ -223,8 +245,36 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             rv.set_status(RunStatus.FAILED)
             return rv
 
-    def run_eks(self, run_id, backend_type, bucket_name, path_in_bucket, work_dir, project_uri, entry_point, params,
-            version, backend_config, tracking_store_uri, experiment_id, project, active_run):
+    def run_eks(self, run_id:str, backend_type:str, bucket_name:str, path_in_bucket:str, work_dir:str, project_uri:str, entry_point:str, params:str,
+            version, backend_config:dict, tracking_store_uri:str, experiment_id:str, project:str, active_run:mlflow.entities.Run):
+        """
+        _summary_
+
+        _extended_summary_
+
+        Args:
+            run_id (str): _description_
+            backend_type (str): gke|aws|HPE
+            bucket_name (str): _description_
+            path_in_bucket (str): _description_
+            work_dir (str): working directory with MLproject and its related files
+            project_uri (str): URI for MLproject file
+            entry_point (str): entry point specified in MLproject file
+            params (str): params specified in MLproject file
+            version (_type_): _description_
+            backend_config (dict): see run_eks_on_backend() for documentation
+            tracking_store_uri (str): _description_
+            experiment_id (str): _description_
+            project (_type_): the MLproject entity
+            active_run (mlflow.entities.Run): _description_
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            _type_: _description_
+        """
+        
         kube_client_location = backend_config.get('kube-client-location', 'local')
         if kube_client_location == 'local':
             return self.run_eks_on_local(backend_type, project_uri, entry_point, params, version,
@@ -237,21 +287,21 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             raise ValueError('kube_client_location must be either local or backend')
 
     def run_eks_on_backend(self, run_id, backend_type, bucket_name, path_in_bucket, work_dir, project_uri, entry_point, params,
-            version, backend_config, tracking_store_uri, experiment_id, project, active_run):
+            version, backend_config:dict, tracking_store_uri:str, experiment_id:str, project:str, active_run:mlflow.entities.Run):
         """
-        calls the run_project() REST API to run the MLProject, instead of running the MLProject locally.  
+        calls upload_objects() to upload MLproject and its files.  Then calls run_project() REST API to run the MLProject in the target compute, instead of running the MLProject locally.  run_project() REST API's invocation parameters are derived from 'backend_config'
 
         Args:
             run_id (_type_): _description_
             backend_type (_type_): _description_
             bucket_name (_type_): _description_
             path_in_bucket (_type_): _description_
-            work_dir (_type_): _description_
+            work_dir (_type_): working directory with MLproject and related files that need to be uploaded to the Mlflow Run.   Eventually run_eks_on_local() will use the contents of this artifact directory to run the MLproject
             project_uri (_type_): _description_
             entry_point (_type_): _description_
             params (_type_): _description_
             version (_type_): _description_ 
-            backend_config (_type_): {"backend-type": "HPE", "kube-context": "unused", "kube-namespace": "parallelsns", "resources.requests.memory": "1024Mi", "kube-client-location": "backend"}
+            backend_config (dict): {"backend-type": "HPE|aws|gke", "kube-context": "unused", "kube-namespace": "parallelsns", "kube-client-location": "backend|local", 'kube-job-template-path':xxxx, 'kube-namespace':xxxxx, 'resources.limits.cpu':500m, 'resources.limits.memory':"1024Mi", 'resources.limits.hugepages':xxxxx, 'resources.limits.nvidia.com/gpu':xxxxx, 'resources.requests.cpu':500m, 'resources.requests.memory':"1024Mi", 'resources.requests.hugepages':xxxxx, 'resources.requests.nvidia.com/gpu':xxxxx, 'kube-context':xxxx, 'run-id':xxxxx, 'parent_run_id':xxxxx, 'last_in_chain_of_xforms':xxxxx, 'INPUT_DATA_SPEC': base64(xxxxx), 'repository-uri':'git_repo_uri', 'git-commit':xxxx, 'IMAGE_TAG':'docker_image_with_tag', IMAGE_DIGEST:xxxx, STORAGE_DIR:xxxx}.  
             tracking_store_uri (_type_): _description_
             experiment_id (_type_): _description_
             project (_type_): _description_
@@ -282,6 +332,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                     open(backend_config.get('kube-job-template-path'), "r").read().encode('utf-8')).decode('utf-8')
             with open(backend_config.get('kube-job-template-path'), "r") as yf:
                 yml = yaml.safe_load(yf)
+            _logger.info(f"contents of {backend_config.get('kube-job-template-path')} = {yml}")
             if 'metadata' in yml and 'namespace' in yml['metadata']:
                 body['namespace'] = yml['metadata']['namespace']
                 _logger.info('namespace obtained from job template: ' + body['namespace'])
@@ -377,7 +428,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             entry_point (_type_): _description_
             params (_type_): _description_
             version (_type_): _description_
-            backend_config (_type_): _description_
+            backend_config (_type_): see run_eks_on_backend() documentation
             tracking_store_uri (_type_): _description_
             experiment_id (_type_): _description_
             project (_type_): _description_
@@ -398,6 +449,10 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                 + ", git-commit=" + str(git_commit)\
                 + ", kube-job-template-path=" + str(kube_job_template_path)\
                 + ", input_data_spec=" + str(input_data_spec))
+            if kube_job_template_path and os.path.exists(kube_job_template_path):
+                with open(kube_job_template_path, "r") as job_template:
+                    yaml_obj = yaml.safe_load(job_template.read())
+                    _logger.info(f"contents of {kube_job_template_path}={yaml_obj}")
 
         from mlflow.projects.docker import (
             validate_docker_env,
@@ -408,7 +463,9 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         validate_docker_env(project)
         validate_docker_installation()
 
+        # kube_config is a copy of backend_config with one additional key: 'kube-job-template', which is contents of backend_config['kube-job-template-path']
         kube_config = mlflow.projects._parse_kubernetes_config(backend_config)
+        _logger.info(f"kube_config={kube_config}")
 
         env_vars:dict = get_run_env_vars(run_id=active_run.info.run_uuid, experiment_id=active_run.info.experiment_id)
         for envvar_name in ['DATABRICKS_HOST', 'DATABRICKS_TOKEN']:
@@ -518,16 +575,51 @@ class PluginConcurrentProjectBackend(AbstractBackend):
 
     def run_eks_job(
         self,
-        project_name,
-        active_run,
-        image_tag,
-        image_digest,
-        command,
-        env_vars,
-        input_data_spec,
-        kube_context=None,
-        job_template=None
-    ):
+        project_name:str,
+        active_run:mlflow.entities.Run,
+        image_tag:str,
+        image_digest:str,
+        command:List[str],
+        env_vars:dict,
+        input_data_spec:str,
+        kube_context:str=None,
+        job_template:dict=None
+    ) -> KubernetesSubmittedRun:
+        """
+        creates a k8s job using the specified 'job_template' and the arguments to this method and runs it in the k8s cluster.
+
+        
+
+        Args:
+            project_name (str): name of the project
+            active_run (mlflow.entities.Run): the mlflow Run for running this MLProject
+            image_tag (str): the docker image for the MLProject to be used in the k8s job
+            image_digest (str): digtest of the docker image
+            command (List[str]): command to be used in k8s job
+            env_vars (dict): the env vars to be used in the k8s job
+            input_data_spec (str): input_data_spec injected into the k8s job: used to setup inputs to MLProject
+            kube_context (str, optional): trying to load either the context passed as arg or, if None, the one provided as env var `KUBECONFIG` or in `~/.kube/config`
+            job_template (dict, optional): the job_template to use to create the k8s job. Defaults to None.
+
+        Returns:
+            KubernetesSubmittedRun: _description_
+        """
+        # 2023-05-24 05:05:40,641 - 353 - concurrent_plugin.concurrent_backend - INFO - run_eks_job: Entered. project_name=docker-example, 
+        # active_run=<Run: data=<RunData: metrics={}, params={'alpha': '0.62', 'l1_ratio': '0.02'}, tags={'mlflow.gitRepoURL': 'https://github.com/jagane-infinstor/mlflow-example-docker.git',
+        #  'mlflow.project.backend': 'concurrent-backend',
+        #  'mlflow.project.entryPoint': 'main',
+        #  'mlflow.source.git.commit': '5ebaa6d3130fec010e49c19b948468eff0aafe51',
+        #  'mlflow.source.git.repoURL': 'https://github.com/jagane-infinstor/mlflow-example-docker.git',
+        #  'mlflow.source.name': 'https://github.com/jagane-infinstor/mlflow-example-docker.git',
+        #  'mlflow.source.type': 'PROJECT',
+        #  'mlflow.user': 'raj-hpe'}>, info=<RunInfo: artifact_uri='s3://infinstor-mlflow-artifacts-hpe.infinstor.com/mlflow-artifacts/raj-hpe/1/1-16848593352850000000055', end_time=None, experiment_id='1', lifecycle_stage='active', run_id='1-16848593352850000000055', run_name='', run_uuid='1-16848593352850000000055', start_time=1684859335285, status='RUNNING', user_id='raj-hpe'>>, 
+        # image_tag=10.241.17.223:31386/mlflow/raj-hpe/ff16d546a3daeea3469ac955073c96fb4d990e60522d7e6ab03939b331317f21:5ebaa6d, 
+        # image_digest=sha256:1d0f14a49dcb17b304bf5d9ec5680de8494797c4c3d697eaff04166349744fa8, 
+        # command=['python train.py --alpha 0.62 --l1-ratio 0.02'], 
+        # env_vars={'MLFLOW_RUN_ID': '1-16848593352850000000055', 'MLFLOW_TRACKING_URI': 'infinstor://mlflow.hpe.infinstor.com', 'MLFLOW_EXPERIMENT_ID': '1'}, 
+        # input_data_spec=W10=, 
+        # kube_context=None, 
+        # job_template={'apiVersion': 'batch/v1', 'kind': 'Job', 'metadata': {'name': '{replaced with MLflow Project name}', 'namespace': 'parallelsns'}, 'spec': {'backoffLimit': 0, 'template': {'spec': {'shareProcessNamespace': True, 'containers': [{'name': '{replaced with MLflow Project name}', 'image': '{replaced with URI of Docker image created during Project execution}', 'command': ['{replaced with MLflow Project entry point command}'], 'imagePullPolicy': 'IfNotPresent', 'resources': {'limits': {'memory': '1024Mi'}}}, {'name': 'sidecar-1-16848593352850000000055', 'image': '10.241.17.223:31386/mlflow/raj-hpe/ff16d546a3daeea3469ac955073c96fb4d990e60522d7e6ab03939b331317f21:5ebaa6d@sha256:1d0f14a49dcb17b304bf5d9ec5680de8494797c4c3d697eaff04166349744fa8', 'lifecycle': {'type': 'Sidecar'}, 'command': ['python'], 'args': ['-m', 'concurrent_plugin.infinfs.mount_service'], 'imagePullPolicy': 'IfNotPresent', 'env': [{'name': 'MLFLOW_TRACKING_URI', 'value': 'infinstor://mlflow.hpe.infinstor.com'}, {'name': 'MLFLOW_RUN_ID', 'value': '1-16848593352850000000055'}, {'name': 'MLFLOW_CONCURRENT_URI', 'value': 'https://concurrent.hpe.infinstor.com'}, {'name': 'DAG_EXECUTION_ID', 'value': 'None'}, {'name': 'DAGID', 'value': 'None'}, {'name': 'MY_POD_NAME', 'valueFrom': {'fieldRef': {'fieldPath': 'metadata.name'}}}, {'name': 'MY_POD_NAMESPACE', 'valueFrom': {'fieldRef': {'fieldPath': 'metadata.namespace'}}}], 'securityContext': {'privileged': True, 'capabilities': {'add': ['SYS_ADMIN']}}, 'resources': {'limits': {'cpu': '250m', 'memory': '1024Mi'}}}], 'priorityClassName': 'concurrent-high-non-preempt-prio', 'restartPolicy': 'Never'}}}}
         _logger.info('run_eks_job: Entered. project_name=' + str(project_name)\
                 + ', active_run=' + str(active_run) + ', image_tag=' + str(image_tag)\
                 + ', image_digest=' + str(image_digest) + ', command=' + str(command)\
@@ -550,6 +642,11 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         job_template = mlflow.projects.kubernetes._get_kubernetes_job_definition(
             project_name, image_tag, image_digest, _get_run_command(command), env_vars, job_template
         )
+        if os.getenv("PYTHONUNBUFFERED") and len(job_template["spec"]["template"]["spec"]["containers"]) > 1: # sidecar container is present:
+            if "env" not in job_template["spec"]["template"]["spec"]["containers"][1].keys():
+                job_template["spec"]["template"]["spec"]["containers"][1]["env"] = []
+            job_template["spec"]["template"]["spec"]["containers"][1]["env"] += [{'name':'PYTHONUNBUFFERED', 'value':os.getenv('PYTHONUNBUFFERED')}]
+
         job_name = job_template["metadata"]["name"]
         job_namespace = job_template["metadata"]["namespace"]
         _load_kube_context(context=kube_context)
@@ -616,7 +713,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                                                     name='sharedmount',
                                                     mount_propagation='Bidirectional'))
 
-        job_template["spec"]["ttlSecondsAfterFinished"] = int(os.getenv("CONCURRENT_KUBE_JOB_TEMPLATE_TTL", "7200"))
+        job_template["spec"]["ttlSecondsAfterFinished"] = int(os.getenv("CONCURRENT_KUBE_JOB_TEMPLATE_TTL", "86400"))
         
         if os.getenv("CONCURRENT_PRIVILEGED_MLFLOW_CONTAINER"): 
             # create 'securityContext' if needed
@@ -653,18 +750,21 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                     kubernetes.client.V1Volume(name="aws-creds-file", secret=kubernetes.client.V1SecretVolumeSource(secret_name=awscreds_secret_name)),
                     kubernetes.client.V1Volume(name='sharedmount', empty_dir=kubernetes.client.V1EmptyDirVolumeSource())
                 ]
-        if input_data_spec:
+        if input_data_spec: 
             job_template["spec"]["template"]["spec"]["volumes"].append(
                     kubernetes.client.V1Volume(name=input_spec_name, secret=kubernetes.client.V1SecretVolumeSource(secret_name=input_spec_name)))
         # if AWS IAM Roles Anywhere is configured, set it up
         if os.getenv("IAM_ROLES_ANYWHERE_SECRET_NAME"):
             job_template["spec"]["template"]["spec"]["volumes"].append(
                 kubernetes.client.V1Volume(name="iam-roles-anywhere-volume", secret=kubernetes.client.V1SecretVolumeSource(secret_name=os.getenv("IAM_ROLES_ANYWHERE_SECRET_NAME"))))
-            
-        _logger.info('run_eks_job: job_template=' + str(job_template))
+        
+        _logger.info(f'run_eks_job: job_template before filtering= { job_template }')
+        # Note: job_template is not just a 'dict' containing 'lists' and 'scalars'.  It has other objects like V1Volume and others.  so filter_empty_in_dict_list_scalar() will not filter correctly.  Also yaml.safe_dump() will not be able to dump such a hybrid correctly as a string
+        #_logger.info(f'run_eks_job: job_template after  filtering= { yaml.safe_dump(concurrent_plugin.utils.filter_empty_in_dict_list_scalar(job_template)) }')
         api_instance = kubernetes.client.BatchV1Api()
-        resp = api_instance.create_namespaced_job(namespace=job_namespace, body=job_template, pretty=True)
+        resp:kubernetes.client.V1Job = api_instance.create_namespaced_job(namespace=job_namespace, body=job_template, pretty=True)
         _logger.info( resp.kind + " " + resp.metadata.name +" created." )
+        _logger.info(f'run_eks_job: created job=\n{ yaml.safe_dump(concurrent_plugin.utils.filter_empty_in_dict_list_scalar(resp.to_dict())) }')
         tracking.MlflowClient().log_param(active_run.info.run_id, 'kubernetes.job_name', job_name)
         tracking.MlflowClient().log_param(active_run.info.run_id, 'kubectl.get_pods', 'kubectl -n ' + str(job_namespace) + ' get pods --selector=job-name=' + job_name)
         return KubernetesSubmittedRun(active_run.info.run_id, job_name, job_namespace)

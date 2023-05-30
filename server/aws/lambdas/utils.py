@@ -469,7 +469,7 @@ def _generate_certificate(cognito_username:str, subs_ddb_item:dict) -> Tuple[str
 
     sts_client:STSClient = boto3.client("sts")
     # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/sts.html#STS.Client.assume_role
-    assume_role_resp:AssumeRoleResponseTypeDef = sts_client.assume_role(RoleSessionName=f"Session-RoleForPrivateCAUserAccess-{cognito_username}", RoleArn="arn:aws:iam::019944623471:role/RoleForPrivateCAUserAccess", ExternalId="Infinstor@123")
+    assume_role_resp:AssumeRoleResponseTypeDef = sts_client.assume_role(RoleSessionName=f"Session-RoleForPrivateCAUserAccess-{cognito_username}", RoleArn=subs_ddb_item['privateCARoleArnForAccessingPrivateCA']['S'], ExternalId=subs_ddb_item['privateCAExternalIDForRoleForAccessingPrivateCA']['S'])
     
     # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/acm-pca.html
     pca_client:ACMPCAClient = boto3.client("acm-pca",aws_access_key_id=assume_role_resp['Credentials']['AccessKeyId'], aws_secret_access_key=assume_role_resp['Credentials']['SecretAccessKey'], aws_session_token=assume_role_resp['Credentials']['SessionToken'])
