@@ -237,7 +237,7 @@ def log_pip_requirements(base_image, run_id, build_logs):
 
 def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_commit):
     """
-    Build a docker image containing the project in `work_dir`, using the base image.
+    Build a docker image containing the project in `work_dir`, using the base image.  Also log pip requirements.txt from the 'pip list' done during building the image.
     """
     from mlflow.projects.docker import (
         _create_docker_build_ctx,
@@ -279,7 +279,7 @@ def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_
     return image
 
 
-def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str]:
+def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str, str]:
     """
     get the docker image that corresponds to os.environ['REPOSITORY_URI']:latest.  
     Either build the image if it doesn't exist, using Dockerfile in os.environ['MLFLOW_PROJECT_DIR'] or pull an existing image.
@@ -288,7 +288,7 @@ def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str
         parent_run_id (str): pip requirements.txt is logged to this parent_run_id.  requirements.txt is created by parsing 'docker build' output
 
     Returns:
-        Tuple[docker.models.images.Image, str]: returns (image, image_digest)
+        Tuple[docker.models.images.Image, str, str]: returns (image, image_uri_with_tag, image_digest).  Note that 'image.tags' contains all the taggings ( all registry/repository:version tagging done for this image ) for this image and can be more than one.  'image_uri_with_tag' is os.environ['REPOSITORY_URI']:tag. 'image_digest' is the digest for 'image_uri_with_tag'
     """
     git_commit = os.environ.get('GIT_COMMIT')
     repository_uri = os.environ['REPOSITORY_URI']
@@ -299,6 +299,19 @@ def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str
         lookup_tag = 'latest'
     docker_client:docker.DockerClient = docker.from_env()
     try:
+        # REPOSITORY                                                                                                                   TAG       IMAGE ID       CREATED        SIZE
+        # hpe-gw1-priv.infinstor.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3             5ebaa6d   06a3114a01cf   19 hours ago   1.67GB
+        # 10.241.17.209:30810/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3                          5ebaa6d   06a3114a01cf   19 hours ago   1.67GB
+        # 10.241.17.209:30810/mlflow/shared_env_images/e14b6df9f5437fb4325a6a79dbfa257a26dcfd6acbfc824e90ae1c9717b06370                latest    bb295e084813   19 hours ago   1.67GB
+        # mlflow-docker-example                                                                                                        latest    bb295e084813   19 hours ago   1.67GB
+        # gateway.hpecatalystpoc.com:10019/mlflow/shared_env_images/e14b6df9f5437fb4325a6a79dbfa257a26dcfd6acbfc824e90ae1c9717b06370   latest    bb295e084813   19 hours ago   1.67GB
+        # hpe-gw1-priv.infinstor.com:10019/mlflow/shared_env_images/e14b6df9f5437fb4325a6a79dbfa257a26dcfd6acbfc824e90ae1c9717b06370   latest    bb295e084813   19 hours ago   1.67GB
+        # 10.241.17.223:31386/mlflow/shared_env_images/621d9d61783f4f58c7b957993e2e147bd4e712f21ef4cd6ef93c85717db95742                latest    5bef5428cc10   27 hours ago   1.67GB
+        # public.ecr.aws/y9l4v0u6/mlflow/shared_env_images/621d9d61783f4f58c7b957993e2e147bd4e712f21ef4cd6ef93c85717db95742            latest    5bef5428cc10   27 hours ago   1.67GB
+        # ubuntu                                                                                                                       latest    3b418d7b466a   4 weeks ago    77.8MB
+        # registry-service:5000/ubuntu                                                                                                 latest    3b418d7b466a   4 weeks ago    77.8MB
+        # 
+        # if a single image (see IMAGE ID bb295e084813 above) is tagged multiple times (all registry/repository:version taggings done for this image), then 'image.tags' has more than one entry: one entry for each tagging of the same image
         image:docker.models.images.Image = docker_client.images.pull(repository_uri, tag=lookup_tag)
     except docker.errors.ImageNotFound :
         logger.info("task_launcher.get_docker_image: Docker img "
@@ -307,10 +320,14 @@ def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str
         logger.info("task_launcher.get_docker_image: Error " + str(apie)
                      + " while pulling " + repository_uri + ", tag=" + lookup_tag)
     else:
+        # 2023-05-25 04:13:36,183 - 274 - root - INFO - task_launcher.get_docker_image: image=<Image: '10.241.17.209:30810/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'gateway.hpecatalystpoc.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'hpe-gw1-priv.infinstor.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d'>
+        # image.tags contains all registry/repository:version taggings done for this image
         logger.info("task_launcher.get_docker_image: image=" + str(image))
         logger.info("task_launcher.get_docker_image: Docker img found "
                      + repository_uri + ", tag=" + lookup_tag + ". Reusing...")
-        image_digest = docker_client.images.get_registry_data(image.tags[0]).id
+        image_uri_with_tag:str = f"{repository_uri}:{lookup_tag}"
+        # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to get the digest for 'os.environ['repository_uri']:tag' and not for image.tags[0]
+        image_digest = docker_client.images.get_registry_data(image_uri_with_tag).id
         logger.info("task_launcher.get_docker_image: image_digest=" + image_digest)
         do_build = False
 
@@ -320,6 +337,8 @@ def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str
         work_dir = os.environ['MLFLOW_PROJECT_DIR']
         project = load_project(work_dir)
         logger.info('Task launcher, base image = ' + str(project.docker_env.get("image")))
+        # 2023-05-25 04:13:36,183 - 274 - root - INFO - task_launcher.get_docker_image: image=<Image: '10.241.17.209:30810/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'gateway.hpecatalystpoc.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'hpe-gw1-priv.infinstor.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d'>
+        # image.tags contains all registry/repository:version taggings done for this image
         image = build_docker_image(
             parent_run_id=parent_run_id,
             work_dir=work_dir,
@@ -327,9 +346,11 @@ def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str
             base_image=project.docker_env.get("image"),
             git_commit=git_commit
         )
-        image_digest = kb.push_image_to_registry(image.tags[0])
+        image_uri_with_tag:str = f"{repository_uri}:{lookup_tag}"
+        # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to use the tagging 'os.environ['repository_uri']:tag' for pushing and not image.tags[0] for pushing
+        image_digest = kb.push_image_to_registry(image_uri_with_tag)
 
-    return image, image_digest
+    return image, image_uri_with_tag, image_digest
 
 
 def launch_mlflow_commands(cmd_list:List[Tuple[str, List[str]]]) -> Dict[str, Tuple[str, None]]:
@@ -371,8 +392,8 @@ def launch_mlflow_commands(cmd_list:List[Tuple[str, List[str]]]) -> Dict[str, Tu
 
 
 def main(run_id_list, input_data_specs, parent_run_id):
-    image:docker.models.images.Image; image_digest:str; 
-    image, image_digest = get_docker_image(parent_run_id)
+    image:docker.models.images.Image; image_uri_with_tag:str; image_digest:str; 
+    image, image_uri_with_tag, image_digest = get_docker_image(parent_run_id)
 
     mlflow_cmd_list = []
     for run_id, input_spec in zip(run_id_list, input_data_specs):
@@ -387,14 +408,16 @@ def main(run_id_list, input_data_specs, parent_run_id):
                 base64.decode(os.environ['KUBE_JOB_TEMPLATE_CONTENTS'], fh)
         else:
             logger.info("Generating Kubernetes Job Template from params")
+            # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to use the tagging 'os.environ['repository_uri']:tag' for the image in the k8s job and not image.tags[0]
             generate_kubernetes_job_template(k8s_job_template_file, os.environ['NAMESPACE'],
-                                             run_id, image.tags[0], image_digest, side_car_name)
+                                             run_id, image_uri_with_tag, image_digest, side_car_name)
 
         k8s_backend_config_file = "/tmp/k8s-backend-config-" + run_id + ".json"
         if os.path.exists(k8s_backend_config_file):
             os.remove(k8s_backend_config_file)
+        # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to use the tagging 'os.environ['repository_uri']:tag' for the image in the backend_end config and not image.tags[0]
         generate_backend_config_json(k8s_backend_config_file, input_spec, run_id,
-                                     k8s_job_template_file, image.tags[0], image_digest)
+                                     k8s_job_template_file, image_uri_with_tag, image_digest)
 
 
 

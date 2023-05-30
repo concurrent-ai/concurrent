@@ -491,7 +491,8 @@ ENV_REPO_NAME=mlflow/shared_env_images/${ENV_SHA}
 if [ "${BACKEND_TYPE}" == "gke" ] ; then
   ENV_REPO_URI="gcr.io/${PROJECT_ID}/${ENV_REPO_NAME}"
   logit "Checking if env image exists in repo URI ${ENV_REPO_URI}"
-  if docker pull ${ENV_REPO_URI}:latest ; then    
+  if docker pull ${ENV_REPO_URI}:latest ; then
+    # tag the image pulled from the remote docker regsitry with the docker_image name specified in MLProject
     if docker tag ${ENV_REPO_URI}:latest ${DOCKER_IMAGE}:latest ; then
       logit "Found latest MLproject docker env image from existing repo $ENV_REPO_URI"
       docker images
@@ -501,7 +502,8 @@ if [ "${BACKEND_TYPE}" == "gke" ] ; then
 elif  [ "${BACKEND_TYPE}" == "HPE" ]; then
   ENV_REPO_URI="${HPE_CONTAINER_REGISTRY_URI}/${ENV_REPO_NAME}"
   logit "Checking if env image exists in repo URI ${ENV_REPO_URI}"  
-  if docker pull ${ENV_REPO_URI}:latest ; then    
+  if docker pull ${ENV_REPO_URI}:latest ; then
+    # tag the image pulled from the remote docker regsitry with the docker_image name specified in MLProject
     if docker tag ${ENV_REPO_URI}:latest ${DOCKER_IMAGE}:latest ; then
       logit "Found latest MLproject docker env image from existing repo $ENV_REPO_URI"
       docker images
@@ -511,7 +513,8 @@ elif  [ "${BACKEND_TYPE}" == "HPE" ]; then
 else # default BACKEND_TYPE is eks  
   if ENV_REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $ENV_REPO_NAME` ; then
     logit "Looking for latest MLproject docker env image from existing repo $ENV_REPO_URI"    
-    if docker pull ${ENV_REPO_URI}:latest ; then      
+    if docker pull ${ENV_REPO_URI}:latest ; then
+      # tag the image pulled from the remote docker regsitry with the docker_image name specified in MLProject
       if docker tag ${ENV_REPO_URI}:latest ${DOCKER_IMAGE}:latest ; then
         logit "Found latest MLproject docker env image from existing repo $ENV_REPO_URI"
         docker images
@@ -531,14 +534,18 @@ else # default BACKEND_TYPE is eks
   fi
 fi
 
+# if the env docker image wasn't found, build it now.
 if [ $CREATE_ENV_IMAGE == "yes" ] ; then
   logit "Building env image for pushing to $ENV_REPO_URI"
   if  [ "${BACKEND_TYPE}" == "HPE" ]; then
+    # tag the built docker image with the 'image' specified in MLProject
     (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} -f Dockerfile --network host . )
   else
+    # tag the built docker image with the 'image' specified in MLProject
     (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} -f Dockerfile . )
   fi
   docker images  
+  # tag the built image with the remote docker registry hostname, so that it can be pushed.
   if ! /usr/bin/docker tag ${DOCKER_IMAGE}:latest ${ENV_REPO_URI}:latest ; then
     logit "Error tagging env image before pushing"
     fail_exit
