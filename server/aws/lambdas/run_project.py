@@ -152,7 +152,7 @@ def run_project_gke(cognito_username, groups, context, subs, item, service_conf:
     configuration.api_key['authorization'] = creds.token
     # if GKE cluster is in 'RECONCILING' state, api server may not be reachable.  Wait for the api server to recover for 10 minutes.  Note that execute_dag(), which calls run_project(), will not retry this call again
     # https://github.com/kubernetes-client/python/pull/780; https://github.com/swagger-api/swagger-codegen/pull/9284/files
-    api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 5  # each retry timeout is 2 minutes (from faiure logs); so 10 minutes
+    api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 10  # each retry timeout is 2 minutes (from faiure logs); so 10 minutes
     configuration.retries = api_server_retries
 
     # cfg = kubernetes_client.ApiClient(configuration)
@@ -504,7 +504,7 @@ def _run_project_hpe(cognito_username:str, groups, context, subs:dict, reqbody:d
     kube_config:Configuration = Configuration()
     # api server may not be reachable.  Wait for the api server to recover for 10 minutes.  Note that execute_dag(), which calls run_project(), will not retry this call again
     # https://github.com/kubernetes-client/python/pull/780; https://github.com/swagger-api/swagger-codegen/pull/9284/files
-    api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 5  # each retry timeout is 2 minutes (from faiure logs); so 10 minutes    
+    api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 10  # each retry timeout is 2 minutes (from faiure logs); so 10 minutes
     kube_config.retries = api_server_retries
     # Loads authentication and cluster information from kube-config file and stores them in kubernetes.client.configuration.
     # config_file: Name of the kube-config file.
@@ -597,7 +597,7 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
     con:Configuration = type.__call__(Configuration)
     # api server may not be reachable.  Wait for the api server to recover for 10 minutes.  Note that execute_dag(), which calls run_project(), will not retry this call again
     # https://github.com/kubernetes-client/python/pull/780; https://github.com/swagger-api/swagger-codegen/pull/9284/files
-    api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 5  # each retry timeout is 2 minutes (from faiure logs); so 10 minutes
+    api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 10  # each retry timeout is 2 minutes (from faiure logs); so 10 minutes
     con.retries = api_server_retries
     # con.debug = True
     config.load_kube_config(config_file=os.path.join(cdir, 'config'), client_configuration=con)
