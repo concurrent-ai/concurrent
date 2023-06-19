@@ -6,6 +6,22 @@ value: 10000
 globalDefault: false
 description: "parallels highest prio for docker in docker pod"
 ---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: task-pv-volume
+  labels:
+    type: local
+spec:
+  storageClassName: hpe-hdd-storage
+  capacity:
+    storage: 200Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Delete  
+  hostPath:
+    path: "/etc"
+---
 # PVC for storing dind data
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -20,7 +36,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 100Gi
+      storage: 200Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -42,7 +58,7 @@ spec:
       priorityClassName: parallels-super-high-for-dind
       containers:
         - image: docker:20.10.18-dind
-          args: [--insecure-registry=registry-service:5000, --insecure-registry=registry-service:443, --insecure-registry=registry-service.parallelsns, --insecure-registry=registry-service.parallelsns:5000, --insecure-registry=registry-service.parallelsns.svc.cluster.local ]
+          args: [--insecure-registry=registry-service:5000, --insecure-registry=registry-service:443, --insecure-registry=registry-service.parallelsns, --insecure-registry=registry-service.parallelsns:5000, --insecure-registry=registry-service.parallelsns.svc.cluster.local, --insecure-registry=10.241.17.223:30810, --insecure-registry=10.241.17.209:30810, --insecure-registry=10.241.17.223:31386, --insecure-registry=10.241.17.209:31386, --insecure-registry=hpe-gw1-priv.infinstor.com:10019, --insecure-registry=hpe-gw2-priv.infinstor.com:10019, --insecure-registry=gateway.hpecatalystpoc.com:10019 ]
           name: docker-dind
           env:
             - name: DOCKER_HOST
@@ -58,6 +74,10 @@ spec:
               protocol: TCP
           securityContext:
             privileged: true #Required for dind container to work.
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1000Mi
       volumes:
         - name: docker-dind-data-vol
           #emptyDir: {}

@@ -36,6 +36,7 @@ from mlflow.tracking import MlflowClient
 ${ADDITIONAL_IMPORTS}
 
 client = MlflowClient()
+print(f"Attempting to set mlflow run_id={os.getenv('MLFLOW_RUN_ID')} with status={os.getenv('UPD_STATUS')}")
 client.set_terminated(os.getenv('MLFLOW_RUN_ID'), os.getenv('UPD_STATUS'))
 ENDPY
 }
