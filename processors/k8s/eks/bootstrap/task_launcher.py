@@ -197,7 +197,11 @@ def fail_exit(parent_run_id):
     upload_logs_for_pod(parent_run_id, os.environ['MY_POD_NAME'], os.environ['BOOTSTRAP_LOG_FILE'])
     exit(-1)
 
-
+def _update_mlflow_run(mlflow_run_id:str, mlflow_run_status:str):
+    client = MlflowClient()
+    logger.error(f"Attempting to set mlflow run_id={mlflow_run_id} with status={mlflow_run_status}")
+    client.set_terminated(mlflow_run_id, mlflow_run_status)
+    
 def log_pip_requirements(base_image, run_id, build_logs):
     try:
         start_looking = False
@@ -392,48 +396,54 @@ def launch_mlflow_commands(cmd_list:List[Tuple[str, List[str]]]) -> Dict[str, Tu
 
 
 def main(run_id_list, input_data_specs, parent_run_id):
-    image:docker.models.images.Image; image_uri_with_tag:str; image_digest:str; 
-    image, image_uri_with_tag, image_digest = get_docker_image(parent_run_id)
+    try:
+        image:docker.models.images.Image; image_uri_with_tag:str; image_digest:str; 
+        image, image_uri_with_tag, image_digest = get_docker_image(parent_run_id)
 
-    mlflow_cmd_list = []
-    for run_id, input_spec in zip(run_id_list, input_data_specs):
-        k8s_job_template_file = "/tmp/kubernetes_job_template-" + run_id + ".yaml"
-        if os.path.exists(k8s_job_template_file):
-            os.remove(k8s_job_template_file)
+        mlflow_cmd_list = []
+        for run_id, input_spec in zip(run_id_list, input_data_specs):
+            k8s_job_template_file = "/tmp/kubernetes_job_template-" + run_id + ".yaml"
+            if os.path.exists(k8s_job_template_file):
+                os.remove(k8s_job_template_file)
 
-        side_car_name = get_side_car_container_name(run_id)
-        if 'KUBE_JOB_TEMPLATE_CONTENTS' in os.environ:
-            logger.info("Using Kubernetes Job Template from environment")
-            with open(k8s_job_template_file, "w") as fh:
-                base64.decode(os.environ['KUBE_JOB_TEMPLATE_CONTENTS'], fh)
-        else:
-            logger.info("Generating Kubernetes Job Template from params")
-            # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to use the tagging 'os.environ['repository_uri']:tag' for the image in the k8s job and not image.tags[0]
-            generate_kubernetes_job_template(k8s_job_template_file, os.environ['NAMESPACE'],
-                                             run_id, image_uri_with_tag, image_digest, side_car_name)
+            side_car_name = get_side_car_container_name(run_id)
+            if 'KUBE_JOB_TEMPLATE_CONTENTS' in os.environ:
+                logger.info("Using Kubernetes Job Template from environment")
+                with open(k8s_job_template_file, "w") as fh:
+                    base64.decode(os.environ['KUBE_JOB_TEMPLATE_CONTENTS'], fh)
+            else:
+                logger.info("Generating Kubernetes Job Template from params")
+                # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to use the tagging 'os.environ['repository_uri']:tag' for the image in the k8s job and not image.tags[0]
+                generate_kubernetes_job_template(k8s_job_template_file, os.environ['NAMESPACE'],
+                                                run_id, image_uri_with_tag, image_digest, side_car_name)
 
-        k8s_backend_config_file = "/tmp/k8s-backend-config-" + run_id + ".json"
-        if os.path.exists(k8s_backend_config_file):
-            os.remove(k8s_backend_config_file)
-        # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to use the tagging 'os.environ['repository_uri']:tag' for the image in the backend_end config and not image.tags[0]
-        generate_backend_config_json(k8s_backend_config_file, input_spec, run_id,
-                                     k8s_job_template_file, image_uri_with_tag, image_digest)
+            k8s_backend_config_file = "/tmp/k8s-backend-config-" + run_id + ".json"
+            if os.path.exists(k8s_backend_config_file):
+                os.remove(k8s_backend_config_file)
+            # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to use the tagging 'os.environ['repository_uri']:tag' for the image in the backend_end config and not image.tags[0]
+            generate_backend_config_json(k8s_backend_config_file, input_spec, run_id,
+                                        k8s_job_template_file, image_uri_with_tag, image_digest)
 
 
 
-        mlflow_cmd = ['mlflow', 'run', '--backend', 'concurrent-backend', '--backend-config', k8s_backend_config_file,
-                      '.']
-        if 'PROJECT_PARAMS' in os.environ:
-            params = json.loads(base64.b64decode(os.getenv('PROJECT_PARAMS')).decode('utf-8'))
-            for k, v in params.items():
-                mlflow_cmd.append('-P')
-                mlflow_cmd.append(k + '=' + v)
-        mlflow_cmd_list.append((run_id, mlflow_cmd))
+            mlflow_cmd = ['mlflow', 'run', '--backend', 'concurrent-backend', '--backend-config', k8s_backend_config_file,
+                        '.']
+            if 'PROJECT_PARAMS' in os.environ:
+                params = json.loads(base64.b64decode(os.getenv('PROJECT_PARAMS')).decode('utf-8'))
+                for k, v in params.items():
+                    mlflow_cmd.append('-P')
+                    mlflow_cmd.append(k + '=' + v)
+            mlflow_cmd_list.append((run_id, mlflow_cmd))
 
-    launch_mlflow_commands(mlflow_cmd_list)
-
-    time.sleep(5)
-    upload_logs_for_pod(parent_run_id, os.environ['MY_POD_NAME'], os.environ['BOOTSTRAP_LOG_FILE'])
+        launch_mlflow_commands(mlflow_cmd_list)
+    except Exception as e:
+        logger.error(f"Exception caught: {e}", exc_info=e)
+        _update_mlflow_run(parent_run_id, "FAILED")
+        raise
+    finally:
+        time.sleep(5)
+        upload_logs_for_pod(parent_run_id, os.environ['MY_POD_NAME'], os.environ['BOOTSTRAP_LOG_FILE'])
+        
 
 
 ##Main
