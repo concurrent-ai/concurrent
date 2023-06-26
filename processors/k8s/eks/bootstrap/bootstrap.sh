@@ -461,8 +461,8 @@ fi
 logit "DOCKER_IMAGE for MLproject is ${DOCKER_IMAGE}"
 logit "Add additional dependencies to Dockerfile"
 (cd /tmp/workdir/${USE_SUBDIR}; echo " " >> Dockerfile)
-(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt update" >> Dockerfile)
-(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN apt install -y libfuse-dev curl" >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN if [ -f '/usr/bin/apt' ] ; then apt update ; fi" >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN if [ -f '/usr/bin/apt' ] ; then apt install -y libfuse-dev curl; else yum install -y fuse-libs curl; fi" >> Dockerfile)
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install --ignore-installed PyYAML" >> Dockerfile)
 (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip uninstall -y concurrent-plugin" >> Dockerfile)
 if [ -n "$CONCURRENT_PLUGIN_PIP_INSTALL_CMD" ]; then
