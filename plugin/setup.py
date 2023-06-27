@@ -13,6 +13,7 @@ setup(
         # Define a MLflow Project Backend plugin called 'concurrent-backend'
         "mlflow.project_backend":
             "concurrent-backend=concurrent_plugin.concurrent_backend:PluginConcurrentProjectBackend",
+        "mlflow.deployments": "concurrent-deployment=concurrent_plugin.concurrent_deployment",
         # entry point for concurrent login command
         'console_scripts': [
             'login_concurrent = concurrent_plugin.login:login',
