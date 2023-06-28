@@ -313,6 +313,8 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         cmap.data['ADDITIONAL_PACKAGES'] = subs['additionalPackages']['S']
     if 'additionalImports' in subs:
         cmap.data['ADDITIONAL_IMPORTS'] = subs['additionalImports']['S']
+    cmap.data['MODEL_URI'] = item['model_uri']
+
     # this is the command that'll be used to install concurrent in the bootstrap and the mlflow project pod.  Set this in subscribers table to something similar to "pip install --no-cache-dir --upgrade http://xyz.com/packages/concurrent-plugin/concurrent_plugin-0.3.27-py3-none-any.whl"
     if 'concurrentPluginPipInstallCmd' in subs: cmap.data['CONCURRENT_PLUGIN_PIP_INSTALL_CMD'] = subs['concurrentPluginPipInstallCmd']['S']
     # this is used to set the ttlSecondsAfterFinished for the kubernetes job launched for the mlflow project.  Set this in subscribers table 
@@ -346,11 +348,11 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
 
     if 'deployModelImage' in subs:
         bootstrap_image = subs['deployModelImage']['S']
+        logger.info(f'kickoff_bootstrap: using subs table override bootstrap_image {bootstrap_image}')
     else:
-        bootstrap_image = 'public.ecr.aws/k7c5t9s7/parallels-eks-bootstrap'
+        bootstrap_image = 'public.ecr.aws/u5q3r5r0/deploymodel'
+        logger.info(f'kickoff_bootstrap: using default bootstrap_image {bootstrap_image}')
 
-    logger.info(f'kickoff_bootstrap: XXXXXXXXXXXXXXXXX')
-    return
     pod = k8s.V1Pod(
         api_version='v1',
         metadata=k8s.V1ObjectMeta(name=canonical_nm, namespace=namespace),
@@ -704,6 +706,14 @@ metadata:
         core_api_instance.delete_namespaced_secret(namespace=job_namespace, name=taskinfo_secret_name)
     except Exception:
         pass
+    sec3 = kubernetes_client.V1Secret()
+    sec3.metadata = kubernetes_client.V1ObjectMeta(name=taskinfo_secret_name, namespace=job_namespace)
+    sec3.type = 'Opaque'
+    deploy_model_params = {'testkey': 'testval'}
+    deploy_model_params_encoded = base64.b64encode(json.dumps(deploy_model_params).encode('utf-8')).decode('utf-8')
+    sec3.data = {'taskinfo': deploy_model_params_encoded}
+    core_api_instance.create_namespaced_secret(namespace=job_namespace, body=sec3)
+
     # setup iam roles anywhere credentials, if needed
     iam_roles_anywhere_secret_name:str = None
     setup_roles_anywhere:bool = 'iamRolesAnywhereCert' in subs
