@@ -24,6 +24,9 @@ RUN gcloud components install docker-credential-gcr
 
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip awscliv2.zip && ./aws/install && python3 -m pip install --no-cache-dir --upgrade pip && python3 -m pip -V &&  python3 -m pip install --no-cache-dir docker mlflow boto3 kubernetes && curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && curl --output /root/aws_signing_helper  https://rolesanywhere.amazonaws.com/releases/1.0.4/X86_64/Linux/aws_signing_helper && chmod a+x /root/aws_signing_helper
 
+RUN python3 -m pip install --no-cache-dir --upgrade infinstor_mlflow_plugin
+RUN python3 -m pip install --no-cache-dir --upgrade transformers
+
 ADD ./stub.sh /usr/local/bin/stub.sh
 RUN chmod +x /usr/local/bin/stub.sh
 CMD /usr/local/bin/stub.sh
