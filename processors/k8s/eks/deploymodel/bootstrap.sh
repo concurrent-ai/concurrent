@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# if there is an error, abort
-set -e
-
 export DOCKER_HOST="tcp://docker-dind:2375"
 
 logit() {
@@ -371,20 +368,25 @@ print(version(package_name))
 ENDPY
 }
 
-generate_image_name() {
+download_model() {
   export MODEL_URI=$1
+  export DEST_DIR=$2
   python3 << ENDPY
-import os
 import sys
-model_uri = os.environ['MODEL_URI'].strip().strip('/')
-if not model_uri.startswith('model:/'):
-    print(f"model_uri does not start with model:/", flush=True)
+import os
+import mlflow
+
+try:
+    mlflow.transformers.load_model(os.environ['MODEL_URI'],
+                                    dst_path=os.environ['DEST_DIR'],
+                                    return_type="pipeline",
+                                    device="cpu")
+except:
+    import traceback
+    traceback.print_exc()
     sys.exit(255)
-else:
-    print(model_uri[7:].replace('/', '-'), flush=True)
-    sys.exit(0)
+sys.exit(0)
 ENDPY
-    return $?
 }
 
 logit "MLFLOW_TRACKING_URI = " $MLFLOW_TRACKING_URI
@@ -395,10 +397,7 @@ TASKINFO=`cat /root/.taskinfo/taskinfo`
 logit "TASKINFO="$TASKINFO
 
 logit "MODEL_URI="$MODEL_URI
-if ! IMG_NAME=`generate_image_name $MODEL_URI` ; then
-    logit "Error generating image name"
-    fail_exit
-fi
+IMG_NAME=`echo $MODEL_URI | sha256sum | awk -F' ' '{ print $1 }'`
 logit "IMG_NAME="$IMG_NAME
 
 #HPE_CONTAINER_REGISTRY_URI="registry-service:5000"
@@ -468,6 +467,30 @@ else # default BACKEND_TYPE is eks
       fail_exit
     fi
   fi
+fi
+
+# if the env docker image wasn't found, build it now.
+if [ $CREATE_IMAGE == "yes" ] ; then
+  logit "Building env image for pushing to $REPO_URI"
+  mkdir -p /root/workdir/container/model
+  if ! `download_model $MODEL_URI /root/workdir/container/model` ; then
+      logit "Error downloading model"
+      fail_exit
+  fi
+##  if  [ "${BACKEND_TYPE}" == "HPE" ]; then
+##    # tag the built docker image with the 'image' specified in MLProject
+##    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${IMG_NAME} -f Dockerfile --network host . )
+##  else
+##    # tag the built docker image with the 'image' specified in MLProject
+##    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${IMG_NAME} -f Dockerfile . )
+##  fi
+  docker images  
+  # tag the built image with the remote docker registry hostname, so that it can be pushed.
+##  if ! /usr/bin/docker tag ${IMG_NAME}:latest ${ENV_REPO_URI}:latest ; then
+##    logit "Error tagging env image before pushing"
+##    fail_exit
+##  fi
+##  /usr/bin/docker push ${ENV_REPO_URI}:latest
 fi
 
 exit 0
