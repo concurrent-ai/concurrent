@@ -53,12 +53,17 @@ else:
 ENDPY
 }
 
-fail_exit() {
-  logit "script exited: logging bootstrap output to mlflow"
-  update_mlflow_run ${MLFLOW_RUN_ID} "FAILED" 
+upon_exit() {
+  exit_code=$?
+  logit "script exited with code $exit_code. logging bootstrap output to mlflow"
+  if [ $exit_code -eq 0 ] ; then
+    update_mlflow_run ${MLFLOW_RUN_ID} "FINISHED" 
+  else
+    update_mlflow_run ${MLFLOW_RUN_ID} "FAILED" 
+  fi
   kubectl logs "${MY_POD_NAME}" > ${DEPLOYMODEL_LOG_FILE}
   log_mlflow_artifact ${MLFLOW_RUN_ID} ${DEPLOYMODEL_LOG_FILE} '.concurrent/logs'
-  exit 255
+  exit $exit_code
 }
 
 # trap: trap [-lp] [[arg] signal_spec ...]
@@ -67,7 +72,7 @@ fail_exit() {
 # If a SIGNAL_SPEC is DEBUG, ARG is executed before every simple command.  
 # If a SIGNAL_SPEC is RETURN, ARG is executed each time a shell function or a  script run by the . or source builtins finishes executing.  
 # A SIGNAL_SPEC of ERR means to execute ARG each time a command's failure would cause the shell to exit when the -e option is enabled.
-trap fail_exit EXIT
+trap upon_exit EXIT
 
 logit "Environment: "
 typeset -p
@@ -330,11 +335,11 @@ get_xform() {
     else
       logit "Error cloning git tree $XFORMNAME"
       cat /tmp/git.log.$$
-      fail_exit
+      exit 255
     fi
   else
     logit "Error checking out git tree $XFORMNAME"
-    fail_exit
+    exit 255
   fi
 }
 
@@ -377,10 +382,7 @@ import os
 import mlflow
 
 try:
-    mlflow.transformers.load_model(os.environ['MODEL_URI'],
-                                    dst_path=os.environ['DEST_DIR'],
-                                    return_type="pipeline",
-                                    device="cpu")
+    mlflow.artifacts.download_artifacts(os.environ['MODEL_URI'], None, None, os.environ['DEST_DIR'], None)
 except:
     import traceback
     traceback.print_exc()
@@ -391,13 +393,14 @@ ENDPY
 
 logit "MLFLOW_TRACKING_URI = " $MLFLOW_TRACKING_URI
 # if tracking uri is not set, then error
-[ -z "$MLFLOW_TRACKING_URI" ] && logit "Error: MLFLOW_TRACKING_URI is not set.  " && fail_exit
+[ -z "$MLFLOW_TRACKING_URI" ] && logit "Error: MLFLOW_TRACKING_URI is not set.  " && exit 255
 
 TASKINFO=`cat /root/.taskinfo/taskinfo`
 logit "TASKINFO="$TASKINFO
 
 logit "MODEL_URI="$MODEL_URI
-IMG_NAME=`echo $MODEL_URI | sha256sum | awk -F' ' '{ print $1 }'`
+IMG_HASH=`echo $MODEL_URI | sha256sum | awk -F' ' '{ print $1 }'`
+IMG_NAME="mlflow-deploy-${IMG_HASH}"
 logit "IMG_NAME="$IMG_NAME
 
 #HPE_CONTAINER_REGISTRY_URI="registry-service:5000"
@@ -464,33 +467,107 @@ else # default BACKEND_TYPE is eks
     if ! REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPO_NAME` ; then
       logit "Error creating docker repository ${REPO_NAME}: "
       cat /tmp/cr-out.txt
-      fail_exit
+      exit 255
     fi
   fi
 fi
 
 # if the env docker image wasn't found, build it now.
-if [ $CREATE_IMAGE == "yes" ] ; then
+if [ $CREATE_IMAGE == "no" ] ; then
   logit "Building env image for pushing to $REPO_URI"
   mkdir -p /root/workdir/container/model
-  if ! `download_model $MODEL_URI /root/workdir/container/model` ; then
+  download_model $MODEL_URI /root/workdir/container/model
+  if [ $? != 0 ] ; then
       logit "Error downloading model"
-      fail_exit
+      exit 255
   fi
-##  if  [ "${BACKEND_TYPE}" == "HPE" ]; then
-##    # tag the built docker image with the 'image' specified in MLProject
-##    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${IMG_NAME} -f Dockerfile --network host . )
-##  else
-##    # tag the built docker image with the 'image' specified in MLProject
-##    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${IMG_NAME} -f Dockerfile . )
-##  fi
+  echo "Model download complete. Model dir listing.."
+  /bin/ls -lR /root/workdir/container/model
+  echo "Model download complete. End model dir listing"
+
+  echo "FROM condaforge/miniforge3" > /root/workdir/container/Dockerfile
+  echo "RUN /opt/conda/bin/conda update -n base -c conda-forge conda" >> /root/workdir/container/Dockerfile
+  echo "RUN /opt/conda/bin/conda init bash" >> /root/workdir/container/Dockerfile
+  echo "WORKDIR /root" >> /root/workdir/container/Dockerfile
+  echo "COPY . ./" >> /root/workdir/container/Dockerfile
+  echo "RUN /opt/conda/bin/conda env create -f /root/model/conda.yaml" >> /root/workdir/container/Dockerfile
+  echo "RUN echo '#!/bin/bash' > /root/start.sh" >> /root/workdir/container/Dockerfile
+  echo "RUN echo 'set -x' > /root/start.sh" >> /root/workdir/container/Dockerfile
+  echo "RUN echo 'cat /root/.bashrc' >> /root/start.sh" >> /root/workdir/container/Dockerfile
+  echo "RUN echo '. /opt/conda/etc/profile.d/conda.sh' >> /root/start.sh" >> /root/workdir/container/Dockerfile
+  echo "RUN echo 'conda init bash' >> /root/start.sh" >> /root/workdir/container/Dockerfile
+  echo "RUN echo 'bash /root/start1.sh' >> /root/start.sh" >> /root/workdir/container/Dockerfile
+
+  echo "RUN echo '#!/bin/bash' > /root/start1.sh" >> /root/workdir/container/Dockerfile
+  echo "RUN echo 'set -x' > /root/start1.sh" >> /root/workdir/container/Dockerfile
+  echo "RUN echo '. /opt/conda/etc/profile.d/conda.sh' >> /root/start1.sh" >> /root/workdir/container/Dockerfile
+  echo "RUN echo 'conda activate mlflow-env' >> /root/start1.sh" >> /root/workdir/container/Dockerfile
+  echo "RUN echo 'mlflow models serve -m /root/model' >> /root/start1.sh" >> /root/workdir/container/Dockerfile
+
+  echo "RUN chmod 755 /root/start.sh" >> /root/workdir/container/Dockerfile
+  echo "RUN chmod 755 /root/start1.sh" >> /root/workdir/container/Dockerfile
+  echo "CMD /usr/bin/bash /root/start.sh" >> /root/workdir/container/Dockerfile
+  if  [ "${BACKEND_TYPE}" == "HPE" ]; then
+    # tag the built docker image with the 'image' specified in MLProject
+    (cd /root/workdir/container; docker build -t ${IMG_NAME} --network host .)
+  else
+    # tag the built docker image with the 'image' specified in MLProject
+    (cd /root/workdir/container; docker build -t ${IMG_NAME} .)
+  fi
   docker images  
   # tag the built image with the remote docker registry hostname, so that it can be pushed.
-##  if ! /usr/bin/docker tag ${IMG_NAME}:latest ${ENV_REPO_URI}:latest ; then
-##    logit "Error tagging env image before pushing"
-##    fail_exit
-##  fi
-##  /usr/bin/docker push ${ENV_REPO_URI}:latest
+  if ! /usr/bin/docker tag ${IMG_NAME}:latest ${REPO_URI}:latest ; then
+    logit "Error tagging env image before pushing"
+    exit 255
+  fi
+  /usr/bin/docker push ${REPO_URI}:latest
 fi
 
-exit 0
+if [ x${RESOURCES_LIMITS_CPU} == "x" ] ; then
+  RESOURCES_LIMITS_CPU=$RESOURCES_REQUESTS_CPU
+fi
+if [ x${RESOURCES_LIMITS_MEMORY} == "x" ] ; then
+  RESOURCES_LIMITS_MEMORY=$RESOURCES_REQUESTS_MEMORY
+fi
+if [ x${RESOURCES_LIMITS_NVIDIA_COM_GPU} == "x" ] ; then
+  RESOURCES_LIMITS_NVIDIA_COM_GPU=$RESOURCES_REQUESTS_NVIDIA_COM_GPU
+fi
+
+cat > /tmp/deployment.$$.yaml << EOYAML
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mlflow-deploy-deployment-${MLFLOW_RUN_ID}
+  labels:
+    app: mlflow-deploy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mlflow-deploy
+  template:
+    metadata:
+      labels:
+        app: mlflow-deploy
+    spec:
+      containers:
+      - name: mlflow-deploy
+        image: ${REPO_URI}:latest
+        resources:
+          requests:
+            memory: ${RESOURCES_REQUESTS_MEMORY}
+            cpu: ${RESOURCES_REQUESTS_CPU}
+            nvidia.com/gpu: ${RESOURCES_REQUESTS_NVIDIA_COM_GPU}
+          limits:
+            memory: ${RESOURCES_LIMITS_MEMORY}
+            cpu: ${RESOURCES_LIMITS_CPU}
+            nvidia.com/gpu: ${RESOURCES_LIMITS_NVIDIA_COM_GPU}
+        ports:
+        - containerPort: 8080
+EOYAML
+
+logit "Creating deployment using the following yaml"
+logit `cat /tmp/deployment.$$.yaml`
+
+/usr/local/bin/kubectl create -n ${NAMESPACE} -f /tmp/deployment.$$.yaml
+exit $?

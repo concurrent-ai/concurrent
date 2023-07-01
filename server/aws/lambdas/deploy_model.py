@@ -242,7 +242,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     """
     _create_prio_classes(con)
     run_id = item['run_id']
-    canonical_nm = 'mlflow-project-' + run_id + "-" + str(int(time.time() * 1000))
+    canonical_nm = 'mlflow-deploy-bootstrap-' + run_id
     if 'namespace' in item:
         namespace = item['namespace']
     else:

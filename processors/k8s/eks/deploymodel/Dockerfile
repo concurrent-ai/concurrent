@@ -27,6 +27,8 @@ RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2
 RUN python3 -m pip install --no-cache-dir --upgrade infinstor_mlflow_plugin
 RUN python3 -m pip install --no-cache-dir --upgrade transformers
 
+ADD ./kubectl /usr/local/bin/kubectl
+RUN chmod +x /usr/local/bin/kubectl
 ADD ./stub.sh /usr/local/bin/stub.sh
 RUN chmod +x /usr/local/bin/stub.sh
 CMD /usr/local/bin/stub.sh
