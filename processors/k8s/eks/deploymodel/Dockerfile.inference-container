@@ -1,0 +1,99 @@
+#### section lifted from https://github.com/huggingface/transformers/blob/main/docker/transformers-all-latest-gpu/Dockerfile ####
+FROM nvidia/cuda:11.8.0-cudnn8-devel-ubuntu20.04
+LABEL maintainer="Hugging Face"
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Use login shell to read variables from `~/.profile` (to pass dynamic created variables between RUN commands)
+SHELL ["sh", "-lc"]
+
+# The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
+# to be used as arguments for docker build (so far).
+
+ARG PYTORCH='2.0.1'
+# (not always a valid torch version)
+ARG INTEL_TORCH_EXT='1.11.0'
+# Example: `cu102`, `cu113`, etc.
+ARG CUDA='cu118'
+
+RUN apt update
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs
+RUN git lfs install
+RUN python3 -m pip install --no-cache-dir --upgrade pip
+
+ARG REF=main
+RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
+RUN python3 -m pip install --no-cache-dir -e ./transformers[dev,onnxruntime]
+
+# TODO: Handle these in a python utility script
+RUN [ ${#PYTORCH} -gt 0 -a "$PYTORCH" != "pre" ] && VERSION='torch=='$PYTORCH'.*' ||  VERSION='torch'; echo "export VERSION='$VERSION'" >> ~/.profile
+RUN echo torch=$VERSION
+# `torchvision` and `torchaudio` should be installed along with `torch`, especially for nightly build.
+# Currently, let's just use their latest releases (when `torch` is installed with a release version)
+# TODO: We might need to specify proper versions that work with a specific torch version (especially for past CI).
+RUN [ "$PYTORCH" != "pre" ] && python3 -m pip install --no-cache-dir -U $VERSION torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/$CUDA || python3 -m pip install --no-cache-dir -U --pre torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/nightly/$CUDA
+
+RUN python3 -m pip install --no-cache-dir -U tensorflow==2.12 protobuf==3.20.3 tensorflow_text tensorflow_probability
+RUN python3 -m pip uninstall -y flax jax
+
+RUN python3 -m pip install --no-cache-dir intel_extension_for_pytorch==$INTEL_TORCH_EXT+cpu -f https://developer.intel.com/ipex-whl-stable-cpu
+
+RUN python3 -m pip install --no-cache-dir git+https://github.com/facebookresearch/detectron2.git pytesseract
+RUN python3 -m pip install -U "itsdangerous<2.1.0"
+
+RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
+
+# Add bitsandbytes for mixed int8 testing
+RUN python3 -m pip install --no-cache-dir bitsandbytes
+
+# For bettertransformer
+RUN python3 -m pip install --no-cache-dir optimum
+
+# For video model testing
+RUN python3 -m pip install --no-cache-dir decord av==9.2.0
+
+# For `dinat` model
+RUN python3 -m pip install --no-cache-dir natten -f https://shi-labs.com/natten/wheels/$CUDA/
+
+# When installing in editable mode, `transformers` is not recognized as a package.
+# this line must be added in order for python to be aware of transformers.
+RUN cd transformers && python3 setup.py develop
+#### end section lifted from https://github.com/huggingface/transformers/blob/main/docker/transformers-all-latest-gpu/Dockerfile ####
+RUN mkdir -p /root
+WORKDIR /root
+COPY . ./
+RUN bash /root/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh -p /opt/conda -b
+RUN /opt/conda/bin/conda update -n base -c conda-forge conda
+RUN 'echo \"channel_priority: strict\"' > /root/.condarc
+RUN 'echo \"channels:\"' >> /root/.condarc
+RUN 'echo \"  - conda-forge\"' >> /root/.condarc
+RUN 'echo \"  - defaults\"' >> /root/.condarc
+RUN /opt/conda/bin/conda update -n base -c conda-forge conda
+RUN /opt/conda/bin/conda init bash
+RUN /opt/conda/bin/conda env create -f /root/model/conda.yaml
+
+RUN echo '#!/bin/bash' > /root/start.sh
+RUN echo 'set -x' > /root/start.sh
+RUN echo '. /opt/conda/etc/profile.d/conda.sh' >> /root/start.sh
+RUN echo 'conda init bash' >> /root/start.sh
+RUN echo 'bash /root/start1.sh' >> /root/start.sh
+
+RUN echo '#!/bin/bash' > /root/start1.sh
+RUN echo 'set -x' > /root/start1.sh
+RUN echo '. /opt/conda/etc/profile.d/conda.sh' >> /root/start1.sh
+RUN echo 'conda activate mlflow-env' >> /root/start1.sh
+RUN echo 'pip install -U pyopenssl cryptography' >> /root/start1.sh
+RUN echo 'echo serve_model.py=====' >> /root/start1.sh
+RUN echo 'cat /root/serve_model.py' >> /root/start1.sh
+RUN echo 'python /root/serve_model.py' >> /root/start1.sh
+
+RUN echo 'import mlflow' > /root/serve_model.py
+RUN echo 'model_uri=\"/root/model\"' >> /root/serve_model.py
+RUN echo 'pipeline = mlflow.transformers.load_model(model_uri, None, return_type=\"pipeline\", device=\"cuda\")' >> /root/serve_model.py
+RUN echo 'print(pipeline)' >> /root/serve_model.py
+RUN echo 'output = pipeline([\"Paris is the\"])' >> /root/serve_model.py
+RUN echo 'print(f\"output={output}\")' >> /root/serve_model.py
+
+RUN chmod 755 /root/start.sh
+RUN chmod 755 /root/start1.sh
+CMD /usr/bin/bash /root/start.sh
