@@ -215,37 +215,9 @@ if [ $CREATE_IMAGE == "no" ] ; then
   /bin/ls -lR /root/workdir/container/model
   echo "Model download complete. End model dir listing"
 
-  echo "FROM condaforge/miniforge3" > /root/workdir/container/Dockerfile
-  echo "RUN /opt/conda/bin/conda update -n base -c conda-forge conda" >> /root/workdir/container/Dockerfile
-  echo "RUN /opt/conda/bin/conda init bash" >> /root/workdir/container/Dockerfile
-  echo "WORKDIR /root" >> /root/workdir/container/Dockerfile
-  echo "COPY . ./" >> /root/workdir/container/Dockerfile
-  echo "RUN /opt/conda/bin/conda env create -f /root/model/conda.yaml" >> /root/workdir/container/Dockerfile
-  echo "RUN echo '#!/bin/bash' > /root/start.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'set -x' > /root/start.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN echo '. /opt/conda/etc/profile.d/conda.sh' >> /root/start.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'conda init bash' >> /root/start.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'bash /root/start1.sh' >> /root/start.sh" >> /root/workdir/container/Dockerfile
+  /bin/cp -f /usr/local/bin/Dockerfile.inference-container /root/workdir/container/Dockerfile
+  /bin/cp -f /usr/local/bin/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh /root/workdir/container
 
-  echo "RUN echo '#!/bin/bash' > /root/start1.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'set -x' > /root/start1.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN echo '. /opt/conda/etc/profile.d/conda.sh' >> /root/start1.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'conda activate mlflow-env' >> /root/start1.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'pip install -U pyopenssl cryptography' >> /root/start1.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'echo serve_model.py=====' >> /root/start1.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'cat /root/serve_model.py' >> /root/start1.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'python /root/serve_model.py' >> /root/start1.sh" >> /root/workdir/container/Dockerfile
-
-  echo "RUN echo 'import mlflow' > /root/serve_model.py" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'model_uri=\"/root/model\"' >> /root/serve_model.py" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'pipeline = mlflow.transformers.load_model(model_uri, None, return_type=\"pipeline\", device=\"cuda\")' >> /root/serve_model.py" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'print(pipeline)' >> /root/serve_model.py" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'output = pipeline([\"Paris is the\"])' >> /root/serve_model.py" >> /root/workdir/container/Dockerfile
-  echo "RUN echo 'print(f\"output={output}\")' >> /root/serve_model.py" >> /root/workdir/container/Dockerfile
-
-  echo "RUN chmod 755 /root/start.sh" >> /root/workdir/container/Dockerfile
-  echo "RUN chmod 755 /root/start1.sh" >> /root/workdir/container/Dockerfile
-  echo "CMD /usr/bin/bash /root/start.sh" >> /root/workdir/container/Dockerfile
   if  [ "${BACKEND_TYPE}" == "HPE" ]; then
     # tag the built docker image with the 'image' specified in MLProject
     (cd /root/workdir/container; docker build -t ${IMG_NAME} --network host .)

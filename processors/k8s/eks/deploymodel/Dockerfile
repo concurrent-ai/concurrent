@@ -29,6 +29,8 @@ RUN python3 -m pip install --no-cache-dir --upgrade transformers
 
 ADD ./kubectl /usr/local/bin/kubectl
 RUN chmod +x /usr/local/bin/kubectl
-ADD ./stub.sh /usr/local/bin/stub.sh
-RUN chmod +x /usr/local/bin/stub.sh
-CMD /usr/local/bin/stub.sh
+ADD ./bootstrap.sh /usr/local/bin/bootstrap.sh
+ADD ./Dockerfile.inference-container /usr/local/bin/Dockerfile.inference-container
+ADD ./Miniconda3-py310_23.3.1-0-Linux-x86_64.sh /usr/local/bin/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh
+RUN chmod +x /usr/local/bin/bootstrap.sh
+CMD /usr/local/bin/bootstrap.sh
