@@ -64,35 +64,35 @@ WORKDIR /root
 COPY . ./
 RUN bash /root/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh -p /opt/conda -b
 RUN /opt/conda/bin/conda update -n base -c conda-forge conda
-RUN 'echo \"channel_priority: strict\"' > /root/.condarc
-RUN 'echo \"channels:\"' >> /root/.condarc
-RUN 'echo \"  - conda-forge\"' >> /root/.condarc
-RUN 'echo \"  - defaults\"' >> /root/.condarc
+RUN echo 'channel_priority: strict' > /root/.condarc
+RUN echo 'channels:' >> /root/.condarc
+RUN echo '  - conda-forge' >> /root/.condarc
+RUN echo '  - defaults' >> /root/.condarc
 RUN /opt/conda/bin/conda update -n base -c conda-forge conda
 RUN /opt/conda/bin/conda init bash
 RUN /opt/conda/bin/conda env create -f /root/model/conda.yaml
 
-RUN echo '#!/bin/bash' > /root/start.sh
-RUN echo 'set -x' > /root/start.sh
-RUN echo '. /opt/conda/etc/profile.d/conda.sh' >> /root/start.sh
-RUN echo 'conda init bash' >> /root/start.sh
-RUN echo 'bash /root/start1.sh' >> /root/start.sh
+RUN echo "#!/bin/bash" > /root/start.sh
+RUN echo "set -x" > /root/start.sh
+RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> /root/start.sh
+RUN echo "conda init bash" >> /root/start.sh
+RUN echo "bash /root/start1.sh" >> /root/start.sh
 
-RUN echo '#!/bin/bash' > /root/start1.sh
-RUN echo 'set -x' > /root/start1.sh
-RUN echo '. /opt/conda/etc/profile.d/conda.sh' >> /root/start1.sh
-RUN echo 'conda activate mlflow-env' >> /root/start1.sh
-RUN echo 'pip install -U pyopenssl cryptography' >> /root/start1.sh
-RUN echo 'echo serve_model.py=====' >> /root/start1.sh
-RUN echo 'cat /root/serve_model.py' >> /root/start1.sh
-RUN echo 'python /root/serve_model.py' >> /root/start1.sh
+RUN echo "#!/bin/bash" > /root/start1.sh
+RUN echo "set -x" > /root/start1.sh
+RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> /root/start1.sh
+RUN echo "conda activate mlflow-env" >> /root/start1.sh
+RUN echo "pip install -U pyopenssl cryptography" >> /root/start1.sh
+RUN echo "echo serve_model.py=====" >> /root/start1.sh
+RUN echo "cat /root/serve_model.py" >> /root/start1.sh
+RUN echo "python /root/serve_model.py" >> /root/start1.sh
 
-RUN echo 'import mlflow' > /root/serve_model.py
-RUN echo 'model_uri=\"/root/model\"' >> /root/serve_model.py
-RUN echo 'pipeline = mlflow.transformers.load_model(model_uri, None, return_type=\"pipeline\", device=\"cuda\")' >> /root/serve_model.py
-RUN echo 'print(pipeline)' >> /root/serve_model.py
-RUN echo 'output = pipeline([\"Paris is the\"])' >> /root/serve_model.py
-RUN echo 'print(f\"output={output}\")' >> /root/serve_model.py
+RUN echo "import mlflow" > /root/serve_model.py
+RUN echo "model_uri='/root/model'" >> /root/serve_model.py
+RUN echo "pipeline = mlflow.transformers.load_model(model_uri, None, return_type=\"pipeline\", device=None)" >> /root/serve_model.py
+RUN echo "print(pipeline)" >> /root/serve_model.py
+RUN echo "output = pipeline(['Paris is the'])" >> /root/serve_model.py
+RUN echo "print(f'output={output}')" >> /root/serve_model.py
 
 RUN chmod 755 /root/start.sh
 RUN chmod 755 /root/start1.sh
