@@ -87,13 +87,6 @@ RUN echo "echo serve_model.py=====" >> /root/start1.sh
 RUN echo "cat /root/serve_model.py" >> /root/start1.sh
 RUN echo "python /root/serve_model.py" >> /root/start1.sh
 
-RUN echo "import mlflow" > /root/serve_model.py
-RUN echo "model_uri='/root/model'" >> /root/serve_model.py
-RUN echo "pipeline = mlflow.transformers.load_model(model_uri, None, return_type=\"pipeline\", device=None)" >> /root/serve_model.py
-RUN echo "print(pipeline)" >> /root/serve_model.py
-RUN echo "output = pipeline(['Paris is the'])" >> /root/serve_model.py
-RUN echo "print(f'output={output}')" >> /root/serve_model.py
-
 RUN chmod 755 /root/start.sh
 RUN chmod 755 /root/start1.sh
 CMD /usr/bin/bash /root/start.sh

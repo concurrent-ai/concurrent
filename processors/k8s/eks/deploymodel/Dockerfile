@@ -31,6 +31,7 @@ ADD ./kubectl /usr/local/bin/kubectl
 RUN chmod +x /usr/local/bin/kubectl
 ADD ./bootstrap.sh /usr/local/bin/bootstrap.sh
 ADD ./Dockerfile.inference-container /usr/local/bin/Dockerfile.inference-container
+ADD ./serve_model.py /usr/local/bin/serve_model.py
 ADD ./Miniconda3-py310_23.3.1-0-Linux-x86_64.sh /usr/local/bin/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh
 RUN chmod +x /usr/local/bin/bootstrap.sh
 CMD /usr/local/bin/bootstrap.sh
