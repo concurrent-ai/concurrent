@@ -217,6 +217,7 @@ if [ true ] ; then
   echo "Model download complete. End model dir listing"
 
   /bin/cp -f /usr/local/bin/Dockerfile.inference-container /root/workdir/container/Dockerfile
+  /bin/cp -f /usr/local/bin/serve_model.py /root/workdir/container/serve_model.py
   /bin/cp -f /usr/local/bin/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh /root/workdir/container
 
   if  [ "${BACKEND_TYPE}" == "HPE" ]; then
