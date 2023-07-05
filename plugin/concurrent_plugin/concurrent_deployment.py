@@ -157,7 +157,7 @@ class PluginConcurrentDeploymentClient(BaseDeploymentClient):
         except Exception as err:
             _logger.info(f'Other error occurred: {err}')
             raise
-        return {"name": f_deployment_name, "flavor": flavor}
+        return {"name": f"concurrent-deployment-{run_id}", "flavor": "transformers"}
 
     def delete_deployment(self, name, config=None, endpoint=None):
         print(f"PluginConcurrentDeploymentClient.delete_deployment: name={name}, config={config}, endpoint={endpoint}")

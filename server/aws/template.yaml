@@ -247,6 +247,34 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+  listdeployments: # no _ in name
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: list_deployments.list_deployments
+      CodeUri: lambdas/.
+      Description: >-
+       concurrent server
+      Role: !GetAtt MLflowLambdaRole.Arn
+      Layers:
+        - !Ref libs
+      Events:
+        Api1:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ParallelsMlflowApi
+            Path: /2.0/mlflow/parallels/list-deployments
+            Method: ANY
+      Environment:
+        Variables:
+          CREDENTIALS_TABLE: !Ref CredentialsTable
+          PERIODIC_RUNS_TABLE: !Ref PeriodicRunsTable
+          SERVICE_CONF_TABLE: !Ref ServiceConfTable
+          SUBSCRIBERS_TABLE: !Ref SubscribersTable
+          CUSTOM_TOKENS_TABLE: !Ref CustomTokensTable
+          XFORMS_TABLE: !Ref XformsTable
+          DAG_TABLE: !Ref dagTable
+          DAG_EXECUTION_TABLE: !Ref dagexecutionTable
+          KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
   parallelsauth:
     Type: 'AWS::Serverless::Function'
     Properties:
