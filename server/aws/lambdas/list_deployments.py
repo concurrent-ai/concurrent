@@ -63,23 +63,33 @@ def _get_deployments(backend_type, cl, con:Configuration, rv):
                                                                     _continue=_continue, field_selector=field_selector,
                                                                     label_selector=label_selector, limit=limit,
                                                                     timeout_seconds=timeout_seconds, watch=watch)
-            print(api_response)
+            #print(api_response)
             items = api_response.items
             for item in items:
                 try:
-                    la = item.metadata.annotations['kubectl.kubernetes.io/last-applied-configuration']
-                    last_applied_configuration = json.loads(la)
-                    name = last_applied_configuration['metadata']['name']
-                    ports = []
-                    containers = last_applied_configuration['spec']['template']['spec']['containers']
+                    name = item.metadata.name
+                    containers = item.spec.template.spec.containers
                     cs = []
                     for container in containers:
-                        container_ports = container['ports']
+                        ports = container.ports
                         ps = []
-                        for port in container_ports:
-                            ps.append(f"{port['containerPort']}/{port['protocol']}")
-                        cs.append({"name": container['name'], "ports": ps})
-                    rv.append({'name': name, "fully_qualified_name": f"{backend_type}/{cl['cluster_name']}/{namespace}/{container['name']}", 'containers': cs})
+                        for port in ports:
+                            container_port = port.container_port
+                            if hasattr(port, 'host_ip') and port.host_ip:
+                                host_ip_str = port.host_ip
+                            else:
+                                host_ip_str = ""
+                            if hasattr(port, 'host_port'):
+                                host_port_str = str(port.host_port)
+                            else:
+                                host_port_str = ""
+                            if hasattr(port, 'protocol'):
+                                protocol_str = str(port.protocol)
+                            else:
+                                protocol_str = ""
+                            ps.append(f"{container_port}:{host_ip_str}:{host_port_str}/{protocol_str}")
+                        cs.append({"name": container.name, "ports": ps})
+                    rv.append({'name': name, "fully_qualified_name": f"{backend_type}/{cl['cluster_name']}/{namespace}/{name}", 'containers': cs})
                 except Exception as e:
                     traceback.print_exc()
                     print(f"Ignoring exception parsing item {item}")

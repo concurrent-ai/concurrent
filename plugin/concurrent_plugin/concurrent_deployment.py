@@ -140,7 +140,6 @@ class PluginConcurrentDeploymentClient(BaseDeploymentClient):
 
         cognito_client_id, _, _, _, region = get_conf()
         token = get_token(cognito_client_id, region, True)
-        print(f"PluginConcurrentDeploymentClient.create_deployment: token={token}")
 
         headers = {
                 'Content-Type': 'application/x-amz-json-1.1',
@@ -170,31 +169,32 @@ class PluginConcurrentDeploymentClient(BaseDeploymentClient):
         return {"flavor": flavor}
 
     def list_deployments(self, endpoint=None):
-        print(f"PluginConcurrentDeploymentClient.list_deployments: endpoint={endpoint}")
         if os.environ.get("raiseError") == "True":
             raise RuntimeError("Error requested")
         cognito_client_id, _, _, _, region = get_conf()
         token = get_token(cognito_client_id, region, True)
-        print(f"PluginConcurrentDeploymentClient.list_deployments: token={token}")
 
         headers = {
                 'Content-Type': 'application/x-amz-json-1.1',
                 'Authorization' : 'Bearer ' + token
                 }
         url = get_env_var().rstrip('/') + '/api/2.0/mlflow/parallels/list-deployments'
-        print(f"PluginConcurrentDeploymentClient.create_deployment: Calling GET url {url}")
+        print(f"PluginConcurrentDeploymentClient.list_deployments: Calling GET url {url}")
         try:
             response = requests.get(url, headers=headers)
             response.raise_for_status()
             jr = json.loads(response.text)
-            print(jr)
+            #print(jr)
         except HTTPError as http_err:
             _logger.info(f'HTTP error occurred: {http_err}')
             raise
         except Exception as err:
             _logger.info(f'Other error occurred: {err}')
             raise
-        return jr
+        rv = []
+        for one in jr['deployments']:
+            rv.append(one['name'])
+        return rv
 
     def get_deployment(self, name, endpoint=None):
         print(f"PluginConcurrentDeploymentClient.get_deployment: name={name}, endpoint={endpoint}")
