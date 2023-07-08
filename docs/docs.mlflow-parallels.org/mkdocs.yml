@@ -30,6 +30,7 @@ nav:
                 - 'MLproject': 'files/use-mlproject.md'
                 - 'Data': 'files/use-data.md'
                 - 'Periodic Run': 'files/periodic-run.md'
+                - 'Deploy': 'files/deploy-model.md'
                 - 'Examples':
                         'helloworld': 'files/examples-helloworld.md'
 
