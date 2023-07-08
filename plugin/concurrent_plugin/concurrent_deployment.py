@@ -11,7 +11,6 @@ from mlflow import tracking
 
 _logger = logging.getLogger(__name__)
 
-f_deployment_name = "fake_deployment_name"
 f_endpoint_name = "fake_endpoint_name"
 
 def run_local(target, name, model_uri, flavor=None, config=None):  # pylint: disable=unused-argument
@@ -212,10 +211,50 @@ class PluginConcurrentDeploymentClient(BaseDeploymentClient):
         print(f"PluginConcurrentDeploymentClient.create_endpoint: name={name}, config={config}")
         if config and config.get("raiseError") == "True":
             raise RuntimeError("Error requested")
-        return {"name": f_endpoint_name}
+        cognito_client_id, _, _, _, region = get_conf()
+        token = get_token(cognito_client_id, region, True)
+
+        headers = {
+                'Content-Type': 'application/x-amz-json-1.1',
+                'Authorization' : 'Bearer ' + token
+                }
+        url = get_env_var().rstrip('/') + '/api/2.0/mlflow/parallels/create-endpoint'
+        print(f"PluginConcurrentDeploymentClient.create_endpoint: posting {body} to {url}")
+        try:
+            response = requests.post(url, data=json.dumps(body), headers=headers)
+            response.raise_for_status()
+        except HTTPError as http_err:
+            _logger.info(f'HTTP error occurred: {http_err}')
+            raise
+        except Exception as err:
+            _logger.info(f'Other error occurred: {err}')
+            raise
+        return {"name": f"concurrent-endpoint-{run_id}", "flavor": "transformers"}
 
     def update_endpoint(self, endpoint, config=None):
         print(f"PluginConcurrentDeploymentClient.update_endpoint: endpoint={endpoint}, config={config}")
+        if config and config.get("raiseError") == "True":
+            raise RuntimeError("Error requested")
+        cognito_client_id, _, _, _, region = get_conf()
+        token = get_token(cognito_client_id, region, True)
+
+        body = {'name': endpoint}
+        headers = {
+                'Content-Type': 'application/x-amz-json-1.1',
+                'Authorization' : 'Bearer ' + token
+                }
+        url = get_env_var().rstrip('/') + '/api/2.0/mlflow/parallels/create-endpoint'
+        print(f"PluginConcurrentDeploymentClient.create_endpoint: posting {body} to {url}")
+        try:
+            response = requests.post(url, data=json.dumps(body), headers=headers)
+            response.raise_for_status()
+        except HTTPError as http_err:
+            _logger.info(f'HTTP error occurred: {http_err}')
+            raise
+        except Exception as err:
+            _logger.info(f'Other error occurred: {err}')
+            raise
+        return {"name": f"concurrent-endpoint-{run_id}", "flavor": "transformers"}
         return None
 
     def delete_endpoint(self, endpoint):

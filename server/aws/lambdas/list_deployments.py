@@ -44,7 +44,7 @@ def respond(err, res=None):
         },
     }
 
-def _get_deployments(backend_type, cl, con:Configuration, rv):
+def _get_deployments(cluster_type, cl, con:Configuration, rv):
     namespace=cl['namespace']
     print('_get_deployments: namespace=' + str(namespace))
     with kubernetes.client.ApiClient(con) as api_client:
@@ -72,24 +72,23 @@ def _get_deployments(backend_type, cl, con:Configuration, rv):
                     cs = []
                     for container in containers:
                         ports = container.ports
-                        ps = []
+                        all_ports = []
                         for port in ports:
-                            container_port = port.container_port
+                            ps = {}
+                            ps['container_port'] = port.container_port
                             if hasattr(port, 'host_ip') and port.host_ip:
-                                host_ip_str = port.host_ip
-                            else:
-                                host_ip_str = ""
-                            if hasattr(port, 'host_port'):
-                                host_port_str = str(port.host_port)
-                            else:
-                                host_port_str = ""
+                                ps['host_ip'] = port.host_ip
+                            if hasattr(port, 'host_port') and port.host_port != None:
+                                ps['host_port'] = str(port.host_port)
                             if hasattr(port, 'protocol'):
-                                protocol_str = str(port.protocol)
-                            else:
-                                protocol_str = ""
-                            ps.append(f"{container_port}:{host_ip_str}:{host_port_str}/{protocol_str}")
-                        cs.append({"name": container.name, "ports": ps})
-                    rv.append({'name': name, "fully_qualified_name": f"{backend_type}/{cl['cluster_name']}/{namespace}/{name}", 'containers': cs})
+                                ps['protocol'] = str(port.protocol)
+                            all_ports.append(ps)
+                        cs.append({"name": container.name, "ports": all_ports})
+                    rv.append({'name': name,
+                                'containers': cs,
+                                'cluster_type': f"{cluster_type}",
+                                'cluster_name': f"{cl['cluster_name']}",
+                                'namespace': f"{namespace}"})
                 except Exception as e:
                     traceback.print_exc()
                     print(f"Ignoring exception parsing item {item}")
@@ -278,6 +277,18 @@ def list_hpe_deployments_from_cluster(cl, service_conf, cognito_username, groups
     config.load_kube_config(config_file=kube_config_fname, client_configuration=kube_config)
     
 
+def list_depl_internal(service_conf, cognito_username, groups, subs, rv):
+    kube_clusters = query_user_accessible_clusters(cognito_username, groups)
+    for cl in kube_clusters:
+        if cl['cluster_type'] == 'EKS':
+            list_eks_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
+        elif cl['cluster_type'] == 'GKE':
+            list_gke_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
+        elif cl['cluster_type'] == HpeClusterConfig.HPE_CLUSTER_TYPE:
+            list_hpe_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
+        else:
+            print(f"Warning: Unknown cluster type {cl['cluster_type']}")
+
 def list_deployments(event, context):
     logger.info('## ENVIRONMENT VARIABLES')
     logger.info(os.environ)
@@ -297,14 +308,6 @@ def list_deployments(event, context):
     if not success: return respond(ValueError(status))
 
     rv = []
-    kube_clusters = query_user_accessible_clusters(cognito_username, groups)
-    for cl in kube_clusters:
-        if cl['cluster_type'] == 'EKS':
-            list_eks_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
-        elif cl['cluster_type'] == 'GKE':
-            list_gke_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
-        elif cl['cluster_type'] == HpeClusterConfig.HPE_CLUSTER_TYPE:
-            list_hpe_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
-        else:
-            print(f"Warning: Unknown cluster type {cl['cluster_type']}")
+    list_depl_internal(service_conf, cognito_username, groups, subs, rv)
+    print(f"list_deployments: {rv}")
     return respond(None, {'deployments': rv})

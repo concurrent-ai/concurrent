@@ -252,19 +252,19 @@ kind: Deployment
 metadata:
   name: mlflow-deploy-deployment-${MLFLOW_RUN_ID}
   labels:
-    app: mlflow-deploy
+    app: mlflow-deploy-${MLFLOW_RUN_ID}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mlflow-deploy
+      app: mlflow-deploy-${MLFLOW_RUN_ID}
   template:
     metadata:
       labels:
-        app: mlflow-deploy
+        app: mlflow-deploy-${MLFLOW_RUN_ID}
     spec:
       containers:
-      - name: mlflow-deploy
+      - name: mlflow-deploy-${MLFLOW_RUN_ID}
         image: ${REPO_URI}:latest
         resources:
           requests:
