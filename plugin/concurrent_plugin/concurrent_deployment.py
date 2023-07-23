@@ -209,11 +209,15 @@ class PluginConcurrentDeploymentClient(BaseDeploymentClient):
 
     def create_endpoint(self, name, config=None):
         print(f"PluginConcurrentDeploymentClient.create_endpoint: name={name}, config={config}")
+        if not name.startswith('mlflow-deploy-deployment-'):
+            raise RuntimeError(f"Error: incorrect endpont. should be of format mlflow-deploy-deployment-<run-id>")
+        run_id = name[len('mlflow-deploy-deployment-'):]
         if config and config.get("raiseError") == "True":
             raise RuntimeError("Error requested")
         cognito_client_id, _, _, _, region = get_conf()
         token = get_token(cognito_client_id, region, True)
 
+        body = {'name': name}
         headers = {
                 'Content-Type': 'application/x-amz-json-1.1',
                 'Authorization' : 'Bearer ' + token
@@ -233,6 +237,9 @@ class PluginConcurrentDeploymentClient(BaseDeploymentClient):
 
     def update_endpoint(self, endpoint, config=None):
         print(f"PluginConcurrentDeploymentClient.update_endpoint: endpoint={endpoint}, config={config}")
+        if not endpoint.startswith('mlflow-deploy-deployment-'):
+            raise RuntimeError(f"Error: incorrect endpont. should be of format mlflow-deploy-deployment-<run-id>")
+        run_id = endpoint[len('mlflow-deploy-deployment-'):]
         if config and config.get("raiseError") == "True":
             raise RuntimeError("Error requested")
         cognito_client_id, _, _, _, region = get_conf()
