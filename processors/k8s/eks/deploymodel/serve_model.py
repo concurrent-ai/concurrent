@@ -31,7 +31,19 @@ def handler_app(environ, start_response):
     print(f"model_input={model_input}")
     model_uri='/root/model'
     pipeline = mlflow.transformers.load_model(model_uri, None, return_type='pipeline', device=None)
-    print(pipeline)
+    print(f"before deepspeed: pipeline={pipeline}")
+    if False:
+        import deepspeed
+        local_rank = int(os.getenv('LOCAL_RANK', '0'))
+        world_size = int(os.getenv('WORLD_SIZE', '4'))
+        pipeline.model = deepspeed.init_inference(
+            pipeline.model,
+            mp_size=world_size,
+            dtype=torch.float
+        )
+        pipeline.device = torch.device(f'cuda:{local_rank}')
+    print(f"after deepspeed: pipeline={pipeline}")
+
     output = pipeline(model_input)
     print(f'output={output}')
     data = bytes(json.dumps(output), 'utf-8')
@@ -65,4 +77,3 @@ if __name__ == '__main__':
         'workers': number_of_workers(),
     }
     StandaloneApplication(handler_app, options).run()
-
