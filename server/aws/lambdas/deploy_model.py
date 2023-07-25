@@ -286,6 +286,10 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         cmap.data['RESOURCES_REQUESTS_MEMORY'] = item['resources.requests.memory']
     if "resources.requests.hugepages" in item:
         cmap.data['RESOURCES_REQUESTS_HUGEPAGES'] = item['resources.requests.hugepages']
+    if "optimizer-technology" in item:
+        cmap.data['OPTIMIZER_TECHNOLOGY'] = item['optimizer-technology']
+    else:
+        cmap.data['OPTIMIZER_TECHNOLOGY'] = 'no-optimizer'
     if "resources.requests.nvidia.com/gpu" in item:
         gpu_count = item['resources.requests.nvidia.com/gpu']
         if int(gpu_count) > 0:

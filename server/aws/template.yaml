@@ -65,7 +65,7 @@ Parameters:
 Globals:
   #https://github.com/awslabs/serverless-application-model/blob/develop/docs/globals.rst
   Function:
-    Runtime: python3.8
+    Runtime: python3.9
     MemorySize: 2048
     Timeout: 900
     Environment:

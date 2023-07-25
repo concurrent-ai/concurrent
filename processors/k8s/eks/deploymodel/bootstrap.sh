@@ -222,10 +222,10 @@ if [ true ] ; then
 
   if  [ "${BACKEND_TYPE}" == "HPE" ]; then
     # tag the built docker image with the 'image' specified in MLProject
-    (cd /root/workdir/container; docker build -t ${IMG_NAME} --network host .)
+    (cd /root/workdir/container; docker build -t ${IMG_NAME} --network host --build-arg OPTIMIZER_TECHNOLOGY=${OPTIMIZER_TECHNOLOGY} --build-arg NVIDIA_GPU_COUNT=${NVIDIA_GPU_COUNT} .)
   else
     # tag the built docker image with the 'image' specified in MLProject
-    (cd /root/workdir/container; docker build -t ${IMG_NAME} .)
+    (cd /root/workdir/container; docker build -t ${IMG_NAME} --build-arg OPTIMIZER_TECHNOLOGY=${OPTIMIZER_TECHNOLOGY} --build-arg NVIDIA_GPU_COUNT=${NVIDIA_GPU_COUNT} .)
   fi
   docker images  
   # tag the built image with the remote docker registry hostname, so that it can be pushed.
@@ -266,6 +266,11 @@ spec:
       containers:
       - name: mlflow-deploy-${MLFLOW_RUN_ID}
         image: ${REPO_URI}:latest
+        env:
+        - name: OPTIMIZER_TECHNOLOGY
+          value: "${OPTIMIZER_TECHNOLOGY}"
+        - name: NVIDIA_GPU_COUNT
+          value: "${RESOURCES_REQUESTS_NVIDIA_COM_GPU}"
         resources:
           requests:
             memory: ${RESOURCES_REQUESTS_MEMORY}

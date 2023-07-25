@@ -1,6 +1,7 @@
 import gunicorn.app.base
 import json
 import mlflow
+import os
 
 def number_of_workers():
     return 1
@@ -32,10 +33,13 @@ def handler_app(environ, start_response):
     model_uri='/root/model'
     pipeline = mlflow.transformers.load_model(model_uri, None, return_type='pipeline', device=None)
     print(f"before deepspeed: pipeline={pipeline}")
-    if False:
+    ot = os.getenv('OPTIMIZER_TECHNOLOGY', 'no-optimizer')
+    print(f"Found env var OPTIMIZER_TECHNOLOGY={ot}")
+    if ot == 'deepspeed':
         import deepspeed
         local_rank = int(os.getenv('LOCAL_RANK', '0'))
-        world_size = int(os.getenv('WORLD_SIZE', '4'))
+        world_size = int(os.getenv('WORLD_SIZE', '1'))
+        print(f"Done importing deepspeed. Calling init_inference")
         pipeline.model = deepspeed.init_inference(
             pipeline.model,
             mp_size=world_size,

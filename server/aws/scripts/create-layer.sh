@@ -15,7 +15,7 @@ else    # if $CONDA_PREFIX/bin/activate does not exist (this doesn't exist outsi
     conda activate base
 fi; 
 conda env remove -y --name mlflow-parallels-dev
-conda create -y --name mlflow-parallels-dev python=3.8
+conda create -y --name mlflow-parallels-dev python=3.9
 if [ -x "$CONDA_PREFIX/bin/activate" ]; then
     source $CONDA_PREFIX/bin/activate mlflow-parallels-dev
 else    
@@ -28,7 +28,7 @@ pip install setuptools==57.5.0
 #pip install botocore
 pip install certifi==2021.10.8
 pip install sqlparse
-pip install mlflow==2.0.1
+pip install mlflow==2.5.0
 pip install infinstor
 pip install infinstor_mlflow_plugin
 pip install python-jose
