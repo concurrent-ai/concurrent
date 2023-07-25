@@ -222,10 +222,10 @@ if [ true ] ; then
 
   if  [ "${BACKEND_TYPE}" == "HPE" ]; then
     # tag the built docker image with the 'image' specified in MLProject
-    (cd /root/workdir/container; docker build -t ${IMG_NAME} --network host --build-arg OPTIMIZER_TECHNOLOGY=${OPTIMIZER_TECHNOLOGY} --build-arg NVIDIA_GPU_COUNT=${NVIDIA_GPU_COUNT} .)
+    (cd /root/workdir/container; docker build -t ${IMG_NAME} --network host .)
   else
     # tag the built docker image with the 'image' specified in MLProject
-    (cd /root/workdir/container; docker build -t ${IMG_NAME} --build-arg OPTIMIZER_TECHNOLOGY=${OPTIMIZER_TECHNOLOGY} --build-arg NVIDIA_GPU_COUNT=${NVIDIA_GPU_COUNT} .)
+    (cd /root/workdir/container; docker build -t ${IMG_NAME} .)
   fi
   docker images  
   # tag the built image with the remote docker registry hostname, so that it can be pushed.

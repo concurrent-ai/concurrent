@@ -133,6 +133,8 @@ class PluginConcurrentDeploymentClient(BaseDeploymentClient):
                 body['namespace'] = config['kube-namespace']
             else:
                 body['namespace'] = 'default'
+            if "optimizer-technology" in config:
+                body['optimizer-technology'] = config['optimizer-technology']
         kube_context = config.get('kube-context')
         if kube_context:
             body['kube_context'] = kube_context

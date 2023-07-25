@@ -37,6 +37,7 @@ def handler_app(environ, start_response):
     print(f"Found env var OPTIMIZER_TECHNOLOGY={ot}")
     if ot == 'deepspeed':
         import deepspeed
+        import torch
         local_rank = int(os.getenv('LOCAL_RANK', '0'))
         world_size = int(os.getenv('WORLD_SIZE', '1'))
         print(f"Done importing deepspeed. Calling init_inference")
