@@ -6,8 +6,37 @@ import os
 def number_of_workers():
     return 1
 
+gpipeline = None
+
+def init_pipeline():
+    model_uri='/root/model'
+    pipeline = mlflow.transformers.load_model(model_uri, None, return_type='pipeline', device=None)
+    print(f"init_pipeline: Created pipeline={pipeline}")
+    ot = os.getenv('OPTIMIZER_TECHNOLOGY', 'no-optimizer')
+    print(f"init_pipeline: Found env var OPTIMIZER_TECHNOLOGY={ot}")
+    if ot == 'deepspeed':
+        import deepspeed
+        import torch
+        local_rank = int(os.getenv('LOCAL_RANK', '0'))
+        world_size = int(os.getenv('WORLD_SIZE', '1'))
+        print(f"Done importing deepspeed. Calling init_inference")
+        pipeline.model = deepspeed.init_inference(
+            pipeline.model,
+            mp_size=world_size,
+            dtype=torch.float
+        )
+        pipeline.device = torch.device(f'cuda:{local_rank}')
+    print(f"init_pipeline: After processing env var OPTIMIZER_TECHNOLOGY. pipeline={pipeline}")
+    global gpipeline
+    gpipeline = pipeline
+
 def handler_app(environ, start_response):
-    print(f"infer: Entered. environ={environ}")
+    global gpipeline
+    print(f"infer: Entered. environ={environ}, gpipeline={gpipeline}")
+    if not gpipeline:
+        init_pipeline()
+    if not gpipeline:
+        return bad_request_return(b"Error. Pipeline not available")
     try:
         request_body_size = int(environ.get('CONTENT_LENGTH', 0))
     except (ValueError):
@@ -30,26 +59,7 @@ def handler_app(environ, start_response):
         model_input.append(d[text_index])
 
     print(f"model_input={model_input}")
-    model_uri='/root/model'
-    pipeline = mlflow.transformers.load_model(model_uri, None, return_type='pipeline', device=None)
-    print(f"before deepspeed: pipeline={pipeline}")
-    ot = os.getenv('OPTIMIZER_TECHNOLOGY', 'no-optimizer')
-    print(f"Found env var OPTIMIZER_TECHNOLOGY={ot}")
-    if ot == 'deepspeed':
-        import deepspeed
-        import torch
-        local_rank = int(os.getenv('LOCAL_RANK', '0'))
-        world_size = int(os.getenv('WORLD_SIZE', '1'))
-        print(f"Done importing deepspeed. Calling init_inference")
-        pipeline.model = deepspeed.init_inference(
-            pipeline.model,
-            mp_size=world_size,
-            dtype=torch.float
-        )
-        pipeline.device = torch.device(f'cuda:{local_rank}')
-    print(f"after deepspeed: pipeline={pipeline}")
-
-    output = pipeline(model_input)
+    output = gpipeline(model_input)
     print(f'output={output}')
     data = bytes(json.dumps(output), 'utf-8')
     #data = b"Hello, World!\n"
@@ -60,7 +70,6 @@ def handler_app(environ, start_response):
     return iter([data])
 
 class StandaloneApplication(gunicorn.app.base.BaseApplication):
-
     def __init__(self, app, options=None):
         self.options = options or {}
         self.application = app
