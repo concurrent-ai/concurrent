@@ -375,10 +375,13 @@ def launch_mlflow_commands(cmd_list:List[Tuple[str, List[str]]]) -> Dict[str, Tu
         cmds_to_run = remaining[:batch_size]
         for run_id, cmd in cmds_to_run:
             # If 'env' kwarg to Popen() is not None, it must be a mapping that defines the environment variables for the new process; these are used instead of the default behavior of inheriting the current process’ environment
-            proc:subprocess.Popen = subprocess.Popen(cmd, cwd=os.environ['MLFLOW_PROJECT_DIR'],
+            try:
+                proc:subprocess.Popen = subprocess.Popen(cmd, cwd=os.environ['MLFLOW_PROJECT_DIR'],
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            logger.info("Launched mlflow cmd: " + str(cmd))
-            procs_dict[run_id] = (proc, None, None)
+                logger.info("Launched mlflow cmd: " + str(cmd))
+                procs_dict[run_id] = (proc, None, None)
+            except Exception as e:
+                logger.error(f"Error launching mlflow cmd: {cmd}. Exception: {e}")
         for run_id, _ in cmds_to_run:
             proc, _, _ = procs_dict[run_id]
             stdout, stderr = proc.communicate()
@@ -391,8 +394,11 @@ def launch_mlflow_commands(cmd_list:List[Tuple[str, List[str]]]) -> Dict[str, Tu
                 logger.info('STDERR:\n{}'.format(stderr.decode('utf-8')))
             else:
                 logger.info('STDERR: None')
+            return_code =proc.returncode
+            logger.info(f"return code for run_id {run_id} : {return_code}")
+            run_job_dict[run_id] =return_code
         remaining = remaining[batch_size:]
-    return
+    return run_job_dict
 
 
 def main(run_id_list, input_data_specs, parent_run_id):
@@ -435,7 +441,17 @@ def main(run_id_list, input_data_specs, parent_run_id):
                     mlflow_cmd.append(k + '=' + v)
             mlflow_cmd_list.append((run_id, mlflow_cmd))
 
-        launch_mlflow_commands(mlflow_cmd_list)
+        # launch_mlflow_commands(mlflow_cmd_list)
+        success_dict= launch_mlflow_commands(mlflow_cmd_list)
+        print(success_dict)
+    
+        for run_id, return_code in success_dict.items():
+            if return_code != 0:  # non-zero values
+                _update_mlflow_run(run_id, "FAILED")
+                print(run_id," : FAILED")
+                _update_mlflow_run(parent_run_id, "FAILED")
+                print(parent_run_id," : FAILED")
+                
     except Exception as e:
         logger.error(f"Exception caught: {e}", exc_info=e)
         _update_mlflow_run(parent_run_id, "FAILED")
