@@ -369,7 +369,8 @@ def execute_dag(event, context):
                         else:
                             logger.warning('Hmm. ' + str(nid) + ' not in dag_execution_status?')
                     except Exception as e:
-                        logger.error(f"Caught exception e={e} for nid={nid}",exc_info=e)
+                        # logger.error(f"Caught exception e={e} for nid={nid}",exc_info=e)
+                        logger.error(f"kubernetes cluster '{dag_json['nodes'][0]['k8s_params']['kube_context']}' was not found or the credentials are invalid.")
                         _update_dag_status_mlflow_run_status_upload_logs(cognito_username, groups, dag_execution_status, auth_info, nid, {"message": str(e)})
 
                     # update the future with polling finished or not
@@ -410,6 +411,9 @@ def _update_dag_status_mlflow_run_status_upload_logs(cognito_username, groups, d
     log_mlflow_artifact(cognito_username, groups, auth_info, dag_execution_status['nodes'][nid]['run_id'], 
                                             err_dict,
                                             '.concurrent/logs', 'run-logs.txt')
+    if dag_execution_status['nodes'][nid]['status']== 'FAILED':
+        logger.warning('Marking parent_run_id ' + dag_execution_status['parent_run_id'] + ' as FAILED')
+        update_run(cognito_username, groups, auth_info, dag_execution_status['parent_run_id'], 'FAILED')        
 
 
 def acquire_idle_row_lock(dag_id, dag_execution_id):
