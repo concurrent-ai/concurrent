@@ -95,20 +95,47 @@ def launch_dag_controller():
 
 def upload_logs_for_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, pod_namespace, tmp_log_file, container_name):
     try:
-        # possible fix if only partial logs are read and full logs can't be read. Note that using follow=True for a running pod may make it wait forever??
-        # https://github.com/kubernetes-client/python/issues/199: Passing follow=True to read_namespaced_pod_log makes it never return #199
-        pod_logs = k8s_client.read_namespaced_pod_log(pod_name, pod_namespace, container=container_name)
-        with open(tmp_log_file, "w") as fh:
-            fh.write(pod_logs)
-    except Exception as ex:
-        logger.warning("Failed to fetch logs for {}, {}: {}".format(run_id, pod_name, ex))
-        return
-
-    try:
         client = MlflowClient()
         client.log_artifact(run_id, tmp_log_file, artifact_path='.concurrent/logs')
     except Exception as ex:
         logger.warning("Failed upload logs for {}, {}: {}".format(run_id, pod_name, ex))
+        
+def add_logs_for_pod(k8s_client:kubernetes.client.CoreV1Api, run_id, pod_name, pod_namespace, log_file, tmp_log_file, container_name):
+    try:
+        # possible fix if only partial logs are read and full logs can't be read. Note that using follow=True for a running pod may make it wait forever??
+        # https://github.com/kubernetes-client/python/issues/199: Passing follow=True to read_namespaced_pod_log makes it never return #199
+        pod_logs = k8s_client.read_namespaced_pod_log(pod_name, pod_namespace, container=container_name)
+        logger.info(type(pod_logs))
+        with open(tmp_log_file, "w") as fh:
+            fh.write(pod_logs)
+        upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, tmp_log_file,
+                                container_name=container_name)
+        # Merging code
+        with open(log_file,'r+' if os.path.isfile(log_file) else 'w+') as f1,\
+             open(tmp_log_file,'r') as f2:
+                file1 = f1.readlines()
+                file2 = f2.readlines()
+                if len(file1)<=len(file2) and file1 == file2[:len(file1)]:          #check the file1 is in file2
+                    f1.writelines(file2[len(file1):])
+                    
+                elif file1 != [] and file1[-1] in file2:                            #check the common lines in both files
+                    index = 0
+                    ind = file2.index(file1[-1])+1  
+                    while ind<=len(file2):                                          #If there is any common lines,it will find the index and direct you    
+                        if file1[len(file1)-ind:] == file2[:ind]:
+                            index = ind                                   
+                        if file1[-1] in file2[ind:]:                                
+                            ind += file2[ind:].index(file1[-1])+1           
+                        else:
+                            break
+                    f1.writelines(file2[index:])                                    #If there is common line,merge file1 and file2
+                            
+                else:
+                    f1.writelines(file2)                                            #If there is no common line,then append file1 and file2
+                    
+    except Exception as ex:
+        logger.warning("Failed to fetch logs for {}, {}: {}".format(run_id, pod_name, ex))
+        return
 
 
 def update_mlflow_run(run_id, status):
@@ -191,9 +218,9 @@ def _fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name,
         task_container_name = pod_info.spec.containers[task_index].name
         side_car_container_name = pod_info.spec.containers[sidecar_index].name
         log_describe_pod(k8s_client, run_id, pod_name, pod_namespace, pod_info)
-        upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, f"/tmp/run-logs-{log_suffix}.txt",
+        add_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/run-logs.txt", f"/tmp/run-logs-{log_suffix}.txt",
                             container_name=task_container_name)
-        upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, f"/tmp/sidecar-logs-{log_suffix}.txt",
+        add_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/sidecar-logs.txt", f"/tmp/sidecar-logs-{log_suffix}.txt",
                             container_name=side_car_container_name)
         # status:
         #   conditions:
@@ -229,6 +256,10 @@ def _fetch_upload_pod_status_logs(k8s_client:client.CoreV1Api, run_id, pod_name,
             print(f"Task container is in running state. Continuing to loop")
             return True
         elif task_container_state.terminated:
+            upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/run-logs.txt",
+                                container_name=task_container_name)
+            upload_logs_for_pod(k8s_client, run_id, pod_name, pod_namespace, "/tmp/sidecar-logs.txt",
+                                container_name=side_car_container_name)
             print(f"Task container is in terminated state. Exiting loop")
             return False
         elif task_container_state.waiting:
