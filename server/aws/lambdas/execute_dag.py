@@ -370,7 +370,7 @@ def execute_dag(event, context):
                             logger.warning('Hmm. ' + str(nid) + ' not in dag_execution_status?')
                     except Exception as e:
                         # logger.error(f"Caught exception e={e} for nid={nid}",exc_info=e)
-                        logger.error(f"kubernetes cluster '{dag_json['nodes'][0]['k8s_params']['kube_context']}' was not found or the credentials are invalid.")
+                        logger.error(f"kubernetes cluster '{dag_json['nodes'][0]['k8s_params']['kube_context']}' was not found or The input credentials entered are invalid.")
                         _update_dag_status_mlflow_run_status_upload_logs(cognito_username, groups, dag_execution_status, auth_info, nid, {"message": str(e)})
 
                     # update the future with polling finished or not
