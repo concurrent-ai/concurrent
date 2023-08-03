@@ -70,7 +70,7 @@ def get_presigned_url(event, context):
         if 'ContinuationToken' in qs:
             params['ContinuationToken'] = unquote(qs['ContinuationToken'])
     else:
-        params = {'Bucket': bucket, 'Key': path}
+        params = {'Bucket': bucket, 'Prefix': path}
         if 'Marker' in qs:
             params['Marker'] = qs['Marker']
 
