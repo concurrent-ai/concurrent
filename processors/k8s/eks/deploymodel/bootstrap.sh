@@ -216,15 +216,18 @@ if [ true ] ; then
   /bin/ls -lR /root/workdir/container/model
   echo "Model download complete. End model dir listing"
 
-  /bin/cp -f /usr/local/bin/Dockerfile.inference-container /root/workdir/container/Dockerfile
+  if [ -f "/root/workdir/container/model/Dockerfile" ] ; then
+      /bin/cp -f /root/workdir/container/model/Dockerfile /root/workdir/container/Dockerfile
+      cat /usr/local/bin/model-Dockerfile-epilogue >> /root/workdir/container/Dockerfile
+  else
+      /bin/cp -f /usr/local/bin/Dockerfile.inference-container /root/workdir/container/Dockerfile
+  fi
   /bin/cp -f /usr/local/bin/serve_model.py /root/workdir/container/serve_model.py
   /bin/cp -f /usr/local/bin/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh /root/workdir/container
 
   if  [ "${BACKEND_TYPE}" == "HPE" ]; then
-    # tag the built docker image with the 'image' specified in MLProject
     (cd /root/workdir/container; docker build -t ${IMG_NAME} --network host .)
   else
-    # tag the built docker image with the 'image' specified in MLProject
     (cd /root/workdir/container; docker build -t ${IMG_NAME} .)
   fi
   docker images  

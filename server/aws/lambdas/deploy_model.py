@@ -346,7 +346,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         bootstrap_image = subs['deployModelImage']['S']
         logger.info(f'kickoff_bootstrap: using subs table override bootstrap_image {bootstrap_image}')
     else:
-        bootstrap_image = 'public.ecr.aws/u5q3r5r0/deploymodel'
+        bootstrap_image = 'public.ecr.aws/u5q3r5r0/deploy-model'
         logger.info(f'kickoff_bootstrap: using default bootstrap_image {bootstrap_image}')
 
     pod = k8s.V1Pod(
@@ -357,6 +357,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                 k8s.V1Container(
                     name=canonical_nm,
                     image = bootstrap_image,
+                    image_pull_policy = 'IfNotPresent', # Always Never or IfNotPresent
                     env_from=[
                         k8s.V1EnvFromSource(
                             config_map_ref=k8s.V1ConfigMapEnvSource(name=canonical_nm)
