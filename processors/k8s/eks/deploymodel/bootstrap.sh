@@ -203,8 +203,8 @@ else # default BACKEND_TYPE is eks
 fi
 
 # if the env docker image wasn't found, build it now.
-#if [ $CREATE_IMAGE == "yes" ] ; then
-if [ true ] ; then
+if [ $CREATE_IMAGE == "yes" ] ; then
+#if [ true ] ; then
   logit "Building env image for pushing to $REPO_URI"
   mkdir -p /root/workdir/container/model
   download_model $MODEL_URI /root/workdir/container/model
