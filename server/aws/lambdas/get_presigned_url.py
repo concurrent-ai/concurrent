@@ -75,7 +75,7 @@ def get_presigned_url(event, context):
         params = {'Bucket': bucket, 'Key': path}
         if 'Marker' in qs:
             params['Marker'] = qs['Marker']
- 
+
     if 'StartAfter' in qs:
         params['StartAfter'] = qs['StartAfter']
     if 'MaxKeys' in qs:
