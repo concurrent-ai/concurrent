@@ -53,6 +53,7 @@ def get_presigned_url(event, context):
         logger.info('bucket and path are required')
         return respond(ValueError('bucket and path are required'))
 
+    # method = 'get_object' | 'put_object' | 'list_objects_v2' | 'list_objects' | 'head_object' 
     if ('method' in qs):
         method = qs['method']
     else:
@@ -65,10 +66,11 @@ def get_presigned_url(event, context):
         logger.warning(msg)
         return respond(msg)
 
-    if method == 'list_objects_v2':
+    if method == 'list_objects_v2' or method == "list_objects":
         params = {'Bucket': bucket, 'Prefix': path, 'Delimiter': '/'}
         if 'ContinuationToken' in qs:
             params['ContinuationToken'] = unquote(qs['ContinuationToken'])
+    # method = 'get_object' | 'put_object'  | 'head_object' 
     else:
         params = {'Bucket': bucket, 'Key': path}
         if 'Marker' in qs:
