@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 
 export DOCKER_HOST="tcp://docker-dind:2375"
 
@@ -46,6 +47,23 @@ if os.path.isdir(artifact):
     client.log_artifacts(os.getenv('MLFLOW_RUN_ID'), artifact, os.getenv('DESTINATION_PREFIX'))
 else:
     client.log_artifact(os.getenv('MLFLOW_RUN_ID'), artifact, os.getenv('DESTINATION_PREFIX'))
+ENDPY
+}
+
+check_model_flavor() {
+  export MODEL_PATH=$1
+  export MODEL_FLAVOR=$2
+  python3 << ENDPY
+import os
+from mlflow.models import Model
+
+model = Model.load(os.getenv('MODEL_PATH'))
+print(f"model={model}", flush=True)
+flavors = model.flavors
+tocheck = os.getenv('MODEL_FLAVOR')
+if tocheck in flavors:
+  os._exit(0)
+os._exit(255)
 ENDPY
 }
 
@@ -203,8 +221,8 @@ else # default BACKEND_TYPE is eks
 fi
 
 # if the env docker image wasn't found, build it now.
-if [ $CREATE_IMAGE == "yes" ] ; then
-#if [ true ] ; then
+#if [ $CREATE_IMAGE == "yes" ] ; then
+if [ true ] ; then
   logit "Building env image for pushing to $REPO_URI"
   mkdir -p /root/workdir/container/model
   download_model $MODEL_URI /root/workdir/container/model
@@ -222,13 +240,27 @@ if [ $CREATE_IMAGE == "yes" ] ; then
   else
       /bin/cp -f /usr/local/bin/Dockerfile.inference-container /root/workdir/container/Dockerfile
   fi
+  check_model_flavor '/root/workdir/container/model' 'transformers'
+  if [ $? == 0 ] ; then
+    echo "Detected transformers model from MLmodel"
+    export MODEL_FLAVOR=transformers
+  else
+    check_model_flavor '/root/workdir/container/model' 'python_function'
+    if [ $? == 0 ] ; then
+      echo "Detected pyfunc model from MLmodel"
+      export MODEL_FLAVOR=pyfunc
+    else
+      echo "Unknown model flavor"
+      export MODEL_FLAVOR=unknown
+    fi
+  fi
   /bin/cp -f /usr/local/bin/serve_model.py /root/workdir/container/serve_model.py
   /bin/cp -f /usr/local/bin/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh /root/workdir/container
 
   if  [ "${BACKEND_TYPE}" == "HPE" ]; then
-    (cd /root/workdir/container; docker build -t ${IMG_NAME} --network host .)
+    (cd /root/workdir/container; docker build -t ${IMG_NAME} --build-arg="BE_MODEL_FLAVOR=$MODEL_FLAVOR" --network host .)
   else
-    (cd /root/workdir/container; docker build -t ${IMG_NAME} .)
+    (cd /root/workdir/container; docker build -t ${IMG_NAME} --build-arg="BE_MODEL_FLAVOR=$MODEL_FLAVOR" .)
   fi
   docker images  
   # tag the built image with the remote docker registry hostname, so that it can be pushed.
@@ -272,6 +304,8 @@ spec:
         env:
         - name: OPTIMIZER_TECHNOLOGY
           value: "${OPTIMIZER_TECHNOLOGY}"
+        - name: MODEL_FLAVOR
+          value: "${MODEL_FLAVOR}"
         - name: NVIDIA_GPU_COUNT
           value: "${RESOURCES_REQUESTS_NVIDIA_COM_GPU}"
         resources:

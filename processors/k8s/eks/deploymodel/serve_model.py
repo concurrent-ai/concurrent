@@ -1,14 +1,34 @@
 import gunicorn.app.base
 import json
 import mlflow
+from mlflow.models import Model
 import os
+import sys
+
+MODEL_URI='/root/model'
 
 def number_of_workers():
     return 1
 
+def pyfunc_handler_app(environ, start_response):
+    global pfmodel
+    print(f"pyfunc_handler_app: Entered. environ={environ}, pfmodel={pfmodel}", flush=True)
+    if not pfmodel:
+        return bad_request_return(b"pyfunc_handler_app: Error. pfmodel not available")
+    try:
+        request_body_size = int(environ.get('CONTENT_LENGTH', 0))
+    except (ValueError):
+        return bad_request_return(b"pyfunc_handler_app: Error. Content length not available")
+    req_str = bytes.decode(environ['wsgi.input'].read(request_body_size), 'utf-8')
+    print('pyfunc_handler_app: >>>>>>>>>>>>>>>>>>>1', flush=True)
+    print(req_str, flush=True)
+    print('pyfunc_handler_app: <<<<<<<<<<<<<<<<<<<', flush=True)
+    req = json.loads(req_str)
+    print('pyfunc_handler_app: >>>>>>>>>>>>>>>>>>>2', flush=True)
+    print(json.dumps(req), flush=True)
+
 def init_pipeline():
-    model_uri='/root/model'
-    pipeline = mlflow.transformers.load_model(model_uri, None, return_type='pipeline', device=None)
+    pipeline = mlflow.transformers.load_model(MODEL_URI, None, return_type='pipeline', device=None)
     print(f"init_pipeline: Created pipeline={pipeline}", flush=True)
     ot = os.getenv('OPTIMIZER_TECHNOLOGY', 'no-optimizer')
     print(f"init_pipeline: Found env var OPTIMIZER_TECHNOLOGY={ot}", flush=True)
@@ -28,7 +48,7 @@ def init_pipeline():
     global gpipeline
     gpipeline = pipeline
 
-def handler_app(environ, start_response):
+def transformers_handler_app(environ, start_response):
     global gpipeline
     print(f"infer: Entered. environ={environ}, gpipeline={gpipeline}", flush=True)
     if not gpipeline:
@@ -86,9 +106,26 @@ if __name__ == '__main__':
         'bind': '%s:%s' % ('0.0.0.0', '8080'),
         'workers': number_of_workers(),
     }
-    global gpipeline
-    gpipeline = None
-    print(f"main: Before init_pipline", flush=True)
-    init_pipeline()
-    print(f"main: After init_pipline. gpipeline={gpipeline}", flush=True)
-    StandaloneApplication(handler_app, options).run()
+    flavor = sys.argv[1]
+    print(f"Model Flavor={flavor}", flush=True)
+    model = Model.load(MODEL_URI)
+    print(f"model={model}", flush=True)
+    flavors = model['flavors']
+    if flavor == 'transformers':
+        if not 'transformers' in flavors:
+            print(f"Error. argv flavor={flavor}, but model does not have that flavor", flush=True)
+            os._exit(255)
+        global gpipeline
+        gpipeline = None
+        print(f"main: transformers: Before init_pipline", flush=True)
+        init_pipeline()
+        print(f"main: transformers: After init_pipline. gpipeline={gpipeline}", flush=True)
+        StandaloneApplication(transformers_handler_app, options).run()
+    elif flavor == 'pyfunc':
+        if not 'python_function' in flavors:
+            print(f"Error. argv flavor={flavor}, but model does not have that flavor", flush=True)
+            os._exit(255)
+        global pfmodel
+        pfmodel = mlflow.pyfunc.load_model(MODEL_URI, suppress_warnings=False)
+        print(f'main: pyfunc: pfmodel={pfmodel}')
+        StandaloneApplication(pyfunc_handler_app, options).run()

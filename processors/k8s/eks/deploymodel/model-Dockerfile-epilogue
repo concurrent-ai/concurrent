@@ -2,9 +2,13 @@ RUN mkdir -p /root
 WORKDIR /root
 COPY . ./
 
+ARG BE_MODEL_FLAVOR=indeterminate
+RUN if [ "${BE_MODEL_FLAVOR}" = "pyfunc" ]; then python3 -c "import os; import mlflow; deps = mlflow.pyfunc.get_model_dependencies('/root/model'); print(f'{deps}', flush=True)" > /tmp/reqs.txt; fi
+RUN if [ "${BE_MODEL_FLAVOR}" = "pyfunc" ]; then pip install -r `cat /tmp/reqs.txt`; else echo "Not pyfunc. model is ${BE_MODEL_FLAVOR}"; fi
+
 RUN echo "#!/bin/bash" > /root/start.sh
 RUN echo "set -x" >> /root/start.sh
-RUN echo "if [ x\${OPTIMIZER_TECHNOLOGY} == "xdeepspeed" ] ; then" >> /root/start.sh
+RUN echo "if [ x\${OPTIMIZER_TECHNOLOGY} = "xdeepspeed" ] ; then" >> /root/start.sh
 RUN echo "    echo 'Using optimizer technology deepspeed with NVIDIA_GPU_COUNT=${NVIDIA_GPU_COUNT}'" >> /root/start.sh
 RUN echo "    deepspeed --num_gpus \${NVIDIA_GPU_COUNT} /root/serve_model.py" >> /root/start.sh
 RUN echo "else" >> /root/start.sh
@@ -12,7 +16,8 @@ RUN echo "    echo 'Not using any optimizer technology'" >> /root/start.sh
 RUN echo "fi" >> /root/start.sh
 RUN echo "echo serve_model.py=====" >> /root/start.sh
 RUN echo "cat /root/serve_model.py" >> /root/start.sh
-RUN echo "python3 /root/serve_model.py" >> /root/start.sh
+RUN echo "python3 /root/serve_model.py \$MODEL_FLAVOR" >> /root/start.sh
 RUN chmod 755 /root/start.sh
+RUN cat /root/start.sh
 CMD /usr/bin/bash /root/start.sh
 
