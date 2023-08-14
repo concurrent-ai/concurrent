@@ -84,10 +84,12 @@ def create_endpoint(event, context):
     body = event['body']
     # example: '{"name": ""}
     item = json.loads(body)
+    print(f'create_endpoint: item={item}', flush=True)
     deployments = []
     list_depl_internal(service_conf, cognito_username, groups, subs, deployments)
     print(f"create_endpoint: deployments={deployments}")
     for depl in deployments:
+        print(f"create_endpoint: depl={depl}")
         if depl['name'] == item['name']:
             if depl['cluster_type'] == 'eks':
                 return create_endpoint_eks(depl, service_conf, cognito_username, groups, subs)
@@ -98,6 +100,7 @@ def create_endpoint(event, context):
             else:
                 print(f"Warning: Unknown cluster type {depl['cluster_type']}")
                 return respond(ValueError(f"Unknown cluster type {depl['cluster_type']}"))
+    print(f"create_endpoint: Failed. Unable to find deployment named {item['name']}")
     return respond(None, {'status': f"Failed. Unable to find deployment named {item['name']}"})
 
 def _create_k8s_endpoint(backend_type, endpoint, cert_auth, cluster_arn, deployment,
@@ -106,14 +109,14 @@ def _create_k8s_endpoint(backend_type, endpoint, cert_auth, cluster_arn, deploym
                         gke_project_id, gke_creds, hpe_cluster_config:HpeClusterConfig,
                         cognito_username:str, subs:dict, con:Configuration):
     deployment_name = deployment['name']
-    print(f"_create_k8s_endpoint: Entered. deployment={deployment}")
+    print(f"_create_k8s_endpoint: Entered. deployment={deployment}", flush=True)
     api_instance = kubernetes_client.CoreV1Api(api_client=api_client.ApiClient(configuration=con))
 
     run_id = deployment_name[25:]
     body = kubernetes.client.V1Service()
     metadata = kubernetes_client.V1ObjectMeta()
     metadata.name = f"mlflow-deploy-endpoint-{run_id}"
-    print(f"_create_k8s_endpoint: endpoint name={metadata.name}")
+    print(f"_create_k8s_endpoint: endpoint name={metadata.name}", flush=True)
     body.metadata = metadata
 
     our_port = deployment['containers'][0]['ports'][0]
@@ -144,10 +147,10 @@ def lookup_gke_cluster_config(cognito_username, groups, kube_cluster_name, subs)
     kube_clusters = query_user_accessible_clusters(cognito_username, groups)
     for cl in kube_clusters:
         if cl['cluster_name'] == kube_cluster_name and cl['cluster_type'] == 'GKE':
-            logger.info("Found user's cluser " + kube_cluster_name)
+            print(f"Found user's cluser {kube_cluster_name}", flush=True)
             return cl['gke_location_type'], cl['gke_location'], cl['gke_project'], cl['gke_creds']
 
-    logger.info("Use cluster info for subscriber")
+    print("Use cluster info for subscriber", flush=True)
     # Fall back to subscriber's cluster
     gke_location = subs['gke_location']['S']
     gke_location_type = subs['gke_location_type']['S']
@@ -158,7 +161,7 @@ def lookup_gke_cluster_config(cognito_username, groups, kube_cluster_name, subs)
 
 
 def create_endpoint_gke(deployment, service_conf, cognito_username, groups, subs):
-    logger.info("create_endpoint_gke: Running in kube. deployment=" + str(deployment))
+    print(f"create_endpoint_gke: Running in kube. deployment={deployment}", flush=True)
     gke_cluster_name = deployment['cluster_name']
     gke_location_type, gke_location, gke_project_id, gke_creds \
         = lookup_gke_cluster_config(cognito_username, groups, gke_cluster_name, subs)
@@ -177,7 +180,7 @@ def create_endpoint_gke(deployment, service_conf, cognito_username, groups, subs
     elif gke_location_type.lower() == 'zonal':
       name= 'projects/' + gke_project_id + '/zone/' + gke_location + '/clusters/' + gke_cluster_name
     response = container_client.get_cluster(name=name)
-    logger.info('Cluster=' + str(response))
+    print('Cluster=' + str(response), flush=True)
 
     configuration = kubernetes_client.Configuration()
     configuration.host = f'https://{response.endpoint}'

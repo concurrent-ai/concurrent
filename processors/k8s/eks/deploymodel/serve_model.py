@@ -19,6 +19,9 @@ def pyfunc_handler_app(environ, start_response):
         request_body_size = int(environ.get('CONTENT_LENGTH', 0))
     except (ValueError):
         return bad_request_return(b"pyfunc_handler_app: Error. Content length not available")
+    unwrapped_model = pfmodel.unwrap_python_model()
+    print(f'unwrapped_model={unwrapped_model}')
+
     req_str = bytes.decode(environ['wsgi.input'].read(request_body_size), 'utf-8')
     print('pyfunc_handler_app: >>>>>>>>>>>>>>>>>>>1', flush=True)
     print(req_str, flush=True)
@@ -26,6 +29,28 @@ def pyfunc_handler_app(environ, start_response):
     req = json.loads(req_str)
     print('pyfunc_handler_app: >>>>>>>>>>>>>>>>>>>2', flush=True)
     print(json.dumps(req), flush=True)
+
+    inp_columns = req['columns']
+    for i in range(len(inp_columns)):
+        print(f"column{i}: {inp_columns[i]}", flush=True)
+        if inp_columns[i] == 'role':
+            role_index = i
+        elif inp_columns[i] == 'message':
+            message_index = i
+    print(f"role_index={role_index}, message_index={message_index}", flush=True)
+    import pandas as pd
+    data = req['data']
+    data = {'role': data[role_index], 'message': data[message_index]}
+    df = pd.DataFrame.from_dict(data)
+    print(f"model_input={df}", flush=True)
+    pred = unwrapped_model.predict(df, {'max_tokens': 256})
+    print(pred)
+    data = bytes(json.dumps(pred), 'utf-8')
+    start_response("200 OK", [
+                ("Content-Type", "text/plain"),
+                ("Content-Length", str(len(data)))
+            ])
+    return iter([data])
 
 def init_pipeline():
     pipeline = mlflow.transformers.load_model(MODEL_URI, None, return_type='pipeline', device=None)
@@ -110,7 +135,7 @@ if __name__ == '__main__':
     print(f"Model Flavor={flavor}", flush=True)
     model = Model.load(MODEL_URI)
     print(f"model={model}", flush=True)
-    flavors = model['flavors']
+    flavors = model.flavors
     if flavor == 'transformers':
         if not 'transformers' in flavors:
             print(f"Error. argv flavor={flavor}, but model does not have that flavor", flush=True)
