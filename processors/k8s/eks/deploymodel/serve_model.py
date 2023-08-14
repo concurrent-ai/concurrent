@@ -11,16 +11,10 @@ def number_of_workers():
     return 1
 
 def pyfunc_handler_app(environ, start_response):
-    global pfmodel
-    print(f"pyfunc_handler_app: Entered. environ={environ}, pfmodel={pfmodel}", flush=True)
-    if not pfmodel:
-        return bad_request_return(b"pyfunc_handler_app: Error. pfmodel not available")
     try:
         request_body_size = int(environ.get('CONTENT_LENGTH', 0))
     except (ValueError):
         return bad_request_return(b"pyfunc_handler_app: Error. Content length not available")
-    unwrapped_model = pfmodel.unwrap_python_model()
-    print(f'unwrapped_model={unwrapped_model}')
 
     req_str = bytes.decode(environ['wsgi.input'].read(request_body_size), 'utf-8')
     print('pyfunc_handler_app: >>>>>>>>>>>>>>>>>>>1', flush=True)
@@ -43,8 +37,9 @@ def pyfunc_handler_app(environ, start_response):
     data = {'role': data[role_index], 'message': data[message_index]}
     df = pd.DataFrame.from_dict(data)
     print(f"model_input={df}", flush=True)
+    global unwrapped_model
     pred = unwrapped_model.predict(df, {'max_tokens': 256})
-    print(pred)
+    print(f"prediction={pred}", flush=True)
     data = bytes(json.dumps(pred), 'utf-8')
     start_response("200 OK", [
                 ("Content-Type", "text/plain"),
@@ -130,6 +125,7 @@ if __name__ == '__main__':
     options = {
         'bind': '%s:%s' % ('0.0.0.0', '8080'),
         'workers': number_of_workers(),
+        'timeout': 600
     }
     flavor = sys.argv[1]
     print(f"Model Flavor={flavor}", flush=True)
@@ -150,7 +146,15 @@ if __name__ == '__main__':
         if not 'python_function' in flavors:
             print(f"Error. argv flavor={flavor}, but model does not have that flavor", flush=True)
             os._exit(255)
-        global pfmodel
         pfmodel = mlflow.pyfunc.load_model(MODEL_URI, suppress_warnings=False)
-        print(f'main: pyfunc: pfmodel={pfmodel}')
+        if not pfmodel:
+            print(f"pyfunc_handler_app: Error load_model pfmodel", flush=True)
+            os._exit(255)
+        global unwrapped_model
+        unwrapped_model = pfmodel.unwrap_python_model()
+        if not unwrapped_model:
+            print(f"pyfunc_handler_app: Error unwrap_python_model", flush=True)
+            os._exit(255)
+        print(f'unwrapped_model={unwrapped_model}', flush=True)
+
         StandaloneApplication(pyfunc_handler_app, options).run()
