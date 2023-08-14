@@ -74,7 +74,7 @@ RUN /opt/conda/bin/conda init bash
 RUN /opt/conda/bin/conda env create -f /root/model/conda.yaml
 
 RUN echo "#!/bin/bash" > /root/start.sh
-RUN echo "set -x" > /root/start.sh
+RUN echo "set -x" >> /root/start.sh
 RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> /root/start.sh
 RUN echo "conda init bash" >> /root/start.sh
 RUN echo "bash /root/start1.sh" >> /root/start.sh
@@ -94,11 +94,12 @@ RUN echo "    pip install sentencepiece" >> /root/start1.sh
 RUN echo "    pip install google" >> /root/start1.sh
 RUN echo "    pip install protobuf" >> /root/start1.sh
 RUN echo "    deepspeed --num_gpus \${NVIDIA_GPU_COUNT} /root/serve_model.py" >> /root/start1.sh
+RUN echo "elif [ x\${OPTIMIZER_TECHNOLOGY} == "llama.cpp" ] ; then" >> /root/start1.sh
+RUN echo "    echo 'Using optimizer llama.cpp'" >> /root/start1.sh
+RUN echo "    echo CMAKE_ARGS=-DLLAMA_CUBLAS=on FORCE_CMAKE=1 pip install llama-cpp-python --force-reinstall --upgrade --no-cache-dir" >> /root/start1.sh
 RUN echo "else" >> /root/start1.sh
 RUN echo "    echo 'Not using any optimizer technology'" >> /root/start1.sh
 RUN echo "fi" >> /root/start1.sh
-RUN echo "echo serve_model.py=====" >> /root/start1.sh
-RUN echo "cat /root/serve_model.py" >> /root/start1.sh
 RUN echo "python /root/serve_model.py" >> /root/start1.sh
 
 RUN chmod 755 /root/start.sh

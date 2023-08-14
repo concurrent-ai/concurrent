@@ -11,11 +11,12 @@ RUN echo "set -x" >> /root/start.sh
 RUN echo "if [ x\${OPTIMIZER_TECHNOLOGY} = "xdeepspeed" ] ; then" >> /root/start.sh
 RUN echo "    echo 'Using optimizer technology deepspeed with NVIDIA_GPU_COUNT=${NVIDIA_GPU_COUNT}'" >> /root/start.sh
 RUN echo "    deepspeed --num_gpus \${NVIDIA_GPU_COUNT} /root/serve_model.py" >> /root/start.sh
+RUN echo "elif [ x\${OPTIMIZER_TECHNOLOGY} = "xllama.cpp" ] ; then" >> /root/start.sh
+RUN echo "    echo 'Using optimizer llama.cpp'" >> /root/start.sh
+RUN echo "    echo CMAKE_ARGS=-DLLAMA_CUBLAS=on FORCE_CMAKE=1 pip install llama-cpp-python --force-reinstall --upgrade --no-cache-dir" >> /root/start.sh
 RUN echo "else" >> /root/start.sh
 RUN echo "    echo 'Not using any optimizer technology'" >> /root/start.sh
 RUN echo "fi" >> /root/start.sh
-RUN echo "echo serve_model.py=====" >> /root/start.sh
-RUN echo "cat /root/serve_model.py" >> /root/start.sh
 RUN echo "python3 /root/serve_model.py \$MODEL_FLAVOR" >> /root/start.sh
 RUN chmod 755 /root/start.sh
 RUN cat /root/start.sh
