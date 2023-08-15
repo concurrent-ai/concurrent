@@ -25,6 +25,7 @@ nav:
                                 - 'Add k8s Roles': 'files/add-k8s-role.md'
                                 - 'Create Docker-In-Docker Service': 'files/create-dind.md'
                                 - 'Enable GPU support': 'files/gke-enable-gpu.md'
+                                - 'Test cluster': 'files/test-cluster.md'
                         - 'Add new k8s namespace': 'files/add-namespace.md'
         - 'Use':
                 - 'MLproject': 'files/use-mlproject.md'
@@ -32,7 +33,8 @@ nav:
                 - 'Periodic Run': 'files/periodic-run.md'
                 - 'Deploy':
                         'tiny': 'files/deploy-model.md'
-                        'llama2-deepspeeed': 'files/deploy-model-deepspeed.md'
+                        'llama-deepspeeed': 'files/deploy-model-deepspeed.md'
+                        'llama-cpp': 'files/deploy-model-llama-cpp.md'
                 - 'Examples':
                         'helloworld': 'files/examples-helloworld.md'
 

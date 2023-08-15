@@ -7,10 +7,10 @@ Use the following command to download k8s-dind-service.yaml
 wget https://docs.concurrent-ai.org/cft/version/0.4/k8s-dind-service.yaml
 ```
 
-The downloaded file creates a **dind** service in the **default** namespace. If you want to create the **dind** service in a different namespace, for example **newnsforconcurrent**, then edit the file to reflect this namespace. For example:
+The downloaded file creates a **dind** service in the **parallelsns** namespace. If you want to create the **dind** service in a different namespace, for example **newnsforconcurrent**, then edit the file to reflect this namespace. For example:
 
 ```
-sed -e 's/default/newnsforconcurrent/g' k8s-dind-service.yaml > k8s-dind-service-new.yaml
+sed -e 's/parallelsns/newnsforconcurrent/g' k8s-dind-service.yaml > k8s-dind-service-new.yaml
 ```
 
 Apply it to your kubernetes cluster using kubectl as follows:
