@@ -63,7 +63,7 @@ List of all deployments:
 ## Step 5: Create Endpoint
 Create an endpoint for the newly created deployment
 ```
-$ mlflow deployments update-endpoint -t concurrent-deployment --endpoint mlflow-deploy-deployment-79-16903256617600000000132
+mlflow deployments update-endpoint -t concurrent-deployment --endpoint mlflow-deploy-deployment-79-16903256617600000000132
 PluginConcurrentDeploymentClient.create_endpoint: posting {'name': 'mlflow-deploy-deployment-79-16903256617600000000132'} to https://concurrent.cws.infinstor.com/api/2.0/mlflow/parallels/create-endpoint
 Endpoint mlflow-deploy-deployment-79-16903256617600000000132 is updated
 ```
@@ -71,7 +71,7 @@ Endpoint mlflow-deploy-deployment-79-16903256617600000000132 is updated
 ## Step 6: Test Endpoint
 Now use kubectl to list the service and its availability state:
 ```
-$ kubectl -n nsforconcurrent get services
+kubectl -n nsforconcurrent get services
 NAME                                                TYPE           CLUSTER-IP    EXTERNAL-IP     PORT(S)          AGE
 docker-dind                                         ClusterIP      10.16.3.133   <none>          2375/TCP         162d
 mlflow-deploy-endpoint-79-16903256617600000000132   LoadBalancer   10.16.8.3     35.222.26.238   8080:30627/TCP   41s
@@ -80,7 +80,7 @@ As you can see above, the mlflow deployment *mlflow-deploy-endpoint-79-169032566
 
 You can invoke it as follows:
 ```
-$ curl -X POST -H "Content-Type:application/json; format=pandas-split" --data '{"columns":["role", "message"],"data":[["system", "user"], ["You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.", "What is python?"]]}' http://35.222.26.238:8080/invocations
+curl -X POST -H "Content-Type:application/json; format=pandas-split" --data '{"columns":["role", "message"],"data":[["system", "user"], ["You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe.  Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.", "What is python?"]]}' http://35.222.26.238:8080/invocations
 
 ```
 
