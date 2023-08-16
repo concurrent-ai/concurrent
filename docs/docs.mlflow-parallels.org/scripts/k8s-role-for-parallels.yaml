@@ -48,6 +48,7 @@ rules:
   - watch
   - create
   - update
+  - post
   - patch
   - delete
   - post
