@@ -164,6 +164,23 @@ def upload_objects(run_id, bucket_name, path_in_bucket, local_path):
     except Exception as err:
         _logger.info(str(err))
 
+# Hack workaround for https://github.com/kubernetes-client/python/issues/2056
+class V1FixedPodFailurePolicyRule(kubernetes.client.V1PodFailurePolicyRule):
+    @property
+    def on_pod_conditions(self):
+        return self._on_pod_conditions
+
+    @on_pod_conditions.setter
+    def on_pod_conditions(self, on_pod_conditions):
+        """Sets the on_pod_conditions of this V1PodFailurePolicyRule.
+
+        Represents the requirement on the pod conditions. The requirement is represented as a list of pod condition patterns. The requirement is satisfied if at least one pattern matches an actual pod condition. At most 20 elements are allowed.  # noqa: E501
+
+        :param on_pod_conditions: The on_pod_conditions of this V1PodFailurePolicyRule.  # noqa: E501
+        :type: list[V1PodFailurePolicyOnPodConditionsPattern]
+        """
+        self._on_pod_conditions = on_pod_conditions
+
 class PluginConcurrentProjectBackend(AbstractBackend):
     def run(self, project_uri:str, entry_point:str, params:str,
             version:str, backend_config:dict, tracking_uri:str, experiment_id:str):
@@ -638,7 +655,11 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         env_vars['DAGID'] = os.getenv('DAGID')
         # PYTHONUNBUFFERED is an environment variable in Python that can be used to disable output buffering for all streams. When this variable is set to a non-empty string, Python automatically sets the PYTHONUNBUFFERED flag, which forces Python to disable buffering for sys.stdout and sys.stderr.
         if os.getenv("PYTHONUNBUFFERED"): env_vars['PYTHONUNBUFFERED'] = os.getenv("PYTHONUNBUFFERED")
-        
+
+        # Hack workaround for https://github.com/kubernetes-client/python/issues/2056
+        kubernetes.client.V1PodFailurePolicyRule = V1FixedPodFailurePolicyRule
+        kubernetes.client.models.V1PodFailurePolicyRule = V1FixedPodFailurePolicyRule
+
         job_template = mlflow.projects.kubernetes._get_kubernetes_job_definition(
             project_name, image_tag, image_digest, _get_run_command(command), env_vars, job_template
         )
