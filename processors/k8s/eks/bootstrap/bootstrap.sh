@@ -481,13 +481,21 @@ if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
     (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
   done
 fi
+
+# copy token file to env image. Note that because of this, the env image is user specific and not shared across users
+mkdir -p /tmp/workdir/${USE_SUBDIR}/root/.concurrent
+/bin/cp /root/.concurrent/token /tmp/workdir/${USE_SUBDIR}/root/.concurrent
+(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN mkdir -p /root/.concurrent" >> Dockerfile)
+(cd /tmp/workdir/${USE_SUBDIR}; echo "COPY /root/.concurrent/token /root/.concurrent" >> Dockerfile)
+
 echo "Updated Dockerfile /tmp/workdir/${USE_SUBDIR}/Dockerfile ========="
 cat /tmp/workdir/${USE_SUBDIR}/Dockerfile
 echo "============================"
 
 CREATE_ENV_IMAGE="yes"
 ENV_SHA=`sha256sum /tmp/workdir/${USE_SUBDIR}Dockerfile |awk -F' ' '{ print $1 }'`
-ENV_REPO_NAME=mlflow/shared_env_images/${ENV_SHA}
+USER_NAME_MUNGED=`echo ${COGNITO_USERNAME}|sed -e 's/@/-/g'`
+ENV_REPO_NAME=mlflow/${USER_NAME_MUNGED}-env_images/${ENV_SHA}
 
 if [ "${BACKEND_TYPE}" == "gke" ] ; then
   ENV_REPO_URI="gcr.io/${PROJECT_ID}/${ENV_REPO_NAME}"
@@ -540,10 +548,10 @@ if [ $CREATE_ENV_IMAGE == "yes" ] ; then
   logit "Building env image for pushing to $ENV_REPO_URI"
   if  [ "${BACKEND_TYPE}" == "HPE" ]; then
     # tag the built docker image with the 'image' specified in MLProject
-    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} -f Dockerfile --network host . )
+    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} --build-arg MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI -f Dockerfile --network host . )
   else
     # tag the built docker image with the 'image' specified in MLProject
-    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} -f Dockerfile . )
+    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} --build-arg MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI -f Dockerfile . )
   fi
   docker images  
   # tag the built image with the remote docker registry hostname, so that it can be pushed.
@@ -560,7 +568,6 @@ MLFLOW_PROJECT_DIR=/tmp/workdir/${USE_SUBDIR}
 log_mlflow_artifact ${PARENT_RUN_ID} ${MLFLOW_PROJECT_DIR} '.concurrent/project_files'
 
 # Next, repository for full image, i.e. MLproject env base plus project code/data
-USER_NAME_MUNGED=`echo ${COGNITO_USERNAME}|sed -e 's/@/-/g'`
 REPO_NAME_MUNGED=`find ${MLFLOW_PROJECT_DIR} -type f|sort|xargs sha256sum|awk -F ' ' '{ print $1 }'|sha256sum|awk -F ' ' '{ print $1 }'`
 REPOSITORY_FULL_NAME=mlflow/${USER_NAME_MUNGED}/${REPO_NAME_MUNGED}
 logit "Name of docker repository for full image is $REPOSITORY_FULL_NAME"

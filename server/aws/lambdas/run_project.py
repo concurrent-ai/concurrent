@@ -386,7 +386,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     if 'bootstrapImage' in subs:
         bootstrap_image = subs['bootstrapImage']['S']
     else:
-        bootstrap_image = 'public.ecr.aws/k7c5t9s7/parallels-eks-bootstrap'
+        bootstrap_image = 'public.ecr.aws/u5q3r5r0/concurrent-bootstrap'
 
     pod = k8s.V1Pod(
         api_version='v1',
