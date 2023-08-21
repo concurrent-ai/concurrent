@@ -2,6 +2,7 @@
 
 # if there is an error, abort
 set -e
+set -x
 
 export DOCKER_HOST="tcp://docker-dind:2375"
 
