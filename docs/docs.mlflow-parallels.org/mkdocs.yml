@@ -23,6 +23,7 @@ nav:
                         - 'GKE':
                                 - 'Create Service Account': 'files/create-service-account.md'
                                 - 'Add k8s Roles': 'files/add-k8s-role.md'
+                                - 'Create Node Pools': 'files/create-node-pools.md'
                                 - 'Create Docker-In-Docker Service': 'files/create-dind.md'
                                 - 'Enable GPU support': 'files/gke-enable-gpu.md'
                                 - 'Test cluster': 'files/test-cluster.md'
