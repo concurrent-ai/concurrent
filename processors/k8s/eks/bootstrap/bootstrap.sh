@@ -4,7 +4,9 @@
 set -e
 set -x
 
-export DOCKER_HOST="tcp://docker-dind:2375"
+if [ ${BACKEND_TYPE} != "eks" ] ; then
+  export DOCKER_HOST="tcp://docker-dind:2375"
+fi
 
 logit() {
     echo "`date` - $$ - INFO - bootstrap.sh - ${*}" # >> ${LOG_FILE}
@@ -62,6 +64,27 @@ else:
 ENDPY
 }
 
+num_of_images() {
+  export ECR_OP=$1
+  python3 << ENDPY
+import os
+import json
+try:
+  js = json.loads(open(os.getenv('ECR_OP'), "r").read().encode('utf-8'))
+  id = js['imageDetails']
+  if len(id) > 0:
+    print(f"{len(id)}", flush=True)
+    os._exit(0)
+  else:
+    print("0", flush=True)
+    os._exit(0)
+except Exception as ex:
+  print("-1", flush=True)
+  os._exit(0)
+ENDPY
+  return $?
+}
+
 fail_exit() {
   logit "script exited: logging bootstrap output to mlflow"
   update_mlflow_run ${PARENT_RUN_ID} "FAILED" 
@@ -80,115 +103,6 @@ trap fail_exit EXIT
 
 logit "Environment: "
 typeset -p
-
-if [ x"$DOCKER_HOST" == "x" ] ; then
-    ##
-    ## Begin Code lifted from stackexchange that provides docker-in-docker functionality
-    ##
-    # Ensure that all nodes in /dev/mapper correspond to mapped devices currently loaded by the device-mapper kernel driver
-    dmsetup mknodes
-
-    # First, make sure that cgroups are mounted correctly.
-    CGROUP=/sys/fs/cgroup
-    : {LOG:=stdio}
-
-    [ -d $CGROUP ] ||
-        mkdir $CGROUP
-
-    mountpoint -q $CGROUP ||
-        mount -n -t tmpfs -o uid=0,gid=0,mode=0755 cgroup $CGROUP || {
-            logit "Could not make a tmpfs mount. Did you use --privileged?"
-            exit 1
-        }
-
-    if [ -d /sys/kernel/security ] && ! mountpoint -q /sys/kernel/security
-    then
-        mount -t securityfs none /sys/kernel/security || {
-            logit "Could not mount /sys/kernel/security."
-            logit "AppArmor detection and --privileged mode might break."
-        }
-    fi
-
-    # Mount the cgroup hierarchies exactly as they are in the parent system.
-    for SUBSYS in $(cut -d: -f2 /proc/1/cgroup)
-    do
-        [ -d $CGROUP/$SUBSYS ] || mkdir $CGROUP/$SUBSYS
-        mountpoint -q $CGROUP/$SUBSYS ||
-                mount -n -t cgroup -o $SUBSYS cgroup $CGROUP/$SUBSYS
-
-        # The two following sections address a bug which manifests itself
-        # by a cryptic "lxc-start: no ns_cgroup option specified" when
-        # trying to start containers withina container.
-        # The bug seems to appear when the cgroup hierarchies are not
-        # mounted on the exact same directories in the host, and in the
-        # container.
-
-        # Named, control-less cgroups are mounted with "-o name=foo"
-        # (and appear as such under /proc/<pid>/cgroup) but are usually
-        # mounted on a directory named "foo" (without the "name=" prefix).
-        # Systemd and OpenRC (and possibly others) both create such a
-        # cgroup. To avoid the aforementioned bug, we symlink "foo" to
-        # "name=foo". This shouldn't have any adverse effect.
-        echo $SUBSYS | grep -q ^name= && {
-                NAME=$(echo $SUBSYS | sed s/^name=//)
-                ln -s $SUBSYS $CGROUP/$NAME
-        }
-
-        # Likewise, on at least one system, it has been reported that
-        # systemd would mount the CPU and CPU accounting controllers
-        # (respectively "cpu" and "cpuacct") with "-o cpuacct,cpu"
-        # but on a directory called "cpu,cpuacct" (note the inversion
-        # in the order of the groups). This tries to work around it.
-        [ $SUBSYS = cpuacct,cpu ] && ln -s $SUBSYS $CGROUP/cpu,cpuacct
-    done
-
-    # Note: as I write those lines, the LXC userland tools cannot setup
-    # a "sub-container" properly if the "devices" cgroup is not in its
-    # own hierarchy. Let's detect this and issue a warning.
-    grep -q :devices: /proc/1/cgroup ||
-        logit "WARNING: the 'devices' cgroup should be in its own hierarchy."
-    grep -qw devices /proc/1/cgroup ||
-        logit "WARNING: it looks like the 'devices' cgroup is not mounted."
-
-    # Now, close extraneous file descriptors.
-    pushd /proc/self/fd >/dev/null
-    for FD in *
-    do
-        case "$FD" in
-        # Keep stdin/stdout/stderr
-        [012])
-            ;;
-        # Nuke everything else
-        *)
-            eval exec "$FD>&-"
-            ;;
-        esac
-    done
-    popd >/dev/null
-
-    # If a pidfile is still around (for example after a container restart),
-    # delete it so that docker can start.
-    rm -rf /var/run/docker.pid
-
-    if [ "$LOG" == "file" ]
-    then
-      dockerd $DOCKER_DAEMON_ARGS &>/var/log/docker.log &
-    else
-      dockerd $DOCKER_DAEMON_ARGS &
-    fi
-    (( timeout = 60 + SECONDS ))
-    until docker info >/dev/null 2>&1
-    do
-      if (( SECONDS >= timeout )); then
-        logit 'Timed out trying to connect to internal docker host.' >&2
-        break
-      fi
-      sleep 1
-    done
-    ##
-    ## End Code lifted from stackexchange that provides docker-in-docker functionality
-    ##
-fi
 
 setup_docker_secret() {
   DOCKER_CONFIG_JSON=`cat /root/.docker/config.json | base64 -w0`
@@ -335,6 +249,17 @@ get_xform() {
           export USE_SUBDIR=${USE_SUBDIR}${XFORM_PATH}/
       fi
       logit "USE_SUBDIR=$USE_SUBDIR"
+      CMT=`(cd /tmp/workdir/$USE_SUBDIR; git log -n 1 | grep '^commit '|sed -e 's/commit \(.*\)$/\1/')`
+      if [ $? == 0 ] ; then
+        if [ x$CMT != "x" ] ; then
+          export GIT_COMMIT=$CMT
+          logit "GIT_COMMIT=$GIT_COMMIT"
+        else
+          unset GIT_COMMIT
+        fi
+      else
+        unset GIT_COMMIT
+      fi
       (cd /tmp/workdir/$USE_SUBDIR; /bin/rm -rf .git)
     else
       logit "Error cloning git tree $XFORMNAME"
@@ -429,9 +354,12 @@ fi
 if [ ${BACKEND_TYPE} == "gke" ] ; then
   gcloud auth activate-service-account ${GCE_ACCOUNT} --key-file=/root/.gce/key.json
   gcloud auth configure-docker
+  export USE_DOCKER_BUILD=yes
 elif [ ${BACKEND_TYPE} == "HPE" ]; then
   logit "HPE: Using docker registry for images being built: $HPE_CONTAINER_REGISTRY_URI"
+  export USE_DOCKER_BUILD=yes
 else # if BACKEND_TYPE is not specified, assume it is EKS
+  export USE_DOCKER_BUILD=no
   # prepare for ECR access using aws credentials in call
   if [ "${ECR_TYPE}" == "public" ] ; then
     logit "Using public ECR repository"
@@ -443,7 +371,12 @@ else # if BACKEND_TYPE is not specified, assume it is EKS
     ECR_LOGIN_ENDPOINT=${ECR_AWS_ACCOUNT_ID}.dkr.ecr.${ECR_REGION}.amazonaws.com
   fi
   P1=$(aws --profile ecr ${ECR_SERVICE} get-login-password --region ${ECR_REGION})
-  echo "${P1}" | docker login --username AWS --password-stdin ${ECR_LOGIN_ENDPOINT}
+  /bin/mkdir -p /root/.docker
+  export REGISTRY_AUTH_FILE=/root/.docker/config.json
+  echo "${P1}" | buildah login --username AWS --password-stdin ${ECR_LOGIN_ENDPOINT}
+  echo "=========== Registry auth file ==============="
+  cat $REGISTRY_AUTH_FILE
+  echo "=========== End Registry auth file ==============="
 
   # Make docker login info available to k8s
   logit "NAMESPACE=" $NAMESPACE
@@ -459,6 +392,7 @@ if ! DOCKER_IMAGE=`docker_img_from_mlproject` ; then
   logit "Error parsing MLproject to determine docker image"
   fail_exit
 fi
+export DOCKER_IMAGE
 logit "DOCKER_IMAGE for MLproject is ${DOCKER_IMAGE}"
 logit "Add additional dependencies to Dockerfile"
 (cd /tmp/workdir/${USE_SUBDIR}; echo " " >> Dockerfile)
@@ -516,12 +450,19 @@ elif  [ "${BACKEND_TYPE}" == "HPE" ]; then
   fi
 else # default BACKEND_TYPE is eks  
   if ENV_REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $ENV_REPO_NAME` ; then
-    logit "Looking for latest MLproject docker env image from existing repo $ENV_REPO_URI"    
-    if docker pull ${ENV_REPO_URI}:latest ; then
-      # tag the image pulled from the remote docker regsitry with the docker_image name specified in MLProject
-      if docker tag ${ENV_REPO_URI}:latest ${DOCKER_IMAGE}:latest ; then
-        logit "Found latest MLproject docker env image from existing repo $ENV_REPO_URI"
-        docker images
+    logit "Looking for latest MLproject docker env image, using aws ecr describe-images, from existing repo $ENV_REPO_URI"    
+    aws ecr describe-images --repository-name ${ENV_REPO_NAME} > /tmp/di-output.json
+    if [ $? != 0 ] ; then
+      logit "aws ecr describe-images failed for env image. ${ENV_REPO_NAME}. Creating env image"
+      CREATE_ENV_IMAGE="yes"
+    else
+      NUM_IMAGES=`num_of_images /tmp/di-output.json`
+      echo "Number of images in repo ${ENV_REPO_NAME}=$NUM_IMAGES"
+      if [ $NUM_IMAGES -le 0 ] ; then
+        logit "env image not found from existing repo $ENV_REPO_URI. Building new env image"
+        CREATE_ENV_IMAGE="yes"
+      else
+        logit "env image found from existing repo $ENV_REPO_URI. Not building new env image"
         CREATE_ENV_IMAGE="no"
       fi
     fi
@@ -537,25 +478,39 @@ else # default BACKEND_TYPE is eks
     fi
   fi
 fi
+export ENV_REPO_URI
 
-INFINSTOR_TOKEN=`grep '^Token=' /root/.concurrent/token | awk -F= '{ print $2 }' | sed -e 's/^Custom //'`
+export INFINSTOR_TOKEN=`grep '^Token=' /root/.concurrent/token | awk -F= '{ print $2 }' | sed -e 's/^Custom //'`
 # if the env docker image wasn't found, build it now.
 if [ $CREATE_ENV_IMAGE == "yes" ] ; then
-  logit "Building env image for pushing to $ENV_REPO_URI"
-  if  [ "${BACKEND_TYPE}" == "HPE" ]; then
-    # tag the built docker image with the 'image' specified in MLProject
-    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} --build-arg MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI --build-arg INFINSTOR_TOKEN=$INFINSTOR_TOKEN -f Dockerfile --network host . )
+  if [ $USE_DOCKER_BUILD == "yes" ] ; then
+    logit "Building env image using docker for pushing to $ENV_REPO_URI"
+    if  [ "${BACKEND_TYPE}" == "HPE" ]; then
+      # tag the built docker image with the 'image' specified in MLProject
+      (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} --build-arg MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI --build-arg INFINSTOR_TOKEN=$INFINSTOR_TOKEN -f Dockerfile --network host . )
+    else
+      # tag the built docker image with the 'image' specified in MLProject
+      (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} --build-arg MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI --build-arg INFINSTOR_TOKEN=$INFINSTOR_TOKEN -f Dockerfile . )
+    fi
+    docker images  
+    # tag the built image with the remote docker registry hostname, so that it can be pushed.
+    if ! /usr/bin/docker tag ${DOCKER_IMAGE}:latest ${ENV_REPO_URI}:latest ; then
+      logit "Error tagging env image before pushing"
+      fail_exit
+    fi
+    /usr/bin/docker push ${ENV_REPO_URI}:latest
   else
-    # tag the built docker image with the 'image' specified in MLProject
-    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/docker build -t ${DOCKER_IMAGE} --build-arg MLFLOW_TRACKING_URI=$MLFLOW_TRACKING_URI --build-arg INFINSTOR_TOKEN=$INFINSTOR_TOKEN -f Dockerfile . )
+    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/buildah bud --build-arg MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI} --build-arg INFINSTOR_TOKEN=${INFINSTOR_TOKEN} -t ${DOCKER_IMAGE} -f Dockerfile .)
+    /usr/bin/buildah images  
+    # tag the built image with the remote docker registry hostname, so that it can be pushed.
+    if ! /usr/bin/buildah tag ${DOCKER_IMAGE}:latest ${ENV_REPO_URI}:latest ; then
+      logit "Error tagging env image before pushing"
+      fail_exit
+    fi
+    /usr/bin/buildah push ${ENV_REPO_URI}:latest
   fi
-  docker images  
-  # tag the built image with the remote docker registry hostname, so that it can be pushed.
-  if ! /usr/bin/docker tag ${DOCKER_IMAGE}:latest ${ENV_REPO_URI}:latest ; then
-    logit "Error tagging env image before pushing"
-    fail_exit
-  fi
-  /usr/bin/docker push ${ENV_REPO_URI}:latest
+else
+  logit "Not creating env image since it exists"
 fi
 
 MLFLOW_PROJECT_DIR=/tmp/workdir/${USE_SUBDIR}
@@ -594,6 +549,7 @@ export BOOTSTRAP_LOG_FILE
 export PERIODIC_RUN_FREQUENCY
 export PERIODIC_RUN_START_TIME
 export PERIODIC_RUN_END_TIME
+export ORIGINAL_NODE_ID
 
 logit "MLFLOW_CONCURRENT_URI is " $MLFLOW_CONCURRENT_URI
 logit "MLFLOW_TRACKING_URI is " $MLFLOW_TRACKING_URI
@@ -609,6 +565,7 @@ logit "MLFLOW_PROJECT_DIR is " $MLFLOW_PROJECT_DIR
 logit "PERIODIC_RUN_FREQUENCY is " $PERIODIC_RUN_FREQUENCY
 logit "PERIODIC_RUN_START_TIME is " $PERIODIC_RUN_START_TIME
 logit "PERIODIC_RUN_END_TIME is " $PERIODIC_RUN_END_TIME
+logit "ORIGINAL_NODE_ID is " $ORIGINAL_NODE_ID
 logit "Full environment: "
 typeset -p
 

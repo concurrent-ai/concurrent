@@ -5,7 +5,10 @@ import base64
 from typing import Dict, List, Tuple
 import zlib
 import subprocess
+import selectors
+import sys
 import time
+import tarfile
 from mlflow.tracking import MlflowClient
 from mlflow.projects.utils import load_project, MLFLOW_DOCKER_WORKDIR_PATH
 from mlflow.projects import kubernetes as kb
@@ -22,7 +25,10 @@ logger.setLevel(logging.INFO)
 
 def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_tag,
                                      image_digest, side_car_name):
-    image_uri = image_tag + "@" + image_digest
+    if image_digest:
+        image_uri = image_tag + "@" + image_digest
+    else:
+        image_uri = image_tag
     mlflow_tracking_uri = os.environ['MLFLOW_TRACKING_URI']
     concurrent_uri = os.environ['MLFLOW_CONCURRENT_URI']
     dag_execution_id = os.getenv('DAG_EXECUTION_ID')
@@ -79,8 +85,8 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         if "RESOURCES_REQUESTS_NVIDIA_COM_GPU" in os.environ:
             fh.write("            nvidia.com/gpu: {}\n".format(os.environ['RESOURCES_REQUESTS_NVIDIA_COM_GPU']))
         if os.environ.get('ECR_TYPE') == "private":
-            fh.write("      imagePullSecrets:\n")
-            fh.write("      - name: ecr-private-key\n")
+            fh.write("        imagePullSecrets:\n")
+            fh.write("        - name: ecr-private-key\n")
 
         ##Add sidecar container
         fh.write("      - name: \"{}\"\n".format(side_car_name))
@@ -131,8 +137,8 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         fh.write("            cpu: \"250m\"\n")
         fh.write("            memory: \"1024Mi\"\n")
         if os.environ.get('ECR_TYPE') == "private":
-            fh.write("      imagePullSecrets:\n")
-            fh.write("      - name: ecr-private-key\n")
+            fh.write("        imagePullSecrets:\n")
+            fh.write("        - name: ecr-private-key\n")
         ## Sidecar config ends
         fh.write("      priorityClassName: concurrent-high-non-preempt-prio\n")
         fh.write("      restartPolicy: Never\n")
@@ -243,8 +249,37 @@ def log_pip_requirements(base_image, run_id, build_logs):
     except Exception as ex2:
         logger.info("Caught exception while trying to extract pip package list. Not fatal" + str(ex2))
 
+def log_pip_requirements_alt(name, run_id, log_lines_array):
+    try:
+        start_looking = False
+        for line in log_lines_array:
+            if start_looking:
+                pl = None
+                try:
+                    pl = json.loads(line)
+                except Exception :
+                    pl = None
+                if pl:
+                    reqs = ''
+                    for one_entry in pl:
+                        if 'name' in one_entry and 'version' in one_entry:
+                            logger.info('Package=' + str(one_entry['name']) + ', version=' + str(one_entry['version']))
+                            reqs = reqs + one_entry['name'] + '==' + one_entry['version'] + '\n'
+                    if reqs:
+                        fpath = '/tmp/requirements-' + name + '.txt'
+                        with open(fpath, 'w') as fp:
+                            fp.write(reqs)
+                        client = MlflowClient()
+                        client.log_artifact(run_id, fpath, artifact_path='.concurrent/logs')
+                        logger.info('build_log: successfully wrote requirements.txt')
+                        break
+            if 'Running pip list' in line:
+                start_looking = True
+    except Exception as ex2:
+        logger.info("Caught exception while trying to extract pip package list. Not fatal" + str(ex2))
 
-def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_commit):
+
+def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_commit, lookup_tag):
     """
     Build a docker image containing the project in `work_dir`, using the base image.  Also log pip requirements.txt from the 'pip list' done during building the image.
     """
@@ -267,28 +302,86 @@ def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_
     build_ctx_path = _create_docker_build_ctx(work_dir, dockerfile)
     logger.info("build_ctx_path = {}".format(build_ctx_path))
     logger.info("_PROJECT_TAR_ARCHIVE_NAME = {}, _GENERATED_DOCKERFILE_NAME = {}".format(_PROJECT_TAR_ARCHIVE_NAME, _GENERATED_DOCKERFILE_NAME))
+    tarf = tarfile.open(build_ctx_path, 'r:gz')
+    logger.info('Begin Build Context Tarfile Listing:')
+    for one_tarf in tarf:
+        logger.info(f"  {one_tarf}")
+    logger.info('End Build Context Tarfile Listing')
     with open(build_ctx_path, "rb") as docker_build_ctx:
-        logger.info("=== Building docker image %s ===", image_uri)
-        client:docker.DockerClient = docker.from_env()
-        image, build_logs = client.images.build(
-            tag=image_uri,
-            forcerm=True,
-            dockerfile=os.path.join(_PROJECT_TAR_ARCHIVE_NAME, _GENERATED_DOCKERFILE_NAME),
-            fileobj=docker_build_ctx,
-            custom_context=True,
-            encoding="gzip"
-        )
-        log_pip_requirements(base_image, parent_run_id, build_logs)
+        if os.getenv('USE_DOCKER_BUILD', 'yes') == 'yes':
+            logger.info("=== Building full image using docker %s ===", image_uri)
+            client:docker.DockerClient = docker.from_env()
+            image, build_logs = client.images.build(
+                tag=image_uri,
+                forcerm=True,
+                dockerfile=os.path.join(_PROJECT_TAR_ARCHIVE_NAME, _GENERATED_DOCKERFILE_NAME),
+                fileobj=docker_build_ctx,
+                custom_context=True,
+                encoding="gzip"
+            )
+            log_pip_requirements(base_image, parent_run_id, build_logs)
+            image_uri_with_tag:str = f"{repository_uri}:{lookup_tag}"
+            image_digest = kb.push_image_to_registry(image_uri_with_tag)
+        else:
+            logger.info("=== Building full image using buildah %s ===", image_uri)
+            tarf = tarfile.open(build_ctx_path, 'r:gz')
+            os.makedirs('/tmp/buildah-workdir')
+            tarf.extractall(path='/tmp/buildah-workdir')
+            logger.info("Begin contents of build context >>>>>")
+            for root, dirs, files in os.walk('/tmp/buildah-workdir'):
+                for fn in files:
+                    logger.info(os.path.join(root, fn))
+            logger.info("End contents of build context <<<<<")
+            cmd = ['/usr/bin/buildah', 'bud',
+                    '--build-arg', 'MLFLOW_TRACKING_URI='+os.getenv('MLFLOW_TRACKING_URI'),
+                    '--build-arg', 'INFINSTOR_TOKEN='+os.getenv('INFINSTOR_TOKEN'),
+                    '-t',  f"{repository_uri}:{lookup_tag}",
+                    '-f', 'mlflow-project-docker-build-context/Dockerfile.mlflow-autogenerated', '.']
+            logger.info(f'Executing command {cmd}')
+            logs_list = []
+            try:
+                process = subprocess.Popen(cmd, cwd='/tmp/buildah-workdir', bufsize=0, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                sel = selectors.DefaultSelector()
+                sel.register(process.stdout, selectors.EVENT_READ)
+                outer_loop = True
+                while outer_loop:
+                    for key, val in sel.select():
+                        line = key.fileobj.readline()
+                        if not line:
+                            outer_loop = False
+                            break
+                        logs_list.append(line)
+                        logger.info(line)
+            except Exception as ex:
+                logger.error(f"Caught {ex} building full image")
+            image_digest = None
+
+            cmd = ['/usr/bin/buildah', 'push', f"{repository_uri}:{lookup_tag}"]
+            logger.info(f'Executing command {cmd}')
+            try:
+                process = subprocess.Popen(cmd, cwd='/tmp/buildah-workdir', bufsize=0, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                sel = selectors.DefaultSelector()
+                sel.register(process.stdout, selectors.EVENT_READ)
+                outer_loop = True
+                while outer_loop:
+                    for key, val in sel.select():
+                        line = key.fileobj.readline()
+                        if not line:
+                            outer_loop = False
+                            break
+                        logger.info(line)
+            except Exception as ex:
+                logger.error(f"Caught {ex} pushing full image")
+            log_pip_requirements_alt(os.getenv('ORIGINAL_NODE_ID', ''), parent_run_id, logs_list)
     try:
         os.remove(build_ctx_path)
     except Exception:
         logger.info("Temporary docker context file %s was not deleted.", build_ctx_path)
     # tracking.MlflowClient().set_tag(run_id, MLFLOW_DOCKER_IMAGE_URI, image_uri)
     # tracking.MlflowClient().set_tag(run_id, MLFLOW_DOCKER_IMAGE_ID, image.id)
-    return image
+    return image_digest
 
-
-def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str, str]:
+def get_docker_image(parent_run_id:str) -> Tuple[str, str]:
     """
     get the docker image that corresponds to os.environ['REPOSITORY_URI']:latest.  
     Either build the image if it doesn't exist, using Dockerfile in os.environ['MLFLOW_PROJECT_DIR'] or pull an existing image.
@@ -297,7 +390,7 @@ def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str
         parent_run_id (str): pip requirements.txt is logged to this parent_run_id.  requirements.txt is created by parsing 'docker build' output
 
     Returns:
-        Tuple[docker.models.images.Image, str, str]: returns (image, image_uri_with_tag, image_digest).  Note that 'image.tags' contains all the taggings ( all registry/repository:version tagging done for this image ) for this image and can be more than one.  'image_uri_with_tag' is os.environ['REPOSITORY_URI']:tag. 'image_digest' is the digest for 'image_uri_with_tag'
+        Tuple[docker.models.images.Image, str, str]: returns (image_uri_with_tag, image_digest).  Note that 'image_uri_with_tag' is os.environ['REPOSITORY_URI']:tag. 'image_digest' is the digest for 'image_uri_with_tag'
     """
     git_commit = os.environ.get('GIT_COMMIT')
     repository_uri = os.environ['REPOSITORY_URI']
@@ -306,8 +399,8 @@ def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str
         lookup_tag = git_commit[:7]
     else:
         lookup_tag = 'latest'
-    docker_client:docker.DockerClient = docker.from_env()
     try:
+        docker_client:docker.DockerClient = docker.from_env()
         # REPOSITORY                                                                                                                   TAG       IMAGE ID       CREATED        SIZE
         # hpe-gw1-priv.infinstor.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3             5ebaa6d   06a3114a01cf   19 hours ago   1.67GB
         # 10.241.17.209:30810/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3                          5ebaa6d   06a3114a01cf   19 hours ago   1.67GB
@@ -328,6 +421,8 @@ def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str
     except docker.errors.APIError as apie:
         logger.info("task_launcher.get_docker_image: Error " + str(apie)
                      + " while pulling " + repository_uri + ", tag=" + lookup_tag)
+    except Exception as ex:
+        logger.info(f"task_launcher.get_docker_image: Error {ex} while pulling {repository_uri} tag={lookup_tag}")
     else:
         # 2023-05-25 04:13:36,183 - 274 - root - INFO - task_launcher.get_docker_image: image=<Image: '10.241.17.209:30810/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'gateway.hpecatalystpoc.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'hpe-gw1-priv.infinstor.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d'>
         # image.tags contains all registry/repository:version taggings done for this image
@@ -345,21 +440,21 @@ def get_docker_image(parent_run_id:str) -> Tuple[docker.models.images.Image, str
                      + repository_uri)
         work_dir = os.environ['MLFLOW_PROJECT_DIR']
         project = load_project(work_dir)
-        logger.info('Task launcher, base image = ' + str(project.docker_env.get("image")))
+        base_image = os.getenv('ENV_REPO_URI', project.docker_env.get("image"))
+        logger.info(f'Task launcher, base image = {base_image}')
         # 2023-05-25 04:13:36,183 - 274 - root - INFO - task_launcher.get_docker_image: image=<Image: '10.241.17.209:30810/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'gateway.hpecatalystpoc.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'hpe-gw1-priv.infinstor.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d'>
         # image.tags contains all registry/repository:version taggings done for this image
-        image = build_docker_image(
+        image_digest = build_docker_image(
             parent_run_id=parent_run_id,
             work_dir=work_dir,
             repository_uri=repository_uri,
-            base_image=project.docker_env.get("image"),
-            git_commit=git_commit
+            base_image=base_image,
+            git_commit=git_commit,
+            lookup_tag=lookup_tag
         )
         image_uri_with_tag:str = f"{repository_uri}:{lookup_tag}"
-        # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to use the tagging 'os.environ['repository_uri']:tag' for pushing and not image.tags[0] for pushing
-        image_digest = kb.push_image_to_registry(image_uri_with_tag)
 
-    return image, image_uri_with_tag, image_digest
+    return image_uri_with_tag, image_digest
 
 
 def launch_mlflow_commands(cmd_list:List[Tuple[str, List[str]]]) -> Dict[str, Tuple[str, None]]:
@@ -403,7 +498,7 @@ def launch_mlflow_commands(cmd_list:List[Tuple[str, List[str]]]) -> Dict[str, Tu
 def main(run_id_list, input_data_specs, parent_run_id):
     try:
         image:docker.models.images.Image; image_uri_with_tag:str; image_digest:str; 
-        image, image_uri_with_tag, image_digest = get_docker_image(parent_run_id)
+        image_uri_with_tag, image_digest = get_docker_image(parent_run_id)
 
         mlflow_cmd_list = []
         for run_id, input_spec in zip(run_id_list, input_data_specs):
@@ -428,9 +523,6 @@ def main(run_id_list, input_data_specs, parent_run_id):
             # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to use the tagging 'os.environ['repository_uri']:tag' for the image in the backend_end config and not image.tags[0]
             generate_backend_config_json(k8s_backend_config_file, input_spec, run_id,
                                         k8s_job_template_file, image_uri_with_tag, image_digest)
-
-
-
             mlflow_cmd = ['mlflow', 'run', '--backend', 'concurrent-backend', '--backend-config', k8s_backend_config_file,
                         '.']
             if 'PROJECT_PARAMS' in os.environ:

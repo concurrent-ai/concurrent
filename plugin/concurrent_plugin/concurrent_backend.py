@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import base64
 import uuid
 import concurrent_plugin.utils
+from datetime import datetime
 
 # Use lazy % or % formatting in logging functionspylint(logging-format-interpolation)
 # Use lazy % or .format() or % formatting in logging functionspylint(logging-fstring-interpolation)
@@ -471,14 +472,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                     yaml_obj = yaml.safe_load(job_template.read())
                     _logger.info(f"contents of {kube_job_template_path}={yaml_obj}")
 
-        from mlflow.projects.docker import (
-            validate_docker_env,
-            validate_docker_installation
-        )
-        
         tracking.MlflowClient().set_tag(active_run.info.run_id, MLFLOW_PROJECT_ENV, "docker")
-        validate_docker_env(project)
-        validate_docker_installation()
 
         # kube_config is a copy of backend_config with one additional key: 'kube-job-template', which is contents of backend_config['kube-job-template-path']
         kube_config = mlflow.projects._parse_kubernetes_config(backend_config)
@@ -489,15 +483,16 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             if os.getenv(envvar_name): env_vars[envvar_name] = os.getenv(envvar_name)
     
         #If a local image has already been created/pulled, kube_config should have it
-        if 'IMAGE_TAG' in backend_config and 'IMAGE_DIGEST' in backend_config:
+        if 'IMAGE_TAG' in backend_config:
+            image_digest = backend_config.get('IMAGE_DIGEST', None)
             _logger.info('Image already available: {}, {}'
-                         .format(backend_config['IMAGE_TAG'], backend_config['IMAGE_DIGEST']))
+                         .format(backend_config['IMAGE_TAG'], image_digest))
             
             submitted_run = self.run_eks_job(
                 project.name,
                 active_run,
                 backend_config['IMAGE_TAG'],
-                backend_config['IMAGE_DIGEST'],
+                image_digest,
                 get_entry_point_command(project, entry_point, params, backend_config['STORAGE_DIR']),
                 env_vars,
                 input_data_spec,
@@ -507,88 +502,30 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             return submitted_run
         else:
             _logger.info('Image not available, build or pull')
+            raise Exception('Image not available, build or pull before attempting to run')
 
-        # First, try pulling the specific tagged version of the image from the repo
-        do_build = True
-        if git_commit:
-            docker_client = docker.from_env()
-            try:
-                image = docker_client.images.pull(repository_uri, tag=git_commit[:7])
-            except docker.errors.ImageNotFound:
-                _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: Docker img "
-                        + repository_uri + ", tag=" + git_commit[:7] + " not found. Building...")
-            except docker.errors.APIError as apie:
-                _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: Error " + str(apie)
-                        + " while pulling " + repository_uri + ", tag=" + git_commit[:7])
-            else:
-                _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: image=" + str(image))
-                _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: Docker img found "
-                        + repository_uri + ", tag=" + git_commit[:7] + ". Reusing...")
-                image_digest = docker_client.images.get_registry_data(image.tags[0]).id
-                _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: image_digest=" + image_digest)
-                do_build = False
-        if do_build:
-            _logger.info("PluginConcurrentProjectBackend.run_eks_on_local: Building "
-                    + repository_uri)
-            image = self.build_docker_image(
-                work_dir=work_dir,
-                repository_uri=kube_config["repository-uri"],
-                base_image=project.docker_env.get("image"),
-                run_id=active_run.info.run_id,
-                git_commit=git_commit
-            )
-            image_digest = mlflow.projects.kubernetes.push_image_to_registry(image.tags[0])
 
-        submitted_run:KubernetesSubmittedRun = self.run_eks_job(
-            project.name,
-            active_run,
-            image.tags[0],
-            image_digest,
-            get_entry_point_command(project, entry_point, params, backend_config['STORAGE_DIR']),
-            env_vars,
-            input_data_spec,
-            kube_config.get("kube-context", None),
-            kube_config["kube-job-template"],
-        )
-        return submitted_run
-
-    def build_docker_image(self, work_dir, repository_uri, base_image, run_id, git_commit):
-        """
-        Build a docker image containing the project in `work_dir`, using the base image.
-        """
-        from mlflow.projects.docker import (
-            _create_docker_build_ctx,
-            _PROJECT_TAR_ARCHIVE_NAME,
-            _GENERATED_DOCKERFILE_NAME
-        )
-        version_string = ":" + git_commit[:7] if git_commit else ""
-        image_uri = repository_uri + version_string
-        dockerfile = (
-            "FROM {imagename}\n COPY {build_context_path}/ {workdir}\n WORKDIR {workdir}\n"
-        ).format(
-            imagename=base_image,
-            build_context_path=_PROJECT_TAR_ARCHIVE_NAME,
-            workdir=MLFLOW_DOCKER_WORKDIR_PATH,
-        )
-        build_ctx_path = _create_docker_build_ctx(work_dir, dockerfile)
-        with open(build_ctx_path, "rb") as docker_build_ctx:
-            _logger.info("=== Building docker image %s ===", image_uri)
-            client = docker.from_env()
-            image, _ = client.images.build(
-                tag=image_uri,
-                forcerm=True,
-                dockerfile=posixpath.join(_PROJECT_TAR_ARCHIVE_NAME, _GENERATED_DOCKERFILE_NAME),
-                fileobj=docker_build_ctx,
-                custom_context=True,
-                encoding="gzip",
-            )
-        try:
-            os.remove(build_ctx_path)
-        except Exception:
-            _logger.info("Temporary docker context file %s was not deleted.", build_ctx_path)
-        tracking.MlflowClient().set_tag(run_id, MLFLOW_DOCKER_IMAGE_URI, image_uri)
-        tracking.MlflowClient().set_tag(run_id, MLFLOW_DOCKER_IMAGE_ID, image.id)
-        return image
+    def _get_kubernetes_job_definition(
+        self, project_name, image_tag, image_digest, command, env_vars, job_template
+    ):
+        if image_digest:
+            container_image = image_tag + "@" + image_digest
+        else:
+            container_image = image_tag
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")
+        job_name = f"{project_name}-{timestamp}"
+        _logger.info("=== Creating Job %s ===", job_name)
+        if os.environ.get("KUBE_MLFLOW_TRACKING_URI") is not None:
+            env_vars["MLFLOW_TRACKING_URI"] = os.environ["KUBE_MLFLOW_TRACKING_URI"]
+        environment_variables = [{"name": k, "value": v} for k, v in env_vars.items()]
+        job_template["metadata"]["name"] = job_name
+        job_template["spec"]["template"]["spec"]["containers"][0]["name"] = project_name
+        job_template["spec"]["template"]["spec"]["containers"][0]["image"] = container_image
+        job_template["spec"]["template"]["spec"]["containers"][0]["command"] = command
+        if "env" not in job_template["spec"]["template"]["spec"]["containers"][0].keys():
+            job_template["spec"]["template"]["spec"]["containers"][0]["env"] = []
+        job_template["spec"]["template"]["spec"]["containers"][0]["env"] += environment_variables
+        return job_template
 
     def run_eks_job(
         self,
@@ -660,7 +597,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         kubernetes.client.V1PodFailurePolicyRule = V1FixedPodFailurePolicyRule
         kubernetes.client.models.V1PodFailurePolicyRule = V1FixedPodFailurePolicyRule
 
-        job_template = mlflow.projects.kubernetes._get_kubernetes_job_definition(
+        job_template = self._get_kubernetes_job_definition(
             project_name, image_tag, image_digest, _get_run_command(command), env_vars, job_template
         )
         if os.getenv("PYTHONUNBUFFERED") and len(job_template["spec"]["template"]["spec"]["containers"]) > 1: # sidecar container is present:

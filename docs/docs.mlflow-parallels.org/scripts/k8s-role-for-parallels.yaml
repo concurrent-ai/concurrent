@@ -9,6 +9,7 @@ rules:
   - nodes
   - namespaces
   - pods
+  - pods/attach
   - pods/log
   - secrets
   - events

@@ -1,10 +1,12 @@
 # Configure an existing EKS Cluster for use with Concurrent for MLflow
 
-There are four steps that need to be performed in order for an existing cluster to be configured for use with Concurrent for MLflow.
+There are five steps that need to be performed in order for an existing cluster to be configured for use with Concurrent for MLflow.
 
 - Create an AWS IAM role for the Concurrent for MLflow Service to access your EKS cluster with admin privileges
 - Create a mapping in your Kubernetes cluster's aws-auth ConfigMap from the IAM role created above to the 'system-manager' 
-- Create a k8s role for running jobs and bind this role to a k8s ServiceAccount
+- Create a k8s role for concurrent system components
+- Create a namespace for running Concurrent DAGs and configure k8s roles for it
+- Update Concurrent configuration with information about this k8s cluster
 
 ## Step 1: Create IAM Role
 
@@ -15,7 +17,7 @@ Browse to AWS CloudFormation console in the region where your EKS cluster is dep
 Use the following S3 URL in the specify URL section:
 
 ```
-https://s3.amazonaws.com/docs.concurrent-ai.org/cft/version/0.3/iam-role-for-parallels.yaml
+https://s3.amazonaws.com/docs.concurrent-ai.org/cft/version/0.4/iam-role-for-parallels.yaml
 ```
 
 Next, choose a name for the stack and specify the AWS account number where the Concurrent for MLflow service is running. The following screenshot shows the stack name role-for-parallels and the Concurrent for MLflow Service.
@@ -59,70 +61,31 @@ configmap/aws-auth patched
 
 ```
 
-## Step 3: k8s roles
+## Step 3: Create a k8s role for concurrent system components
 
-Concurrent uses two roles in each namespace - one high privilege role for system components and one low privilege role for user code
-
-### High privlege role
-
-This role is used by system components
+This cluster wide role needs to be created only once per cluster
 
 Download the yaml file k8s-role-for-parallels.yaml from [here](https://docs.concurrent-ai.org/scripts/k8s-role-for-parallels.yaml "Download k8s-role-for-parallels.yaml"). Apply this yaml file to your cluster
 
 ```
 kubectl apply -f k8s-role-for-parallels.yaml
-clusterrole.rbac.authorization.k8s.io/k8s-role-for-parallels-lambda created
-clusterrolebinding.rbac.authorization.k8s.io/k8s-role-for-parallels-lambda-binding created
 ```
 
-**Create a namespace called parallelsns, and a ServiceAccount called k8s-serviceaccount-for-parallels-parallelsns**
+## Step 4: Create a namespace for running Concurrent DAGs and configure k8s roles for it
 
-In this example, we create a namespace called parallelsns in k8s and configure it for use with Concurrent for MLflow
+Directions for creating a new namespace and configuring it for use with Concurrent are described in detail [here](https://docs.concurrent-ai.org/files/add-namespace/ "Add namespace")
 
-```
-kubectl create namespace parallelsns
-namespace/parallelsns created
-```
-
-Download the yaml file k8s-service-role.yaml from [here](https://docs.concurrent-ai.org/scripts/k8s-service-role.yaml "Download k8s-service-role.yaml"). Apply this yaml file to your cluster
-
-```
-kubectl apply -f k8s-service-role.yaml 
-serviceaccount/k8s-serviceaccount-for-parallels-parallelsns created
-rolebinding.rbac.authorization.k8s.io/k8s-service-account-binding-parallelsns created
-
-```
-
-### Low privlege role
-
-User code runs in this low privilege role
-
-Download the yaml file user-role.yaml from [here](https://docs.concurrent-ai.org/scripts/user-role.yaml "Download user-role.yaml"). Apply this yaml file to your cluster
-
-Next, edit the user-role.yaml file to change the namespace from parallelsns to the new namespace being created 
-
-```
-sed -e 's/parallelsns/newnsforconcurrent/g' user-role.yaml > user-role-new.yaml
-```
-
-Finally, apply to the k8s cluster
-
-```
-kubectl apply -f user-role-new.yaml 
-clusterrole.rbac.authorization.k8s.io/k8s-role-for-users-newnsforconcurrent created
-serviceaccount/k8s-serviceaccount-for-users-newnsforconcurrent created
-rolebinding.rbac.authorization.k8s.io/k8s-serviceaccount-for-users-newnsforconcurrent-binding created
-```
-
-## Step 4: Create a Docker in Docker service for the default namespace
-
-Instructions for this step are provided [here](/files/create-dind/ "Create Docker In Docker Service")
 
 ## Step 5: Update Concurrent Configuration
 
-XXX
+- Login to the Concurrent MLflow ui and click on the gear icon in the top right. The `Use Setting` page is displayed
+- Choose the `Cluster Configuration` tab in `User Setting`
+- Click `Add Cluster` and fill out the details. Note that EKS Role and EKS External ID are from the output of the CFT in Step 1
+- Example screenshot below.
 
-## Step 6: Test system
+[![](https://docs.concurrent-ai.org/images/configure-cluster.png?raw=true)](https://docs.concurrent-ai.org/images/configure-cluster.png?raw=true)
+
+## Test system
 
 Finally, test the system by running a MLflow Project. For example,
 
