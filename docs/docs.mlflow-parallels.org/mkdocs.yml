@@ -38,6 +38,7 @@ nav:
                         'llama-cpp': 'files/deploy-model-llama-cpp.md'
                 - 'Examples':
                         'helloworld': 'files/examples-helloworld.md'
+                        'llama.cpp': 'files/examples-llama-cpp.md'
 
 extra:
         analytics:
