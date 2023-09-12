@@ -419,7 +419,8 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
             priority_class_name='parallels-lo-prio',
             volumes=volumes,
             # service_account_name='infinstor-serviceaccount-' + namespace
-            service_account_name='k8s-serviceaccount-for-parallels-' + namespace
+            service_account_name='k8s-serviceaccount-for-parallels-' + namespace,
+            tolerations=[k8s.V1Toleration(key="concurrent-node-type", operator="Equal", value="system", effect="NoSchedule")]
         )
     )
     try:

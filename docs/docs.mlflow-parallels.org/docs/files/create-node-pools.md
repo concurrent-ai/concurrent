@@ -11,7 +11,8 @@ Concurrent for MLflow uses three node pools
 ``` 
 gcloud container node-pools create concurrent-system-pods \
     --cluster concurrent-devel --disk-size 500 --num-nodes 1 \
-    --machine-type e2-standard-2
+    --machine-type e2-standard-2 \
+    --node-taints=concurrent-node-type=system:NoSchedule
 ```
 
 ## Non GPU Worker Pool
