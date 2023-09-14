@@ -412,7 +412,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                     ],
                     security_context=k8s.V1SecurityContext(privileged=True),
                     volume_mounts=volume_mounts,
-                    resources = k8s.V1ResourceRequirements(requests={'cpu': '3000m', 'memory': '8192M'}, limits={'cpu': '3000m', 'memory': '8192M'})
+                    resources = k8s.V1ResourceRequirements(requests={'cpu': '1500m', 'memory': '4096M'}, limits={'cpu': '1500m', 'memory': '4096M'})
                 )
             ],
             restart_policy='Never',
