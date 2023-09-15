@@ -97,6 +97,8 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         fh.write("        args: [\"-m\", \"concurrent_plugin.infinfs.mount_service\"]\n")
         fh.write("        imagePullPolicy: IfNotPresent\n")
         fh.write("        env:\n")
+        fh.write("        - name: INFINSTOR_ENABLE_MULTIPART_UPLOAD\n")
+        fh.write("          value: \"1\"\n")
         fh.write("        - name: MLFLOW_TRACKING_URI\n")
         fh.write("          value: \"{}\"\n".format(mlflow_tracking_uri))
         fh.write("        - name: MLFLOW_RUN_ID\n")
@@ -399,45 +401,66 @@ def get_docker_image(parent_run_id:str) -> Tuple[str, str]:
         lookup_tag = git_commit[:7]
     else:
         lookup_tag = 'latest'
-    try:
-        docker_client:docker.DockerClient = docker.from_env()
-        # REPOSITORY                                                                                                                   TAG       IMAGE ID       CREATED        SIZE
-        # hpe-gw1-priv.infinstor.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3             5ebaa6d   06a3114a01cf   19 hours ago   1.67GB
-        # 10.241.17.209:30810/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3                          5ebaa6d   06a3114a01cf   19 hours ago   1.67GB
-        # 10.241.17.209:30810/mlflow/shared_env_images/e14b6df9f5437fb4325a6a79dbfa257a26dcfd6acbfc824e90ae1c9717b06370                latest    bb295e084813   19 hours ago   1.67GB
-        # mlflow-docker-example                                                                                                        latest    bb295e084813   19 hours ago   1.67GB
-        # gateway.hpecatalystpoc.com:10019/mlflow/shared_env_images/e14b6df9f5437fb4325a6a79dbfa257a26dcfd6acbfc824e90ae1c9717b06370   latest    bb295e084813   19 hours ago   1.67GB
-        # hpe-gw1-priv.infinstor.com:10019/mlflow/shared_env_images/e14b6df9f5437fb4325a6a79dbfa257a26dcfd6acbfc824e90ae1c9717b06370   latest    bb295e084813   19 hours ago   1.67GB
-        # 10.241.17.223:31386/mlflow/shared_env_images/621d9d61783f4f58c7b957993e2e147bd4e712f21ef4cd6ef93c85717db95742                latest    5bef5428cc10   27 hours ago   1.67GB
-        # public.ecr.aws/y9l4v0u6/mlflow/shared_env_images/621d9d61783f4f58c7b957993e2e147bd4e712f21ef4cd6ef93c85717db95742            latest    5bef5428cc10   27 hours ago   1.67GB
-        # ubuntu                                                                                                                       latest    3b418d7b466a   4 weeks ago    77.8MB
-        # registry-service:5000/ubuntu                                                                                                 latest    3b418d7b466a   4 weeks ago    77.8MB
-        # 
-        # if a single image (see IMAGE ID bb295e084813 above) is tagged multiple times (all registry/repository:version taggings done for this image), then 'image.tags' has more than one entry: one entry for each tagging of the same image
-        image:docker.models.images.Image = docker_client.images.pull(repository_uri, tag=lookup_tag)
-    except docker.errors.ImageNotFound :
-        logger.info("task_launcher.get_docker_image: Docker img "
+    image_uri_with_tag:str = f"{repository_uri}:{lookup_tag}"
+    if os.getenv('USE_DOCKER_BUILD', 'yes') == 'yes':
+        logger.info("Using docker_client to determine if full image needs to be built")
+        try:
+            docker_client:docker.DockerClient = docker.from_env()
+            # REPOSITORY                                                                                                                   TAG       IMAGE ID       CREATED        SIZE
+            # hpe-gw1-priv.infinstor.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3             5ebaa6d   06a3114a01cf   19 hours ago   1.67GB
+            # 10.241.17.209:30810/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3                          5ebaa6d   06a3114a01cf   19 hours ago   1.67GB
+            # 10.241.17.209:30810/mlflow/shared_env_images/e14b6df9f5437fb4325a6a79dbfa257a26dcfd6acbfc824e90ae1c9717b06370                latest    bb295e084813   19 hours ago   1.67GB
+            # mlflow-docker-example                                                                                                        latest    bb295e084813   19 hours ago   1.67GB
+            # gateway.hpecatalystpoc.com:10019/mlflow/shared_env_images/e14b6df9f5437fb4325a6a79dbfa257a26dcfd6acbfc824e90ae1c9717b06370   latest    bb295e084813   19 hours ago   1.67GB
+            # hpe-gw1-priv.infinstor.com:10019/mlflow/shared_env_images/e14b6df9f5437fb4325a6a79dbfa257a26dcfd6acbfc824e90ae1c9717b06370   latest    bb295e084813   19 hours ago   1.67GB
+            # 10.241.17.223:31386/mlflow/shared_env_images/621d9d61783f4f58c7b957993e2e147bd4e712f21ef4cd6ef93c85717db95742                latest    5bef5428cc10   27 hours ago   1.67GB
+            # public.ecr.aws/y9l4v0u6/mlflow/shared_env_images/621d9d61783f4f58c7b957993e2e147bd4e712f21ef4cd6ef93c85717db95742            latest    5bef5428cc10   27 hours ago   1.67GB
+            # ubuntu                                                                                                                       latest    3b418d7b466a   4 weeks ago    77.8MB
+            # registry-service:5000/ubuntu                                                                                                 latest    3b418d7b466a   4 weeks ago    77.8MB
+            # 
+            # if a single image (see IMAGE ID bb295e084813 above) is tagged multiple times (all registry/repository:version taggings done for this image), then 'image.tags' has more than one entry: one entry for each tagging of the same image
+            image:docker.models.images.Image = docker_client.images.pull(repository_uri, tag=lookup_tag)
+        except docker.errors.ImageNotFound :
+            logger.info("task_launcher.get_docker_image: Docker img "
                      + repository_uri + ", tag=" + lookup_tag + " not found. Building...")
-    except docker.errors.APIError as apie:
-        logger.info("task_launcher.get_docker_image: Error " + str(apie)
+        except docker.errors.APIError as apie:
+            logger.info("task_launcher.get_docker_image: Error " + str(apie)
                      + " while pulling " + repository_uri + ", tag=" + lookup_tag)
-    except Exception as ex:
-        logger.info(f"task_launcher.get_docker_image: Error {ex} while pulling {repository_uri} tag={lookup_tag}")
-    else:
-        # 2023-05-25 04:13:36,183 - 274 - root - INFO - task_launcher.get_docker_image: image=<Image: '10.241.17.209:30810/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'gateway.hpecatalystpoc.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'hpe-gw1-priv.infinstor.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d'>
-        # image.tags contains all registry/repository:version taggings done for this image
-        logger.info("task_launcher.get_docker_image: image=" + str(image))
-        logger.info("task_launcher.get_docker_image: Docker img found "
+        except Exception as ex:
+            logger.info(f"task_launcher.get_docker_image: Error {ex} while pulling {repository_uri} tag={lookup_tag}")
+        else:
+            # 2023-05-25 04:13:36,183 - 274 - root - INFO - task_launcher.get_docker_image: image=<Image: '10.241.17.209:30810/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'gateway.hpecatalystpoc.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d', 'hpe-gw1-priv.infinstor.com:10019/mlflow/raj-hpe/53bab292098d0c5c28a6ceb25dc157c1a7a929a7aa6c58d7d18cdbeed546dab3:5ebaa6d'>
+            # image.tags contains all registry/repository:version taggings done for this image
+            logger.info("task_launcher.get_docker_image: image=" + str(image))
+            logger.info("task_launcher.get_docker_image: Docker img found "
                      + repository_uri + ", tag=" + lookup_tag + ". Reusing...")
-        image_uri_with_tag:str = f"{repository_uri}:{lookup_tag}"
-        # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to get the digest for 'os.environ['repository_uri']:tag' and not for image.tags[0]
-        image_digest = docker_client.images.get_registry_data(image_uri_with_tag).id
-        logger.info("task_launcher.get_docker_image: image_digest=" + image_digest)
-        do_build = False
+            # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to get the digest for 'os.environ['repository_uri']:tag' and not for image.tags[0]
+            image_digest = docker_client.images.get_registry_data(image_uri_with_tag).id
+            logger.info("task_launcher.get_docker_image: image_digest=" + image_digest)
+            do_build = False
+    else:
+        logger.info("Using aws ecr describe-images to determine if full image needs to be built")
+        repository_name = repository_uri[repository_uri.find('/') + 1:]
+        cmd = ['aws', 'ecr', 'describe-images', '--repository-name', repository_name]
+        logger.info(f'Executing command {cmd}')
+        try:
+            js = json.loads(subprocess.check_output(cmd))
+            logger.info('describe-images returns: ' + json.dumps(js, indent=2))
+            det = js['imageDetails']
+            for od in det:
+                if lookup_tag == 'latest':
+                    return image_uri_with_tag, ''
+                if 'imageTags' in od:
+                    for tg in od['imageTags']:
+                        if tg == lookup_tag:
+                            logger.info(f'describe-images says tag {lookup_tag} present')
+                            return image_uri_with_tag, od.get('imageDigest', '')
+        except Exception as ex:
+            logger.error(f"Caught {ex} checking for existence of full image")
 
     if do_build:
         logger.info("Task launcher: Building "
-                     + repository_uri)
+                 + repository_uri)
         work_dir = os.environ['MLFLOW_PROJECT_DIR']
         project = load_project(work_dir)
         base_image = os.getenv('ENV_REPO_URI', project.docker_env.get("image"))

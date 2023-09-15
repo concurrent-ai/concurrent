@@ -50,6 +50,27 @@ else:
 ENDPY
 }
 
+num_of_images() {
+  export ECR_OP=$1
+  python3 << ENDPY
+import os
+import json
+try:
+  js = json.loads(open(os.getenv('ECR_OP'), "r").read().encode('utf-8'))
+  id = js['imageDetails']
+  if len(id) > 0:
+    print(f"{len(id)}", flush=True)
+    os._exit(0)
+  else:
+    print("0", flush=True)
+    os._exit(0)
+except Exception as ex:
+  print("-1", flush=True)
+  os._exit(0)
+ENDPY
+  return $?
+}
+
 check_model_flavor() {
   export MODEL_PATH=$1
   export MODEL_FLAVOR=$2
@@ -218,6 +239,38 @@ else # default BACKEND_TYPE is eks
       exit 255
     fi
   fi
+
+  if REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPO_NAME` ; then
+    logit "Looking for latest MLproject docker image, using aws ecr describe-images, from existing repo $REPO_URI"    
+    aws ecr describe-images --repository-name ${REPO_NAME} > /tmp/di-output.json
+    if [ $? != 0 ] ; then
+      logit "aws ecr describe-images failed for image. ${REPO_NAME}. Creating image"
+      CREATE_IMAGE="yes"
+    else
+      NUM_IMAGES=`num_of_images /tmp/di-output.json`
+      echo "Number of images in repo ${REPO_NAME}=$NUM_IMAGES"
+      if [ $NUM_IMAGES -le 0 ] ; then
+        logit "image not found from existing repo $REPO_URI. Building new image"
+        CREATE_IMAGE="yes"
+      else
+        logit "image found from existing repo $REPO_URI. Not building new image"
+        CREATE_IMAGE="no"
+      fi
+    fi
+  else
+    logit "Creating new MLproject docker env image repo $REPO_NAME"
+    /bin/rm -f /tmp/cr-out.txt
+    aws --profile ecr --region ${ECR_REGION} ${ECR_SERVICE} create-repository --repository-name ${REPO_NAME} > /tmp/cr-out.txt
+    logit "Proceed if repository created"    
+    if ! REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPO_NAME` ; then
+      logit "Error creating docker repository ${REPO_NAME}: "
+      cat /tmp/cr-out.txt
+      exit 255
+    fi
+  fi
+
+
+
 fi
 
 # if the env docker image wasn't found, build it now.
