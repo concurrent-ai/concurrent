@@ -374,10 +374,6 @@ else # if BACKEND_TYPE is not specified, assume it is EKS
   /bin/mkdir -p /root/.docker
   export REGISTRY_AUTH_FILE=/root/.docker/config.json
   echo "${P1}" | buildah login --username AWS --password-stdin ${ECR_LOGIN_ENDPOINT}
-  echo "=========== Registry auth file ==============="
-  cat $REGISTRY_AUTH_FILE
-  echo "=========== End Registry auth file ==============="
-
   # Make docker login info available to k8s
   logit "NAMESPACE=" $NAMESPACE
   if [ "${ECR_TYPE}" == "private" ] ; then
@@ -412,8 +408,16 @@ fi
 if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
   for i in $(echo ${ADDITIONAL_PACKAGES} | tr "," "\n")
   do
-    logit "Adding additional package $i to env image"
-    (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
+    if [ $i == "infinstor" ] ; then
+      #logit "Adding additional package $i to env image"
+      #(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
+      # Use the following two lines instead of the above two lines if you want to load an alt infinstor pkg into the project container
+      logit "Adding alternate additional package $i to env image"
+      (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install -U https://concurrentdist.s3.amazonaws.com/misc/test/infinstor-2.1.0-py3-none-any.whl" >> Dockerfile)
+    else
+      logit "Adding additional package $i to env image"
+      (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
+    fi
   done
 fi
 

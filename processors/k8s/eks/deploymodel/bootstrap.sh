@@ -1,8 +1,6 @@
 #!/bin/bash
 set -x
 
-export DOCKER_HOST="tcp://docker-dind:2375"
-
 logit() {
     echo "`date` - $$ - INFO - deploymodel.sh - ${*}" # >> ${LOG_FILE}
     # [ -n "$LOG_FILE" ] && echo "`date` - $$ - INFO - deploymodel.sh - ${*}"  >> "${LOG_FILE}"
@@ -191,8 +189,9 @@ else # if BACKEND_TYPE is not specified, assume it is EKS
     ECR_LOGIN_ENDPOINT=${ECR_AWS_ACCOUNT_ID}.dkr.ecr.${ECR_REGION}.amazonaws.com
   fi
   P1=$(aws --profile ecr ${ECR_SERVICE} get-login-password --region ${ECR_REGION})
-  echo "${P1}" | docker login --username AWS --password-stdin ${ECR_LOGIN_ENDPOINT}
-
+  /bin/mkdir -p /root/.docker
+  export REGISTRY_AUTH_FILE=/root/.docker/config.json
+  echo "${P1}" | buildah login --username AWS --password-stdin ${ECR_LOGIN_ENDPOINT}
   # Make docker login info available to k8s
   logit "NAMESPACE=" $NAMESPACE
   if [ "${ECR_TYPE}" == "private" ] ; then
@@ -214,7 +213,7 @@ if [ "${BACKEND_TYPE}" == "gke" ] ; then
   fi
 elif  [ "${BACKEND_TYPE}" == "HPE" ]; then
   REPO_URI="${HPE_CONTAINER_REGISTRY_URI}/${REPO_NAME}"
-  logit "Checking if env image exists in repo URI ${REPO_URI}"  
+  logit "Checking if env image exists in repo URI ${REPO_URI}"
   docker manifest inspect ${REPO_URI}:latest
   if [ $? == 0 ] ; then
     logit "Found existing image ${REPO_URI}. Not creating a new image"
@@ -222,26 +221,7 @@ elif  [ "${BACKEND_TYPE}" == "HPE" ]; then
   fi
 else # default BACKEND_TYPE is eks  
   if REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPO_NAME` ; then
-    logit "Looking for latest MLproject docker env image from existing repo $REPO_URI"    
-    docker manifest inspect ${REPO_URI}:latest
-    if [ $? == 0 ] ; then
-      logit "Found existing image ${REPO_URI}. Not creating a new image"
-      CREATE_IMAGE="no"
-    fi
-  else
-    logit "Creating new MLproject docker env image repo $REPO_NAME"
-    /bin/rm -f /tmp/cr-out.txt
-    aws --profile ecr --region ${ECR_REGION} ${ECR_SERVICE} create-repository --repository-name ${REPO_NAME} > /tmp/cr-out.txt
-    logit "Proceed if repository created"    
-    if ! REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPO_NAME` ; then
-      logit "Error creating docker repository ${REPO_NAME}: "
-      cat /tmp/cr-out.txt
-      exit 255
-    fi
-  fi
-
-  if REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPO_NAME` ; then
-    logit "Looking for latest MLproject docker image, using aws ecr describe-images, from existing repo $REPO_URI"    
+    logit "Looking for latest MLproject container image, using aws ecr describe-images, from existing repo $REPO_URI"    
     aws ecr describe-images --repository-name ${REPO_NAME} > /tmp/di-output.json
     if [ $? != 0 ] ; then
       logit "aws ecr describe-images failed for image. ${REPO_NAME}. Creating image"
@@ -258,22 +238,19 @@ else # default BACKEND_TYPE is eks
       fi
     fi
   else
-    logit "Creating new MLproject docker env image repo $REPO_NAME"
+    logit "Creating new MLproject container env image repo $REPO_NAME"
     /bin/rm -f /tmp/cr-out.txt
     aws --profile ecr --region ${ECR_REGION} ${ECR_SERVICE} create-repository --repository-name ${REPO_NAME} > /tmp/cr-out.txt
     logit "Proceed if repository created"    
     if ! REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $REPO_NAME` ; then
-      logit "Error creating docker repository ${REPO_NAME}: "
+      logit "Error creating container repository ${REPO_NAME}: "
       cat /tmp/cr-out.txt
       exit 255
     fi
   fi
-
-
-
 fi
 
-# if the env docker image wasn't found, build it now.
+# if the env container image wasn't found, build it now.
 #if [ $CREATE_IMAGE == "yes" ] ; then
 if [ true ] ; then
   logit "Building env image for pushing to $REPO_URI"
@@ -311,17 +288,17 @@ if [ true ] ; then
   /bin/cp -f /usr/local/bin/Miniconda3-py310_23.3.1-0-Linux-x86_64.sh /root/workdir/container
 
   if  [ "${BACKEND_TYPE}" == "HPE" ]; then
-    (cd /root/workdir/container; docker build -t ${IMG_NAME} --build-arg="BE_MODEL_FLAVOR=$MODEL_FLAVOR" --network host .)
+    (cd /root/workdir/container; buildah build -t ${IMG_NAME} --build-arg="BE_MODEL_FLAVOR=$MODEL_FLAVOR" --network host .)
   else
-    (cd /root/workdir/container; docker build -t ${IMG_NAME} --build-arg="BE_MODEL_FLAVOR=$MODEL_FLAVOR" .)
+    (cd /root/workdir/container; buildah build -t ${IMG_NAME} --build-arg="BE_MODEL_FLAVOR=$MODEL_FLAVOR" .)
   fi
-  docker images  
-  # tag the built image with the remote docker registry hostname, so that it can be pushed.
-  if ! /usr/bin/docker tag ${IMG_NAME}:latest ${REPO_URI}:latest ; then
+  buildah images
+  # tag the built image with the remote container registry hostname, so that it can be pushed.
+  if ! buildah tag ${IMG_NAME}:latest ${REPO_URI}:latest ; then
     logit "Error tagging env image before pushing"
     exit 255
   fi
-  /usr/bin/docker push ${REPO_URI}:latest
+  buildah push ${REPO_URI}:latest
 fi
 
 if [ x${RESOURCES_LIMITS_CPU} == "x" ] ; then

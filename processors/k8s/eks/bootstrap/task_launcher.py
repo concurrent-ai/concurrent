@@ -97,8 +97,6 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         fh.write("        args: [\"-m\", \"concurrent_plugin.infinfs.mount_service\"]\n")
         fh.write("        imagePullPolicy: IfNotPresent\n")
         fh.write("        env:\n")
-        fh.write("        - name: INFINSTOR_ENABLE_MULTIPART_UPLOAD\n")
-        fh.write("          value: \"1\"\n")
         fh.write("        - name: MLFLOW_TRACKING_URI\n")
         fh.write("          value: \"{}\"\n".format(mlflow_tracking_uri))
         fh.write("        - name: MLFLOW_RUN_ID\n")
@@ -142,6 +140,7 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
             fh.write("        imagePullSecrets:\n")
             fh.write("        - name: ecr-private-key\n")
         ## Sidecar config ends
+        fh.write("      terminationGracePeriodSeconds: 120\n")
         fh.write("      priorityClassName: concurrent-high-non-preempt-prio\n")
         fh.write("      restartPolicy: Never\n")
 
