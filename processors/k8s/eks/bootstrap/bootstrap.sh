@@ -413,7 +413,7 @@ if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
       #(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
       # Use the following two lines instead of the above two lines if you want to load an alt infinstor pkg into the project container
       logit "Adding alternate additional package $i to env image"
-      (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install -U https://concurrentdist.s3.amazonaws.com/misc/test/infinstor-2.1.0-py3-none-any.whl" >> Dockerfile)
+      (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install -U https://concurrentdist.s3.amazonaws.com/misc/test/infinstor-2.1.2-py3-none-any.whl" >> Dockerfile)
     else
       logit "Adding additional package $i to env image"
       (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
