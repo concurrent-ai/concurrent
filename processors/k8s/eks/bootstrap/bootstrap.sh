@@ -13,10 +13,6 @@ logit() {
     # [ -n "$LOG_FILE" ] && echo "`date` - $$ - INFO - bootstrap.sh - ${*}"  >> "${LOG_FILE}"
 }
 
-logit "Bootstrap Container Pip Packages="
-pip list
-logit "End bootstrap Container Pip Packages="
-
 ##
 ## Begin concurrent code
 ##

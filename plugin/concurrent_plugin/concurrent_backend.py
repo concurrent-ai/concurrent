@@ -673,8 +673,6 @@ class PluginConcurrentProjectBackend(AbstractBackend):
 
         job_template["spec"]["ttlSecondsAfterFinished"] = int(os.getenv("CONCURRENT_KUBE_JOB_TEMPLATE_TTL", "86400"))
         
-        job_template["spec"]["template"]["spec"]["containers"][0]["lifecycle"] = {"preStop": {"exec": {"command": ["/bin/sh","-c","killall -USR2 python"]}}}
-
         if os.getenv("CONCURRENT_PRIVILEGED_MLFLOW_CONTAINER"): 
             # create 'securityContext' if needed
             if not job_template["spec"]["template"]["spec"]["containers"][0].get('securityContext'):
