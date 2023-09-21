@@ -682,9 +682,13 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         # Sometimes when auto-scaling is on, pods need to get rescheduled due to node scaledown.
         # The following snippet configures the rescheduling policy
         # See https://kubernetes.io/docs/concepts/workloads/controllers/job/#pod-failure-policy
-        job_template["spec"]["template"]["spec"]["restartPolicy"] = "Never"
+        job_template["spec"]["template"]["spec"]["restartPolicy"] = "Never" # pod is never restarted on the same node
         job_template["spec"]["backoffLimit"] = 6
         podFailurePolicy = {"rules": [
+                                        {
+                                            "action": "Ignore",
+                                            "onExitCodes": {"operator": "In", "values": [143]}
+                                        },
                                         {
                                             "action": "FailJob",
                                             "onExitCodes": {"operator": "NotIn", "values": [0]}
