@@ -378,6 +378,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         gce_keyfile_contents = 'GCE Keyfile unused for ' + backend_type
         
     core_v1_api:kubernetes_client.CoreV1Api = kubernetes_client.CoreV1Api(api_client=api_client.ApiClient(configuration=con))
+    batch_v1_api:kubernetes_client.BatchV1Api = kubernetes_client.BatchV1Api(api_client=api_client.ApiClient(configuration=con))
     volume_mounts, volumes = setup_secrets(cognito_username, backend_type, core_v1_api, namespace, tokfile_contents, credsfile_contents,
                                            gce_keyfile_contents, hpe_cluster_config, run_input_spec_map_encoded,subs, cmap)
 
@@ -388,44 +389,62 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     else:
         bootstrap_image = 'public.ecr.aws/u5q3r5r0/concurrent-bootstrap'
 
-    pod = k8s.V1Pod(
-        api_version='v1',
-        metadata=k8s.V1ObjectMeta(name=canonical_nm, namespace=namespace),
-        spec=k8s.V1PodSpec(
-            containers=[
-                k8s.V1Container(
-                    name=canonical_nm,
-                    image = bootstrap_image,
-                    env_from=[
-                        k8s.V1EnvFromSource(
-                            config_map_ref=k8s.V1ConfigMapEnvSource(name=canonical_nm)
-                        )
-                    ],
-                    env=[
-                        k8s.V1EnvVar(name='MY_POD_NAME', 
-                            value_from=k8s.V1EnvVarSource(
-                                field_ref=k8s.V1ObjectFieldSelector(
-                                    field_path='metadata.name'
+    try:
+        pod_failure_policy = kubernetes_client.V1PodFailurePolicy([
+            kubernetes_client.V1PodFailurePolicyRule(action="Ignore", on_exit_codes=kubernetes_client.V1PodFailurePolicyOnExitCodesRequirement(operator="In", values=[143])),
+            kubernetes_client.V1PodFailurePolicyRule(action="FailJob", on_exit_codes=kubernetes_client.V1PodFailurePolicyOnExitCodesRequirement(operator="NotIn", values=[0])),
+            kubernetes_client.V1PodFailurePolicyRule(action="Ignore", on_pod_conditions=kubernetes_client.V1PodFailurePolicyOnPodConditionsPattern(status="True", type="DisruptionTarget"))
+            ])
+        pod_template = kubernetes_client.V1PodTemplateSpec(
+            metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm}, namespace=namespace),
+            spec=kubernetes_client.V1PodSpec(
+                containers=[
+                    kubernetes_client.V1Container(
+                        name=canonical_nm,
+                        image = bootstrap_image,
+                        env_from=[
+                            kubernetes_client.V1EnvFromSource(
+                                config_map_ref=kubernetes_client.V1ConfigMapEnvSource(name=canonical_nm)
+                            )
+                        ],
+                        env=[
+                            kubernetes_client.V1EnvVar(name='MY_POD_NAME', 
+                                value_from=kubernetes_client.V1EnvVarSource(
+                                    field_ref=kubernetes_client.V1ObjectFieldSelector(
+                                        field_path='metadata.name'
+                                    )
                                 )
                             )
-                        )
-                    ],
-                    security_context=k8s.V1SecurityContext(privileged=True),
-                    volume_mounts=volume_mounts,
-                    resources = k8s.V1ResourceRequirements(requests={'cpu': '1250m', 'memory': '3072M'}, limits={'cpu': '1250m', 'memory': '3072M'})
+                        ],
+                        security_context=kubernetes_client.V1SecurityContext(privileged=True),
+                        volume_mounts=volume_mounts,
+                        resources = kubernetes_client.V1ResourceRequirements(requests={'cpu': '1250m', 'memory': '3072M'}, limits={'cpu': '1250m', 'memory': '3072M'})
+                    )
+                ],
+                restart_policy='Never',
+                priority_class_name='parallels-lo-prio',
+                volumes=volumes,
+                # service_account_name='infinstor-serviceaccount-' + namespace
+                service_account_name='k8s-serviceaccount-for-parallels-' + namespace,
+                tolerations=[kubernetes_client.V1Toleration(key="concurrent-node-type", operator="Equal", value="system", effect="NoSchedule")]
                 )
-            ],
-            restart_policy='Never',
-            priority_class_name='parallels-lo-prio',
-            volumes=volumes,
-            # service_account_name='infinstor-serviceaccount-' + namespace
-            service_account_name='k8s-serviceaccount-for-parallels-' + namespace,
-            tolerations=[k8s.V1Toleration(key="concurrent-node-type", operator="Equal", value="system", effect="NoSchedule")]
-        )
-    )
+            )
+        job = kubernetes_client.V1Job(
+                api_version="batch/v1",
+                kind="Job",
+                metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, namespace=namespace, labels={"job_name": canonical_nm}),
+                spec=kubernetes_client.V1JobSpec(completions=1, template=pod_template)#, pod_failure_policy=pod_failure_policy)
+            )
+        logger.info(f'kickoff_bootstrap: creating namespaced job={job}')
+    except Exception as exp1:
+        traceback.print_exc()
+        logger.info(f'kickoff_bootstrap: Caught {exp1}')
+        return
+
     try:
-        arv:kubernetes_client.V1Pod = core_v1_api.create_namespaced_pod(namespace=namespace,body=pod)
+        arv = batch_v1_api.create_namespaced_job(namespace=namespace,body=job)
     except Exception as ex:
+        traceback.print_exc()
         logger.error('kickoff_bootstrap: create_namespaced_pod of bootstrap caught ' + str(ex))
     else:
         logger.info(f'kickoff_bootstrap: create_namespaced_pod of bootstrap returned api_ver={ yaml.safe_dump(utils.filter_empty_in_dict_list_scalar(arv.to_dict())) }')
@@ -600,7 +619,7 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
     # https://github.com/kubernetes-client/python/pull/780; https://github.com/swagger-api/swagger-codegen/pull/9284/files
     api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 10  # prev default of 5 was giving us only 4 mins
     con.retries = api_server_retries
-    # con.debug = True
+    con.debug = True
     config.load_kube_config(config_file=os.path.join(cdir, 'config'), client_configuration=con)
     # hand off job to kube. First, delete existing ConfigMap, create new ConfigMap
     if ecr_role and ecr_role_ext and ecr_type and ecr_region:
