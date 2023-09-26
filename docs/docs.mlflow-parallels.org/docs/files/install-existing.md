@@ -17,7 +17,7 @@ Browse to AWS CloudFormation console in the region where your EKS cluster is dep
 Use the following S3 URL in the specify URL section:
 
 ```
-https://s3.amazonaws.com/docs.concurrent-ai.org/cft/version/0.4/iam-role-for-parallels.yaml
+https://s3.amazonaws.com/docs.concurrent-ai.org/cft/version/0.7/iam-role-for-parallels.yaml
 ```
 
 Next, choose a name for the stack and specify the AWS account number where the Concurrent for MLflow service is running. The following screenshot shows the stack name role-for-parallels and the Concurrent for MLflow Service.
