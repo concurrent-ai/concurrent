@@ -51,9 +51,9 @@ Outputs:
     Description: External ID for Role
     Value: !Select [2, !Split ['/', !Ref AWS::StackId]]
     Export:
-      Name: 'parallels:ExternalIDForRoleForAccessingEksAndEcr'
+      Name: !Join [ "-", ['parallels:ExternalIDForRoleForAccessingEksAndEcr', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
   RoleForConcurrentService:
     Description: ARN of role
     Value: !GetAtt RoleForAccessingEksAndEcr.Arn
     Export:
-      Name: 'parallels:RoleForAccessingEksAndEcr'
+      Name: !Join [ "-", ['parallels:RoleForAccessingEksAndEcr', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
