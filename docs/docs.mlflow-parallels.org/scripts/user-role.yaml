@@ -2,6 +2,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: k8s-role-for-users-parallelsns
+  namespace: parallelsns
 rules:
 - apiGroups:
   - batch
