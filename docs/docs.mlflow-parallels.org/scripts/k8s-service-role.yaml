@@ -21,8 +21,7 @@ roleRef:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: pods-reader
-  namespace: parallelsns
+  name: pods-reader-parallelsns
 subjects:
 - kind: ServiceAccount
   name: k8s-serviceaccount-for-users-parallelsns
