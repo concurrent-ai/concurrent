@@ -17,7 +17,8 @@ RUN echo "    echo CMAKE_ARGS=-DLLAMA_CUBLAS=on FORCE_CMAKE=1 pip install llama-
 RUN echo "else" >> /root/start.sh
 RUN echo "    echo 'Not using any optimizer technology'" >> /root/start.sh
 RUN echo "fi" >> /root/start.sh
-RUN echo "python3 /root/serve_model.py \$MODEL_FLAVOR" >> /root/start.sh
+RUN if [ "${BE_MODEL_FLAVOR}" = "pyfunc" ]; then echo "python3 /root/serve_model.py pyfunc" >> /root/start.sh ; fi
+RUN if [ "${BE_MODEL_FLAVOR}" = "transformers" ]; then echo "python3 /root/serve_model.py transformers" >> /root/start.sh ; fi
 RUN chmod 755 /root/start.sh
 RUN cat /root/start.sh
 CMD /usr/bin/bash /root/start.sh

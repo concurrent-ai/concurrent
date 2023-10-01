@@ -11,7 +11,7 @@ from mlflow import tracking
 
 _logger = logging.getLogger(__name__)
 
-f_endpoint_name = "fake_endpoint_name"
+f_endpoint_name = "concurrent_deployment"
 
 def run_local(target, name, model_uri, flavor=None, config=None):  # pylint: disable=unused-argument
     """

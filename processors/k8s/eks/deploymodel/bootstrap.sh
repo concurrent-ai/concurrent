@@ -251,8 +251,7 @@ else # default BACKEND_TYPE is eks
 fi
 
 # if the env container image wasn't found, build it now.
-#if [ $CREATE_IMAGE == "yes" ] ; then
-if [ true ] ; then
+if [ $CREATE_IMAGE == "yes" ] ; then
   logit "Building env image for pushing to $REPO_URI"
   mkdir -p /root/workdir/container/model
   download_model $MODEL_URI /root/workdir/container/model
@@ -349,9 +348,14 @@ spec:
             nvidia.com/gpu: ${RESOURCES_LIMITS_NVIDIA_COM_GPU}
         ports:
         - containerPort: 8080
+      tolerations:
+      - effect: NoSchedule
+        key: concurrent-node-type
+        value: deployment
+        operator: Equal
 EOYAML
 
-logit "Creating deployment using the following yaml"
+logit "Creating deployment using this following yaml"
 logit `cat /tmp/deployment.$$.yaml`
 
 /usr/local/bin/kubectl create -n ${NAMESPACE} -f /tmp/deployment.$$.yaml

@@ -44,7 +44,7 @@ Note the following:
 - Requested CPU: *3000m*
 - Requested Memory: *6000Mi*
 - Requested Nvidia GPU: *1*
-- Backend Type: *GKE*
+- Backend Type: *gke* or *eks*
 - Optimizer Technology: llama.cpp
 
 ## Step 4: List Deployments
@@ -84,4 +84,9 @@ curl -X POST -H "Content-Type:application/json; format=pandas-split" --data '{"c
 
 ```
 
+You can expect something similar to the following:
+
+```
+{"id": "cmpl-2c513aa9-4e74-4cf2-a9de-b1b5cd75bc03", "object": "text_completion", "created": 1696132804, "model": "/root/model/data/ggml-model-q8_0.gguf", "choices": [{"text": "  Thank you for asking! Python is a high-level programming language that is widely used for various purposes, including web development, scientific computing, data analysis, artificial intelligence, and more. It is known for its simplicity, readability, and ease of use, making it a great language for beginners and experienced programmers alike.\nPython has a vast number of libraries and frameworks that enable developers to build complex applications with ease. Some popular ones include NumPy, pandas, and scikit-learn for data analysis, Django and Flask for web development, and TensorFlow and Keras for machine learning.\nWhether you're just starting out or looking to expand your skillset, Python is definitely worth checking out! \ud83d\ude0a", "index": 0, "logprobs": null, "finish_reason": "stop"}], "usage": {"prompt_tokens": 91, "completion_tokens": 154, "total_tokens": 245}}
+```
 

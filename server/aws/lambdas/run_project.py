@@ -449,7 +449,6 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     else:
         logger.info(f'kickoff_bootstrap: create_namespaced_pod of bootstrap returned api_ver={ yaml.safe_dump(utils.filter_empty_in_dict_list_scalar(arv.to_dict())) }')
 
-
 def lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, subs):
     # First lookup user specific cluster
     eks_region, eks_role, eks_role_ext = None, None, None

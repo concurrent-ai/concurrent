@@ -55,10 +55,6 @@ serviceaccount/k8s-serviceaccount-for-users-newnsforconcurrent created
 rolebinding.rbac.authorization.k8s.io/k8s-serviceaccount-for-users-newnsforconcurrent-binding created
 ```
 
-## Create DinD service
-
-In this step, we create a Docker in Docker service for this namespace. [Instructions are available here](/files/create-dind/)
-
 ## Test new namespace
 
 Finally, test that cluster setup worked by running a test MLflow Project as follows:

@@ -149,6 +149,7 @@ def list_gke_deployments_from_cluster(cl, service_conf, cognito_username, groups
     _get_deployments('gke', cl, configuration, rv)
 
 def list_eks_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv):
+    kube_cluster_name = cl['cluster_name']
     eks_region = cl['eks_region']
     eks_role = cl['eks_role']
     eks_role_ext = cl['eks_role_ext']
@@ -281,11 +282,20 @@ def list_depl_internal(service_conf, cognito_username, groups, subs, rv):
     kube_clusters = query_user_accessible_clusters(cognito_username, groups)
     for cl in kube_clusters:
         if cl['cluster_type'] == 'EKS':
-            list_eks_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
+            try:
+                list_eks_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
+            except Exception as ex:
+                print(f'Warning: Caught and ignored {ex} listing {cl}')
         elif cl['cluster_type'] == 'GKE':
-            list_gke_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
+            try:
+                list_gke_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
+            except Exception as ex:
+                print(f'Warning: Caught and ignored {ex} listing {cl}')
         elif cl['cluster_type'] == HpeClusterConfig.HPE_CLUSTER_TYPE:
-            list_hpe_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
+            try:
+                list_hpe_deployments_from_cluster(cl, service_conf, cognito_username, groups, subs, rv)
+            except Exception as ex:
+                print(f'Warning: Caught and ignored {ex} listing {cl}')
         else:
             print(f"Warning: Unknown cluster type {cl['cluster_type']}")
 

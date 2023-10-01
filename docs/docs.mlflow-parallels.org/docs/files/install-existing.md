@@ -1,10 +1,11 @@
 # Configure an existing EKS Cluster for use with Concurrent for MLflow
 
-There are five steps that need to be performed in order for an existing cluster to be configured for use with Concurrent for MLflow.
+There are six steps that need to be performed in order for an existing cluster to be configured for use with Concurrent for MLflow.
 
 - Create an AWS IAM role for the Concurrent for MLflow Service to access your EKS cluster with admin privileges
 - Create a mapping in your Kubernetes cluster's aws-auth ConfigMap from the IAM role created above to the 'system-manager' 
 - Create a k8s role for concurrent system components
+- Create different nodegroups for running Concurrent system, worker and deployment pods
 - Create a namespace for running Concurrent DAGs and configure k8s roles for it
 - Update Concurrent configuration with information about this k8s cluster
 
@@ -39,7 +40,9 @@ Here's a screen capture:
 
 [![](https://docs.concurrent-ai.org/images/install-existing-4.png?raw=true)](https://docs.concurrent-ai.org/images/install-existing-4.png?raw=true)
 
-## Step 2: Create a mapping in your Kubernetes cluster's aws-auth ConfigMap from the IAM role created above to the 'system-manager' 
+## Step 2: Map IAM Role to K8s system-manager
+
+In this step, you will create a mapping in your Kubernetes cluster's aws-auth ConfigMap from the IAM role created above to the 'system-manager' 
 
 The next two steps needs to be performed on a machine with the bash shell and a functional kubectl for the cluster. Download the script patch-aws-auth.sh from [here](https://docs.concurrent-ai.org/scripts/patch-aws-auth.sh "Download patch-aws-auth.sh"). This script takes one parameter, the RoleForInfinstorService output from the previous step. Here is a screen capture of a successful run of this script
 
@@ -61,22 +64,121 @@ configmap/aws-auth patched
 
 ```
 
-## Step 3: Create a k8s role for concurrent system components
+## Step 3: Create k8s role for concurrent system
+
+In this step, we create a k8s role for concurrent system components
 
 This cluster wide role needs to be created only once per cluster
 
-Download the yaml file k8s-role-for-parallels.yaml from [here](https://docs.concurrent-ai.org/scripts/k8s-role-for-parallels.yaml "Download k8s-role-for-parallels.yaml"). Apply this yaml file to your cluster
+Download the yaml file k8s-role-for-parallels.yaml from [here](/scripts/k8s-role-for-parallels.yaml "Download k8s-role-for-parallels.yaml"). Apply this yaml file to your cluster
 
 ```
 kubectl apply -f k8s-role-for-parallels.yaml
 ```
 
-## Step 4: Create a namespace for running Concurrent DAGs and configure k8s roles for it
+## Step 4: Create node groups
 
-Directions for creating a new namespace and configuring it for use with Concurrent are described in detail [here](https://docs.concurrent-ai.org/files/add-namespace/ "Add namespace")
+Concurrent uses the following node groups:
+
+### system
+
+This node group is used for running the bootstrap container. Bootstrap is a system component that builds the worker container image and kicks of the kubernetes job for the worker node.
+
+It is acceptable to use spot instances for the *system* node group. Here's a suggested list of instance types for this node group
+
+```
+    t3.medium
+    c5.large
+    c5a.large
+    c6a.large
+```
+
+It is also required to set the disk size to 200GB for this nodegroup instances
+
+The node group size is set to:
+
+```
+Desired size: 1 node
+Minimum size: 0 nodes
+Maximum size: 1 node
+```
+
+The following taint must be set.
+
+```
+Key: concurrent-node-type
+Value: system
+Effect: NoSchedule
+```
+
+### worker
+
+This node group is used for running the pipeline(DAG) nodes.
+
+It is acceptable to use spot instances for the *worker* node group. Here's a suggested list of instance types for this node group
+
+```
+    c4.2xlarge
+    c5.2xlarge
+    c5a.2xlarge
+    m4.2xlarge
+```
+
+It is also required to set the disk size to 200GB for this nodegroup instances
+
+The node group size is set to:
+
+```
+Desired size: 1 node
+Minimum size: 0 nodes
+Maximum size: 1 node
+```
+
+The following taint must be set.
+
+```
+Key: concurrent-node-type
+Value: worker
+Effect: NoSchedule
+```
+
+### deployment
+
+This node group is optional and only used for deployment.
+
+It is acceptable to use spot instances for the *deployment* node group. Here's a suggested list of instance types for this node group
+
+```
+    c3.2xlarge
+    c4.2xlarge
+    c5a.2xlarge
+    c6a.2xlarge
+```
+
+It is also required to set the disk size to 200GB for this nodegroup instances
+
+The node group size is set to:
+
+```
+Desired size: 1 node
+Minimum size: 0 nodes
+Maximum size: 1 node
+```
+
+The following taint must be set.
+
+```
+Key: concurrent-node-type
+Value: deployment
+Effect: NoSchedule
+```
+
+## Step 5: Create a namespace for running Concurrent DAGs and configure k8s roles for it
+
+Directions for creating a new namespace and configuring it for use with Concurrent are described in detail [here](/files/add-namespace/ "Add namespace")
 
 
-## Step 5: Update Concurrent Configuration
+## Step 6: Update Concurrent Configuration
 
 - Login to the Concurrent MLflow ui and click on the gear icon in the top right. The `Use Setting` page is displayed
 - Choose the `Cluster Configuration` tab in `User Setting`

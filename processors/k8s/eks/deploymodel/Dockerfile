@@ -14,6 +14,7 @@ RUN apt update && DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install t
                    lxc \
                    iptables \
                    unzip \
+                   buildah \
                    python3 \
                    python3-pip && \
     rm -rf /var/lib/apt/lists

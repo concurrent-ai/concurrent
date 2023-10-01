@@ -104,8 +104,7 @@ def create_endpoint(event, context):
     return respond(None, {'status': f"Failed. Unable to find deployment named {item['name']}"})
 
 def _create_k8s_endpoint(backend_type, endpoint, cert_auth, cluster_arn, deployment,
-                        eks_access_key_id, eks_secret_access_key, eks_session_token, ecr_type, ecr_region,
-                        ecr_access_key_id, ecr_secret_access_key, ecr_session_token, ecr_aws_account_id,
+                        eks_access_key_id, eks_secret_access_key, eks_session_token,
                         gke_project_id, gke_creds, hpe_cluster_config:HpeClusterConfig,
                         cognito_username:str, subs:dict, con:Configuration):
     deployment_name = deployment['name']
@@ -195,7 +194,7 @@ def create_endpoint_gke(deployment, service_conf, cognito_username, groups, subs
     configuration.retries = api_server_retries
 
     success = _create_k8s_endpoint('gke', response.endpoint, response.master_auth.cluster_ca_certificate, None,
-                    deployment, None, None, None, None, None, None, None, None, None,
+                    deployment, None, None, None,
                     gke_project_id, gke_creds, empty_hpe_cluster_config, cognito_username, subs, configuration)
     os.remove(creds_file_path)
     if success:
@@ -235,6 +234,91 @@ def lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, subs)
         ecr_role_ext = subs['ecrRoleExt']['S']
 
     return eks_region, eks_role, eks_role_ext, ecr_role, ecr_role_ext, ecr_type, ecr_region
+
+def create_endpoint_eks(deployment, service_conf, cognito_username, groups, subs):
+    print(f"create_endpoint_eks: Running in kube. deployment={deployment}", flush=True)
+    eks_cluster_name = deployment['cluster_name']
+    eks_access_key_id = None
+    eks_secret_access_key = None
+    eks_session_token = None
+    eks_region, eks_role, eks_role_ext, ecr_role, ecr_role_ext, ecr_type, ecr_region \
+        = lookup_eks_cluster_config(cognito_username, groups, eks_cluster_name, subs)
+    if eks_role and eks_role_ext:
+        sts_client = boto3.client('sts')
+        assumed_role_object = sts_client.assume_role(
+                RoleArn=eks_role,
+                ExternalId=eks_role_ext,
+                RoleSessionName=str(uuid.uuid4()))
+        eks_access_key_id = assumed_role_object['Credentials']['AccessKeyId']
+        eks_secret_access_key = assumed_role_object['Credentials']['SecretAccessKey']
+        eks_session_token = assumed_role_object['Credentials']['SessionToken']
+
+    if eks_session_token:
+        eks_client = boto3.client('eks', aws_access_key_id=eks_access_key_id,
+                aws_secret_access_key=eks_secret_access_key, aws_session_token=eks_session_token,
+                region_name=eks_region)
+    else:
+        eks_client = boto3.client('eks', aws_access_key_id=eks_access_key_id,
+                aws_secret_access_key=eks_secret_access_key, region_name=eks_region)
+    resp = eks_client.describe_cluster(name=eks_cluster_name)
+    print('create_endpoint_eks: describe_cluster res=' + str(resp))
+    endpoint = resp['cluster']['endpoint']
+    print('create_endpoint_eks: endpoint=' + str(endpoint))
+    cert_auth = resp['cluster']['certificateAuthority']['data']
+    print('create_endpoint_eks: cert_auth=' + str(cert_auth))
+    cluster_arn = resp['cluster']['arn']
+    print('create_endpoint_eks: cluster_arn=' + str(cluster_arn))
+
+    # write kube config file
+    cdir = tempfile.mkdtemp()
+    with open(os.path.join(cdir, 'config'), "w") as fh:
+        fh.write('apiVersion: v1\n')
+        fh.write('clusters:\n')
+        fh.write('- cluster:\n')
+        fh.write('    certificate-authority-data: ' + cert_auth + '\n')
+        fh.write('    server: ' + endpoint + '\n')
+        fh.write('  name: ' + cluster_arn + '\n')
+        fh.write('contexts:\n')
+        fh.write('- context:\n')
+        fh.write('    cluster: ' + cluster_arn + '\n')
+        fh.write('    user: ' + cluster_arn + '\n')
+        fh.write('  name: ' + cluster_arn + '\n')
+        fh.write('current-context: ' + cluster_arn + '\n')
+        fh.write('kind: Config\n')
+        fh.write('preferences: {}\n')
+        fh.write('users:\n')
+        fh.write('- name: ' + cluster_arn + '\n')
+        fh.write('  user:\n')
+        #fh.write('    token:' + token + '\n')
+        fh.write('    exec:\n')
+        fh.write('      apiVersion: client.authentication.k8s.io/v1alpha1\n')
+        fh.write('      command: python\n')
+        fh.write('      args:\n')
+        fh.write('        - ' + os.path.join(os.getcwd(), 'eks_get_token.py') + '\n')
+        fh.write('      env:\n')
+        fh.write('        - name: "AWS_ACCESS_KEY_ID"\n')
+        fh.write('          value: "' + eks_access_key_id + '"\n')
+        fh.write('        - name: "AWS_SECRET_ACCESS_KEY"\n')
+        fh.write('          value: "' + eks_secret_access_key + '"\n')
+        if eks_session_token:
+            fh.write('        - name: "AWS_SESSION_TOKEN"\n')
+            fh.write('          value: "' + eks_session_token + '"\n')
+        fh.write('        - name: "EKS_CLUSTER_NAME"\n')
+        fh.write('          value: "' + eks_cluster_name + '"\n')
+    logger.debug(open(os.path.join(cdir, 'config')).read())
+    con:Configuration = type.__call__(Configuration)
+    # api server may not be reachable.  Wait for the api server to recover for 10 minutes.  Note that execute_dag(), which calls deploy_model(), will not retry this call again
+    # https://github.com/kubernetes-client/python/pull/780; https://github.com/swagger-api/swagger-codegen/pull/9284/files
+    api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 10  # prev default of 5 was giving us only 4 mins
+    con.retries = api_server_retries
+    # con.debug = True
+    config.load_kube_config(config_file=os.path.join(cdir, 'config'), client_configuration=con)
+    success = _create_k8s_endpoint('eks', endpoint, cert_auth, cluster_arn, deployment, eks_access_key_id, eks_secret_access_key, eks_session_token,
+                        None, None, empty_hpe_cluster_config, cognito_username, subs, con)
+    if success:
+        return respond(None, {})
+    else:
+        return respond(ValueError(f"Error creating endpoint for deployment {deployment}"))
 
 def _lookup_hpe_cluster_config(cognito_username:str, groups:list, kube_cluster_name: str, subs:dict) -> HpeClusterConfig:
     # first try user's kube clusters
@@ -288,110 +372,3 @@ def _deploy_model_hpe(cognito_username:str, groups, context, subs:dict, reqbody:
     
     return respond(None, {})
 
-def deploy_model_eks(cognito_username, groups, context, subs, item, service_conf):   # pylint: disable=unused-argument
-    logger.info("deploy_model: Running in kube. item=" + str(item) + ', service_conf=' + str(service_conf))
-    if not 'kube_context' in item:
-        return respond(ValueError('Project Backend Configuration must include kube_context'))
-    kube_cluster_name = item['kube_context']
-
-    eks_access_key_id = None
-    eks_secret_access_key = None
-    eks_session_token = None
-
-    eks_region, eks_role, eks_role_ext, \
-        ecr_role, ecr_role_ext, ecr_type, ecr_region \
-        = lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, subs)
-    ecr_aws_account_id = None
-
-    if eks_role and eks_role_ext:
-        sts_client = boto3.client('sts')
-        assumed_role_object = sts_client.assume_role(
-                RoleArn=eks_role,
-                ExternalId=eks_role_ext,
-                RoleSessionName=str(uuid.uuid4()))
-        eks_access_key_id = assumed_role_object['Credentials']['AccessKeyId']
-        eks_secret_access_key = assumed_role_object['Credentials']['SecretAccessKey']
-        eks_session_token = assumed_role_object['Credentials']['SessionToken']
-
-    if eks_session_token:
-        eks_client = boto3.client('eks', aws_access_key_id=eks_access_key_id,
-                aws_secret_access_key=eks_secret_access_key, aws_session_token=eks_session_token,
-                region_name=eks_region)
-    else:
-        eks_client = boto3.client('eks', aws_access_key_id=eks_access_key_id,
-                aws_secret_access_key=eks_secret_access_key, region_name=eks_region)
-    resp = eks_client.describe_cluster(name=kube_cluster_name)
-
-    print('run_mlflow_project_kube: describe_cluster res=' + str(resp))
-    endpoint = resp['cluster']['endpoint']
-    print('run_mlflow_project_kube: endpoint=' + str(endpoint))
-    cert_auth = resp['cluster']['certificateAuthority']['data']
-    print('run_mlflow_project_kube: cert_auth=' + str(cert_auth))
-    cluster_arn = resp['cluster']['arn']
-    print('run_mlflow_project_kube: cluster_arn=' + str(cluster_arn))
-
-    # write kube config file
-    cdir = tempfile.mkdtemp()
-    with open(os.path.join(cdir, 'config'), "w") as fh:
-        fh.write('apiVersion: v1\n')
-        fh.write('clusters:\n')
-        fh.write('- cluster:\n')
-        fh.write('    certificate-authority-data: ' + cert_auth + '\n')
-        fh.write('    server: ' + endpoint + '\n')
-        fh.write('  name: ' + cluster_arn + '\n')
-        fh.write('contexts:\n')
-        fh.write('- context:\n')
-        fh.write('    cluster: ' + cluster_arn + '\n')
-        fh.write('    user: ' + cluster_arn + '\n')
-        fh.write('  name: ' + cluster_arn + '\n')
-        fh.write('current-context: ' + cluster_arn + '\n')
-        fh.write('kind: Config\n')
-        fh.write('preferences: {}\n')
-        fh.write('users:\n')
-        fh.write('- name: ' + cluster_arn + '\n')
-        fh.write('  user:\n')
-        #fh.write('    token:' + token + '\n')
-        fh.write('    exec:\n')
-        fh.write('      apiVersion: client.authentication.k8s.io/v1alpha1\n')
-        fh.write('      command: python\n')
-        fh.write('      args:\n')
-        fh.write('        - ' + os.path.join(os.getcwd(), 'eks_get_token.py') + '\n')
-        fh.write('      env:\n')
-        fh.write('        - name: "AWS_ACCESS_KEY_ID"\n')
-        fh.write('          value: "' + eks_access_key_id + '"\n')
-        fh.write('        - name: "AWS_SECRET_ACCESS_KEY"\n')
-        fh.write('          value: "' + eks_secret_access_key + '"\n')
-        if eks_session_token:
-            fh.write('        - name: "AWS_SESSION_TOKEN"\n')
-            fh.write('          value: "' + eks_session_token + '"\n')
-        fh.write('        - name: "EKS_CLUSTER_NAME"\n')
-        fh.write('          value: "' + kube_cluster_name + '"\n')
-    logger.debug(open(os.path.join(cdir, 'config')).read())
-    con:Configuration = type.__call__(Configuration)
-    # api server may not be reachable.  Wait for the api server to recover for 10 minutes.  Note that execute_dag(), which calls deploy_model(), will not retry this call again
-    # https://github.com/kubernetes-client/python/pull/780; https://github.com/swagger-api/swagger-codegen/pull/9284/files
-    api_server_retries:int=int(service_conf['K8sApiServerRetries']['N']) if service_conf.get('K8sApiServerRetries') else 10  # prev default of 5 was giving us only 4 mins
-    con.retries = api_server_retries
-    # con.debug = True
-    config.load_kube_config(config_file=os.path.join(cdir, 'config'), client_configuration=con)
-    # hand off job to kube. First, delete existing ConfigMap, create new ConfigMap
-    if ecr_role and ecr_role_ext and ecr_type and ecr_region:
-        ecr_assumed_role_object = sts_client.assume_role(
-                RoleArn=ecr_role,
-                ExternalId=ecr_role_ext,
-                RoleSessionName=str(uuid.uuid4()))
-        ecr_access_key_id=ecr_assumed_role_object['Credentials']['AccessKeyId']
-        ecr_secret_access_key=ecr_assumed_role_object['Credentials']['SecretAccessKey']
-        ecr_session_token=ecr_assumed_role_object['Credentials']['SessionToken']
-        if ecr_type == 'private':
-            ss = ecr_role.split(':')
-            ecr_aws_account_id=ss[4]
-    else:
-        err = 'deploy_model_eks: ecr role, ext, region and type must be specified'
-        logger.error(err)
-        return respond(ValueError(err))
-
-    _create_k8s_endpoint('eks', endpoint, cert_auth, cluster_arn, item, eks_access_key_id, eks_secret_access_key, eks_session_token,
-                        ecr_type, ecr_region, ecr_access_key_id, ecr_secret_access_key, ecr_session_token, ecr_aws_account_id,
-                        None, None, empty_hpe_cluster_config, cognito_username, subs, con)
-    return respond(None, {})
