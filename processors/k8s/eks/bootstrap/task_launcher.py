@@ -289,9 +289,9 @@ def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_
         _PROJECT_TAR_ARCHIVE_NAME,
         _GENERATED_DOCKERFILE_NAME
     )
-    # image tag for the image
-    version_string = ":" + git_commit[:7] if git_commit else ""
-    image_uri = repository_uri + version_string
+    # tag for the docker image using the git commit id.
+    image_tag_string = ":" + git_commit[:7] if git_commit else ""
+    image_uri = repository_uri + image_tag_string
     dockerfile = (
         "FROM {imagename}\n COPY {build_context_path}/ {workdir}\n WORKDIR {workdir}\n RUN echo 'Running pip list'\n RUN echo $(pip list --format json)"
     ).format(

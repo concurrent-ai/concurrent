@@ -2,11 +2,11 @@
 
 # if there is an error, abort
 set -e
-set -x
+# set -x
 
-if [ ${BACKEND_TYPE} != "eks" ] ; then
+#if [ ${BACKEND_TYPE} != "eks" ] ; then
   export DOCKER_HOST="tcp://docker-dind:2375"
-fi
+#fi
 
 logit() {
     echo "`date` - $$ - INFO - bootstrap.sh - ${*}" # >> ${LOG_FILE}
@@ -96,6 +96,10 @@ fail_exit() {
 # If a SIGNAL_SPEC is RETURN, ARG is executed each time a shell function or a  script run by the . or source builtins finishes executing.  
 # A SIGNAL_SPEC of ERR means to execute ARG each time a command's failure would cause the shell to exit when the -e option is enabled.
 trap fail_exit EXIT
+
+scriptdir=`dirname $0`
+[ -f "$scriptdir/bootstrap-version.txt" ] && logit "Bootstrap version: $(cat $scriptdir/bootstrap-version.txt)"
+
 
 logit "Environment: "
 typeset -p
@@ -237,14 +241,19 @@ ENDPY
 get_xform() {
   
   if (cd /tmp/workdir; git clone "$XFORMNAME" >& /tmp/git.log.$$) ; then
-    # CINTO is similar to Cloning into 'xxxxxxx'  abcdef
+    # CINTO is a lin similar to "Cloning into 'cwsearch'  xxxxx"
     if CINTO=`grep 'Cloning into' /tmp/git.log.$$` ; then
-      # extract the subdirectory into which the clone was done
+      # from CINTO, extract the subdirectory into which the clone was done: first sed replaces everything from beginning until "'" with an empty string; 2nd sed replaces everything from a "'" till the end of the string with an empty string.
       export USE_SUBDIR=`echo $CINTO | sed -e "s/^Cloning into '//"|sed -e "s/'.*$//"`/
       if [ x"$XFORM_PATH" != "x" ] ; then
           export USE_SUBDIR=${USE_SUBDIR}${XFORM_PATH}/
       fi
       logit "USE_SUBDIR=$USE_SUBDIR"
+      
+      # write the output of git describe to store version details of the Mlproject being executed.
+      ( cd /tmp/workdir/$USE_SUBDIR; echo "Creating version.txt: Version information of MLproject: $XFORMNAME:$(git describe --all --long --always)"; echo "Version information of MLproject: $XFORMNAME:$(git describe --all --long --always)" > version.txt )
+      
+      # get the 'git commit id' of the tip of the branch.  the docker image created later is tagged using this 'git commit id'
       CMT=`(cd /tmp/workdir/$USE_SUBDIR; git log -n 1 | grep '^commit '|sed -e 's/commit \(.*\)$/\1/')`
       if [ $? == 0 ] ; then
         if [ x$CMT != "x" ] ; then
@@ -355,7 +364,7 @@ elif [ ${BACKEND_TYPE} == "HPE" ]; then
   logit "HPE: Using docker registry for images being built: $HPE_CONTAINER_REGISTRY_URI"
   export USE_DOCKER_BUILD=yes
 else # if BACKEND_TYPE is not specified, assume it is EKS
-  export USE_DOCKER_BUILD=no
+  export USE_DOCKER_BUILD=yes
   # prepare for ECR access using aws credentials in call
   if [ "${ECR_TYPE}" == "public" ] ; then
     logit "Using public ECR repository"
@@ -404,22 +413,14 @@ fi
 if [ x"$ADDITIONAL_PACKAGES" != "x" ] ; then
   for i in $(echo ${ADDITIONAL_PACKAGES} | tr "," "\n")
   do
-    if [ $i == "infinstor" ] ; then
-      #logit "Adding additional package $i to env image"
-      #(cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
-      # Use the following two lines instead of the above two lines if you want to load an alt infinstor pkg into the project container
-      logit "Adding alternate additional package $i to env image"
-      (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install -U https://concurrentdist.s3.amazonaws.com/misc/test/infinstor-2.1.2-py3-none-any.whl" >> Dockerfile)
-    else
-      logit "Adding additional package $i to env image"
-      (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
-    fi
+    logit "Adding additional package $i to env image"
+    (cd /tmp/workdir/${USE_SUBDIR}; echo "RUN pip install $i" >> Dockerfile)
   done
 fi
 
-echo "Updated Dockerfile /tmp/workdir/${USE_SUBDIR}/Dockerfile ========="
+logit "Updated Dockerfile /tmp/workdir/${USE_SUBDIR}/Dockerfile ========="
 cat /tmp/workdir/${USE_SUBDIR}/Dockerfile
-echo "============================"
+logit "============================"
 
 CREATE_ENV_IMAGE="yes"
 ENV_SHA=`sha256sum /tmp/workdir/${USE_SUBDIR}Dockerfile |awk -F' ' '{ print $1 }'`
@@ -483,6 +484,7 @@ export ENV_REPO_URI
 export INFINSTOR_TOKEN=`grep '^Token=' /root/.concurrent/token | awk -F= '{ print $2 }' | sed -e 's/^Custom //'`
 # if the env docker image wasn't found, build it now.
 if [ $CREATE_ENV_IMAGE == "yes" ] ; then
+  logit "Environment image creation starting for $ENV_REPO_URI"
   if [ $USE_DOCKER_BUILD == "yes" ] ; then
     logit "Building env image using docker for pushing to $ENV_REPO_URI"
     if  [ "${BACKEND_TYPE}" == "HPE" ]; then
@@ -498,8 +500,10 @@ if [ $CREATE_ENV_IMAGE == "yes" ] ; then
       logit "Error tagging env image before pushing"
       fail_exit
     fi
+    logit "Pushing env image using docker for pushing to $ENV_REPO_URI"
     /usr/bin/docker push ${ENV_REPO_URI}:latest
   else
+    logit "Building env image using buildah with repo URI $ENV_REPO_URI"
     (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/buildah bud --build-arg MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI} --build-arg INFINSTOR_TOKEN=${INFINSTOR_TOKEN} -t ${DOCKER_IMAGE} -f Dockerfile .)
     /usr/bin/buildah images  
     # tag the built image with the remote docker registry hostname, so that it can be pushed.
@@ -507,8 +511,10 @@ if [ $CREATE_ENV_IMAGE == "yes" ] ; then
       logit "Error tagging env image before pushing"
       fail_exit
     fi
+    logit "Pushing env image using buildah to $ENV_REPO_URI"
     /usr/bin/buildah push ${ENV_REPO_URI}:latest
   fi
+  logit "Environment image creation complete for $ENV_REPO_URI"
 else
   logit "Not creating env image since it exists"
 fi
