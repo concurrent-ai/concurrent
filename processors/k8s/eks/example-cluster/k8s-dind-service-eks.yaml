@@ -6,21 +6,6 @@ value: 10000
 globalDefault: false
 description: "parallels highest prio for docker in docker pod"
 ---
-# PVC for storing dind data
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  labels:
-    app: docker-dind
-  name: docker-dind-data
-  namespace: ${NAMESPACE}
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: ${PV_SIZE}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -57,10 +42,14 @@ spec:
           securityContext:
             privileged: true #Required for dind container to work.
       volumes:
+        # https://stackoverflow.com/questions/71556634/pv-pvc-with-eks-cluster
         - name: docker-dind-data-vol
           #emptyDir: {}
-          persistentVolumeClaim:
-            claimName: docker-dind-data
+          hostPath:
+            path: /data
+            type: DirectoryOrCreate
+          # persistentVolumeClaim:
+          #   claimName: docker-dind-data
 ---
 ## Service for exposing docker-dind
 apiVersion: v1
