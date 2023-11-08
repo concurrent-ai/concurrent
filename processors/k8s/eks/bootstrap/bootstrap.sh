@@ -364,7 +364,6 @@ elif [ ${BACKEND_TYPE} == "HPE" ]; then
   logit "HPE: Using docker registry for images being built: $HPE_CONTAINER_REGISTRY_URI"
   export USE_DOCKER_BUILD=yes
 else # if BACKEND_TYPE is not specified, assume it is EKS
-  export USE_DOCKER_BUILD=yes
   # prepare for ECR access using aws credentials in call
   if [ "${ECR_TYPE}" == "public" ] ; then
     logit "Using public ECR repository"

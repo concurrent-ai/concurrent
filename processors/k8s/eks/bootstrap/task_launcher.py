@@ -214,7 +214,7 @@ def _update_mlflow_run(mlflow_run_id:str, mlflow_run_status:str):
     logger.error(f"Attempting to set mlflow run_id={mlflow_run_id} with status={mlflow_run_status}")
     client.set_terminated(mlflow_run_id, mlflow_run_status)
     
-def log_pip_requirements(base_image, run_id, build_logs):
+def log_pip_requirements(base_image:str, run_id:str, build_logs):
     try:
         start_looking = False
         for l1 in list(list(build_logs)):
@@ -238,7 +238,9 @@ def log_pip_requirements(base_image, run_id, build_logs):
                             logger.info('Package=' + str(one_entry['name']) + ', version=' + str(one_entry['version']))
                             reqs = reqs + one_entry['name'] + '==' + one_entry['version'] + '\n'
                     if reqs:
-                        fpath = '/tmp/requirements-' + base_image + '.txt'
+                        # for ecr registry, we get the error below, since base_image has '/' in it.  so replace '/' with '_'
+                        # Caught exception while trying to extract pip package list. Not fatal[Errno 2] No such file or directory: '/tmp/requirements-687391518391.dkr.ecr.us-east-1.amazonaws.com/mlflow/raj-isstage2-isstage8-env_images/4d737c94902dfc10b241e7b94239f3691c3bba25d63f781da403c8bc0759ad36.txt'
+                        fpath = '/tmp/requirements-' + base_image.replace("/","_") + '.txt'
                         with open(fpath, 'w') as fp:
                             fp.write(reqs)
                         client = MlflowClient()
