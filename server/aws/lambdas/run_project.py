@@ -359,6 +359,8 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     if 'concurrentPrivilegedMlflowContainer' in subs: cmap.data['CONCURRENT_PRIVILEGED_MLFLOW_CONTAINER'] = subs['concurrentPrivilegedMlflowContainer']['S']
     # PYTHONUNBUFFERED is an environment variable in Python that can be used to disable output buffering for all streams. When this variable is set to a non-empty string, Python automatically sets the PYTHONUNBUFFERED flag, which forces Python to disable buffering for sys.stdout and sys.stderr.
     cmap.data['PYTHONUNBUFFERED'] = 'true'
+    # set 'concurrentUseDockerBuild' to "yes" or "no"
+    if 'concurrentUseDockerBuild' in subs: cmap.data['USE_DOCKER_BUILD'] = subs['concurrentUseDockerBuild']['S']
         
     tokfile_contents = 'Token=' + item['parallels_token'] + '\n'
     if backend_type == 'eks':
