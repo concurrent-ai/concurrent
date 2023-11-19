@@ -662,14 +662,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/root/.aws-iam-roles-anywhere', name='iam-roles-anywhere-volume'))
             volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path='/root/.aws/config', name='iam-roles-anywhere-volume', sub_path='awsCredentialConfigFile'))
 
-        ##Add volume for fuse mounts, side car volume is setup with 'Bidirectional' mount propagation
         side_car_volume_mounts = volume_mounts.copy()
-        volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path=CONCURRENT_FUSE_MOUNT_BASE,
-                                                             name='sharedmount',
-                                                             mount_propagation='HostToContainer'))
-        side_car_volume_mounts.append(kubernetes.client.V1VolumeMount(mount_path=CONCURRENT_FUSE_MOUNT_BASE,
-                                                    name='sharedmount',
-                                                    mount_propagation='Bidirectional'))
 
         job_template["spec"]["ttlSecondsAfterFinished"] = int(os.getenv("CONCURRENT_KUBE_JOB_TEMPLATE_TTL", "86400"))
         
