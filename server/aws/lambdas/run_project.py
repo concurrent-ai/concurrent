@@ -398,7 +398,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
             kubernetes_client.V1PodFailurePolicyRule(action="Ignore", on_pod_conditions=kubernetes_client.V1PodFailurePolicyOnPodConditionsPattern(status="True", type="DisruptionTarget"))
             ])
         pod_template = kubernetes_client.V1PodTemplateSpec(
-            metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm}, namespace=namespace),
+            metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm, 'concurrent-node-type': 'system'}, namespace=namespace),
             spec=kubernetes_client.V1PodSpec(
                 containers=[
                     kubernetes_client.V1Container(
@@ -418,7 +418,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                                 )
                             )
                         ],
-                        security_context=kubernetes_client.V1SecurityContext(privileged=True),
+                        # security_context=kubernetes_client.V1SecurityContext(privileged=True),
                         volume_mounts=volume_mounts,
                         resources = kubernetes_client.V1ResourceRequirements(requests={'cpu': '1250m', 'memory': '3072M'}, limits={'cpu': '1250m', 'memory': '3072M'})
                     )
@@ -427,8 +427,8 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                 priority_class_name='parallels-lo-prio',
                 volumes=volumes,
                 # service_account_name='infinstor-serviceaccount-' + namespace
-                service_account_name='k8s-serviceaccount-for-parallels-' + namespace,
-                tolerations=[kubernetes_client.V1Toleration(key="concurrent-node-type", operator="Equal", value="system", effect="NoSchedule")]
+                service_account_name='k8s-serviceaccount-for-parallels-' + namespace
+                #tolerations=[kubernetes_client.V1Toleration(key="concurrent-node-type", operator="Equal", value="system", effect="NoSchedule")],
                 )
             )
         job = kubernetes_client.V1Job(
