@@ -164,7 +164,7 @@ def run_project_gke(cognito_username, groups, context, subs, item, service_conf:
 
     _kickoff_bootstrap('gke', response.endpoint, response.master_auth.cluster_ca_certificate, None,
                     item, None, None, None, None, None, None, None, None, None,
-                    gke_project_id, gke_creds, empty_hpe_cluster_config, cognito_username, subs, configuration)
+                    gke_project_id, gke_creds, empty_hpe_cluster_config, cognito_username, subs, configuration, use_fargate=False)
     os.remove(creds_file_path)
     return respond(None, {})
 
@@ -213,7 +213,7 @@ empty_hpe_cluster_config = HpeClusterConfig("", "", "", "")
 def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                         eks_access_key_id, eks_secret_access_key, eks_session_token, ecr_type, ecr_region,
                         ecr_access_key_id, ecr_secret_access_key, ecr_session_token, ecr_aws_account_id,
-                        gke_project_id, gke_creds, hpe_cluster_config:HpeClusterConfig, cognito_username:str, subs:dict, con:Configuration):
+                        gke_project_id, gke_creds, hpe_cluster_config:HpeClusterConfig, cognito_username:str, subs:dict, con:Configuration, use_fargate:bool):
     """
     _summary_
 
@@ -397,8 +397,18 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
             kubernetes_client.V1PodFailurePolicyRule(action="FailJob", on_exit_codes=kubernetes_client.V1PodFailurePolicyOnExitCodesRequirement(operator="NotIn", values=[0])),
             kubernetes_client.V1PodFailurePolicyRule(action="Ignore", on_pod_conditions=kubernetes_client.V1PodFailurePolicyOnPodConditionsPattern(status="True", type="DisruptionTarget"))
             ])
+        if use_fargate:
+            logger.info(f'kickoff_bootstrap: use_fargate is True')
+            use_fargate_value = "yes"
+            pod_metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm, 'concurrent-node-type': 'system'}, namespace=namespace)
+            tolerations=None
+        else:
+            logger.info(f'kickoff_bootstrap: use_fargate is False')
+            use_fargate_value = "no"
+            pod_metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm}, namespace=namespace)
+            tolerations=[kubernetes_client.V1Toleration(key="concurrent-node-type", operator="Equal", value="system", effect="NoSchedule")]
         pod_template = kubernetes_client.V1PodTemplateSpec(
-            metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm, 'concurrent-node-type': 'system'}, namespace=namespace),
+            metadata=pod_metadata,
             spec=kubernetes_client.V1PodSpec(
                 containers=[
                     kubernetes_client.V1Container(
@@ -416,19 +426,18 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                                         field_path='metadata.name'
                                     )
                                 )
-                            )
+                            ),
+                            kubernetes_client.V1EnvVar(name='USE_FARGATE', value=use_fargate_value)
                         ],
-                        # security_context=kubernetes_client.V1SecurityContext(privileged=True),
                         volume_mounts=volume_mounts,
-                        resources = kubernetes_client.V1ResourceRequirements(requests={'cpu': '1250m', 'memory': '3072M'}, limits={'cpu': '1250m', 'memory': '3072M'})
+                        resources = kubernetes_client.V1ResourceRequirements(requests={'cpu': '3000m', 'memory': '8000M'}, limits={'cpu': '3000m', 'memory': '8000M'})
                     )
                 ],
                 restart_policy='Never',
                 priority_class_name='parallels-lo-prio',
                 volumes=volumes,
-                # service_account_name='infinstor-serviceaccount-' + namespace
-                service_account_name='k8s-serviceaccount-for-parallels-' + namespace
-                #tolerations=[kubernetes_client.V1Toleration(key="concurrent-node-type", operator="Equal", value="system", effect="NoSchedule")],
+                service_account_name='k8s-serviceaccount-for-parallels-' + namespace,
+                tolerations=tolerations
                 )
             )
         job = kubernetes_client.V1Job(
@@ -458,8 +467,12 @@ def lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, subs)
     for cl in kube_clusters:
         if cl['cluster_name'] == kube_cluster_name and cl['cluster_type'] == 'EKS':
             logger.info("Found user's cluser " + kube_cluster_name)
+            if 'use_fargate' in cl and cl['use_fargate'] == 'yes':
+                use_fargate = True
+            else:
+                use_fargate = False
             return cl['eks_region'], cl['eks_role'], cl['eks_role_ext'], cl['ecr_role'], \
-                    cl['ecr_role_ext'], cl['ecr_type'], cl['ecr_region']
+                    cl['ecr_role_ext'], cl['ecr_type'], cl['ecr_region'], use_fargate
 
     logger.info("Use cluster info for subscriber")
     # Fall back to subscriber's cluster
@@ -481,8 +494,12 @@ def lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, subs)
         ecr_role = subs['ecrRole']['S']
     if 'ecrRoleExt' in subs:
         ecr_role_ext = subs['ecrRoleExt']['S']
+    if 'use_fargate' in subs and subs['use_fargate'] == 'yes':
+        use_fargate = True
+    else:
+        use_fargate = False
 
-    return eks_region, eks_role, eks_role_ext, ecr_role, ecr_role_ext, ecr_type, ecr_region
+    return eks_region, eks_role, eks_role_ext, ecr_role, ecr_role_ext, ecr_type, ecr_region, use_fargate
 
 def _lookup_hpe_cluster_config(cognito_username:str, groups:list, kube_cluster_name: str, subs:dict) -> HpeClusterConfig:
     # first try user's kube clusters
@@ -532,7 +549,7 @@ def _run_project_hpe(cognito_username:str, groups, context, subs:dict, reqbody:d
     # client_configuration: The kubernetes.client.Configuration to set configs to.
     config.load_kube_config(config_file=kube_config_fname, client_configuration=kube_config)
     
-    _kickoff_bootstrap(HpeClusterConfig.HPE_CLUSTER_TYPE, endpoint=None, cert_auth=None, cluster_arn=None, item=reqbody, eks_access_key_id=None, eks_secret_access_key=None, eks_session_token=None, ecr_type=None, ecr_region=None, ecr_access_key_id=None, ecr_secret_access_key=None, ecr_session_token=None, ecr_aws_account_id=None, gke_project_id=None, gke_creds=None, hpe_cluster_config=hpe_cluster_conf, cognito_username=cognito_username, subs=subs, con=kube_config)
+    _kickoff_bootstrap(HpeClusterConfig.HPE_CLUSTER_TYPE, endpoint=None, cert_auth=None, cluster_arn=None, item=reqbody, eks_access_key_id=None, eks_secret_access_key=None, eks_session_token=None, ecr_type=None, ecr_region=None, ecr_access_key_id=None, ecr_secret_access_key=None, ecr_session_token=None, ecr_aws_account_id=None, gke_project_id=None, gke_creds=None, hpe_cluster_config=hpe_cluster_conf, cognito_username=cognito_username, subs=subs, con=kube_config, use_fargate=False)
     
     return respond(None, {})
 
@@ -547,7 +564,7 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
     eks_session_token = None
 
     eks_region, eks_role, eks_role_ext, \
-        ecr_role, ecr_role_ext, ecr_type, ecr_region \
+        ecr_role, ecr_role_ext, ecr_type, ecr_region, use_fargate \
         = lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, subs)
     ecr_aws_account_id = None
 
@@ -641,7 +658,7 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
 
     _kickoff_bootstrap('eks', endpoint, cert_auth, cluster_arn, item, eks_access_key_id, eks_secret_access_key, eks_session_token,
                         ecr_type, ecr_region, ecr_access_key_id, ecr_secret_access_key, ecr_session_token, ecr_aws_account_id,
-                        None, None, empty_hpe_cluster_config, cognito_username, subs, con)
+                        None, None, empty_hpe_cluster_config, cognito_username, subs, con, use_fargate=use_fargate)
     return respond(None, {})
 
     

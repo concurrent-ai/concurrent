@@ -24,7 +24,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_tag,
-                                     image_digest, side_car_name):
+                                     image_digest, side_car_name, use_fargate):
     if image_digest:
         image_uri = image_tag + "@" + image_digest
     else:
@@ -47,12 +47,18 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         #fh.write("  ttlSecondsAfterFinished: 600\n")
         fh.write("  backoffLimit: 0\n")
         fh.write("  template:\n")
-        fh.write("    spec:\n")
-        fh.write("      tolerations:\n")
-        fh.write("      - key: \"concurrent-node-type\"\n")
-        fh.write("        operator: \"Equal\"\n")
-        fh.write("        value: \"worker\"\n")
-        fh.write("        effect: \"NoSchedule\"\n")
+        if use_fargate:
+            fh.write("    metadata:\n")
+            fh.write("      labels:\n")
+            fh.write("        concurrent-node-type: \"worker\"\n")
+            fh.write("    spec:\n")
+        else:
+            fh.write("    spec:\n")
+            fh.write("      tolerations:\n")
+            fh.write("      - key: \"concurrent-node-type\"\n")
+            fh.write("        operator: \"Equal\"\n")
+            fh.write("        value: \"worker\"\n")
+            fh.write("        effect: \"NoSchedule\"\n")
         fh.write("      shareProcessNamespace: true\n")
         fh.write("      containers:\n")
         fh.write("      - name: \"{replaced with MLflow Project name}\"\n")
@@ -136,7 +142,8 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
             fh.write("        - name: ecr-private-key\n")
         ## Sidecar config ends
         fh.write("      terminationGracePeriodSeconds: 120\n")
-        fh.write("      priorityClassName: concurrent-high-non-preempt-prio\n")
+        #fh.write("      priorityClassName: concurrent-high-non-preempt-prio\n")
+        fh.write("      priorityClassName: parallels-lo-prio\n")
         fh.write("      restartPolicy: Never\n")
 
 
@@ -331,6 +338,7 @@ def build_docker_image(parent_run_id, work_dir, repository_uri, base_image, git_
                     logger.info(os.path.join(root, fn))
             logger.info("End contents of build context <<<<<")
             cmd = ['/usr/bin/buildah', 'bud',
+                    '--isolation', 'chroot',
                     '--build-arg', 'MLFLOW_TRACKING_URI='+os.getenv('MLFLOW_TRACKING_URI'),
                     '--build-arg', 'INFINSTOR_TOKEN='+os.getenv('INFINSTOR_TOKEN'),
                     '-t',  f"{repository_uri}:{lookup_tag}",
@@ -532,9 +540,15 @@ def main(run_id_list, input_data_specs, parent_run_id):
                     base64.decode(os.environ['KUBE_JOB_TEMPLATE_CONTENTS'], fh)
             else:
                 logger.info("Generating Kubernetes Job Template from params")
+                if 'USE_FARGATE' in os.environ and os.environ['USE_FARGATE'] == 'yes':
+                    use_fargate = True
+                    logger.info("USE_FARGATE is yes")
+                else:
+                    use_fargate = False
+                    logger.info("USE_FARGATE not true")
                 # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to use the tagging 'os.environ['repository_uri']:tag' for the image in the k8s job and not image.tags[0]
                 generate_kubernetes_job_template(k8s_job_template_file, os.environ['NAMESPACE'],
-                                                run_id, image_uri_with_tag, image_digest, side_car_name)
+                                                run_id, image_uri_with_tag, image_digest, side_car_name, use_fargate)
 
             k8s_backend_config_file = "/tmp/k8s-backend-config-" + run_id + ".json"
             if os.path.exists(k8s_backend_config_file):

@@ -452,7 +452,7 @@ elif  [ "${BACKEND_TYPE}" == "HPE" ]; then
 else # default BACKEND_TYPE is eks  
   if ENV_REPO_URI=`get_repository_uri $ECR_SERVICE $ECR_REGION $ENV_REPO_NAME` ; then
     logit "Looking for latest MLproject docker env image, using aws ecr describe-images, from existing repo $ENV_REPO_URI"    
-    aws ecr describe-images --repository-name ${ENV_REPO_NAME} > /tmp/di-output.json
+    aws --region ${ECR_REGION} ecr describe-images --repository-name ${ENV_REPO_NAME} > /tmp/di-output.json
     if [ $? != 0 ] ; then
       logit "aws ecr describe-images failed for env image. ${ENV_REPO_NAME}. Creating env image"
       CREATE_ENV_IMAGE="yes"
@@ -504,7 +504,7 @@ if [ $CREATE_ENV_IMAGE == "yes" ] ; then
     /usr/bin/docker push ${ENV_REPO_URI}:latest
   else
     logit "Building env image using buildah with repo URI $ENV_REPO_URI"
-    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/buildah bud --build-arg MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI} --build-arg INFINSTOR_TOKEN=${INFINSTOR_TOKEN} -t ${DOCKER_IMAGE} -f Dockerfile .)
+    (cd /tmp/workdir/${USE_SUBDIR}; /usr/bin/buildah bud --isolation chroot --build-arg MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI} --build-arg INFINSTOR_TOKEN=${INFINSTOR_TOKEN} -t ${DOCKER_IMAGE} -f Dockerfile .)
     /usr/bin/buildah images  
     # tag the built image with the remote docker registry hostname, so that it can be pushed.
     if ! /usr/bin/buildah tag ${DOCKER_IMAGE}:latest ${ENV_REPO_URI}:latest ; then
@@ -556,6 +556,7 @@ export PERIODIC_RUN_FREQUENCY
 export PERIODIC_RUN_START_TIME
 export PERIODIC_RUN_END_TIME
 export ORIGINAL_NODE_ID
+export USE_FARGATE
 
 logit "MLFLOW_CONCURRENT_URI is " $MLFLOW_CONCURRENT_URI
 logit "MLFLOW_TRACKING_URI is " $MLFLOW_TRACKING_URI

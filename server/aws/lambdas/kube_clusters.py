@@ -309,6 +309,10 @@ def get_cluster_info_details(db_row):
         c_info['ecr_role_ext'] = item['ecr_role_ext']['S']
         c_info['ecr_type'] = item['ecr_type']['S']
         c_info['ecr_region'] = item['ecr_region']['S']
+        if 'use_fargate' in item:
+            c_info['use_fargate'] = item['use_fargate']['S']
+        else:
+            c_info['use_fargate'] = "no"
     elif c_info['cluster_type'] == 'HPE':
         # keep keynames here consistent with the names in parallels-subscribers table
         c_info['hpeKubeConfig'] = item['hpeKubeConfig']['S']
@@ -395,6 +399,8 @@ def query_user_accessible_clusters(cognito_username, groups:list):
                 c_info['namespace'] = cluster_info['namespace']
                 c_info['cluster_type'] = cluster_info['cluster_type']
                 c_info['owner'] = cluster_info['owner']
+                if 'use_fargate' in cluster_info:
+                    c_info['use_fargate'] = cluster_info['use_fargate']
                 cluster_info_list.append(c_info)
 
     ## Get user's own clusters

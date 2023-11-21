@@ -315,7 +315,10 @@ if __name__ == '__main__':
             print('Mount/Monitor service starting for runid {0}, and podname {1}'.format(run_id, pod_name), flush=True)
             print('Listening on port {}:{}'.format(HOST, PORT), flush=True)
             s.listen()
-            mount_service_ready()
+            try:
+                mount_service_ready()
+            except Exception as ex:
+                print(f"mount_service: Caught {ex} while marking mount service ready. Ignoring", flush=True)
             i = 0
             while True:
                 print_info('Waiting for request..')
