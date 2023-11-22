@@ -1,3 +1,8 @@
+# traceback-with variables: https://pypi.org/project/traceback-with-variables/
+# Simplest usage in regular Python, for the whole program:
+from traceback_with_variables import activate_by_import
+import traceback_with_variables
+
 import traceback
 from typing import Any, Union
 
@@ -43,4 +48,4 @@ def filter_empty_in_dict_list_scalar(dict_list_scalar:Union[list, dict, Any]) ->
     except Exception as e:
         # some excpetion, just log it..
         print(f"_filter_empty_in_dict_list_scalar(): Caught exception: {e}")
-        traceback.print_exc()
+        traceback_with_variables.print_exc()

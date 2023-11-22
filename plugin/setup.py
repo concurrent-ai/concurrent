@@ -8,7 +8,7 @@ setup(
     packages=find_packages(),
     # Require MLflow as a dependency of the plugin, so that plugin users can simply install
     # the plugin & then immediately use it with MLflow
-    install_requires=["mlflow >= 1.21.0 ", "jsons", "kubernetes", "dpath"],
+    install_requires=["mlflow >= 1.21.0 ", "jsons", "kubernetes", "dpath", "traceback-with-variables"],
     entry_points={
         # Define a MLflow Project Backend plugin called 'concurrent-backend'
         "mlflow.project_backend":

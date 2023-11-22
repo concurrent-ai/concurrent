@@ -1,5 +1,10 @@
 import boto3
 
+# traceback-with variables: https://pypi.org/project/traceback-with-variables/
+# Simplest usage in regular Python, for the whole program:
+from traceback_with_variables import activate_by_import
+import traceback_with_variables
+
 ## Load infin_boto3, even if not used, to decorate boto3
 from infinstor import infin_boto3
 import tempfile
