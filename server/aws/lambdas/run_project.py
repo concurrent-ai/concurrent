@@ -430,7 +430,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                             kubernetes_client.V1EnvVar(name='USE_FARGATE', value=use_fargate_value)
                         ],
                         volume_mounts=volume_mounts,
-                        resources = kubernetes_client.V1ResourceRequirements(requests={'cpu': '3000m', 'memory': '8000M'}, limits={'cpu': '3000m', 'memory': '8000M'})
+                        resources = kubernetes_client.V1ResourceRequirements(requests={'cpu': '3000m', 'memory': '7000M'}, limits={'cpu': '3000m', 'memory': '7000M'})
                     )
                 ],
                 restart_policy='Never',
