@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create a diy NAT instance for private subnets
+Parameters:
+  VpcId:
+    Type: String
+    Description: 'Vpc ID of pre-existing VPC'
+  VpcPublicSubnetId:
+    Type: String
+    Description: 'SubnetId of Public Subnet in the above VPC'
+  VpcCidr:
+    Type: String
+    Description: "CIDR of the above VPC (the entire VPC's CIDR, not any specific subnet)"
+Resources:
+  DiyNatSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for DIY NAT Instance
+      GroupName: { Fn::Join: ['-', [ 'SecurityGroup-DiyNat', !Ref AWS::StackId ]] }
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          ToPort: 22
+          FromPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          ToPort: 443
+          FromPort: 443
+          CidrIp: 0.0.0.0/0
+      VpcId: !Ref VpcId
+  DiyNatInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0230bd60aa48260c6
+      InstanceType: t2.micro
+      SecurityGroupIds: 
+        - !GetAtt DiyNatSecurityGroup.GroupId
+      SourceDestCheck: false
+      SubnetId: !Ref VpcPublicSubnetId
+      UserData: IyEvYmluL2Jhc2gKeXVtIGluc3RhbGwgLXkgaXB0YWJsZXMKc3lzY3RsIC13IG5ldC5pcHY0LmlwX2ZvcndhcmQ9MQppcHRhYmxlcyAtdCBuYXQgLUEgUE9TVFJPVVRJTkcgLWogTUFTUVVFUkFERQo=
+      KeyName: eks-cluster-concurrent
