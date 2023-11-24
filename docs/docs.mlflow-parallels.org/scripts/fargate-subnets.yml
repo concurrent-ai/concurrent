@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Create a diy NAT instance for private subnets
+Description: Configure an existing VPC for EKS Fargate Profile: This CFT creates three private subnets for EKS fargate profiles. It also creates a diy NAT instance for these private subnets.
 Parameters:
   VpcId:
     Type: String
@@ -10,12 +10,42 @@ Parameters:
   VpcCidr:
     Type: String
     Description: "CIDR of the above VPC (the entire VPC's CIDR, not any specific subnet)"
+  Subnet1Cidr:
+    Type: String
+    Description: "CIDR of the first private subnet that will be created"
+  Subnet2Cidr:
+    Type: String
+    Description: "CIDR of the second private subnet that will be created"
+  Subnet3Cidr:
+    Type: String
+    Description: "CIDR of the third private subnet that will be created"
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "VPC Information"
+        Parameters:
+          - VpcId
+          - VpcPublicSubnetId
+          - VpcCidr
+      -
+        Label:
+          default: "Private subnets to be created in the above VPC"
+        Parameters:
+          - Subnet1Cidr
+          - Subnet2Cidr
+          - Subnet3Cidr
+    ParameterLabels:
+      VpcId:
+        default: "Which VPC should this be deployed to?"
+
 Resources:
   DiyNatSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: Security group for DIY NAT Instance
-      GroupName: { Fn::Join: ['-', [ 'SecurityGroup-DiyNat', !Ref AWS::StackId ]] }
+      GroupName: { Fn::Join: ['-', [ 'SecurityGroup-DiyNat', !Ref AWS::StackName ]] }
       SecurityGroupIngress: 
         - IpProtocol: tcp
           ToPort: 22
@@ -24,6 +54,14 @@ Resources:
         - IpProtocol: tcp
           ToPort: 443
           FromPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          ToPort: 80
+          FromPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp
+          ToPort: -1
+          FromPort: -1
           CidrIp: 0.0.0.0/0
       VpcId: !Ref VpcId
   DiyNatInstance:
@@ -36,21 +74,63 @@ Resources:
       SourceDestCheck: false
       SubnetId: !Ref VpcPublicSubnetId
       UserData: "IyEvYmluL2Jhc2gKeXVtIGluc3RhbGwgLXkgaXB0YWJsZXMKc3lzY3RsIC13IG5ldC5pcHY0LmlwX2ZvcndhcmQ9MQppcHRhYmxlcyAtdCBuYXQgLUEgUE9TVFJPVVRJTkcgLWogTUFTUVVFUkFERQo="
-      KeyName: "eks-cluster-concurrent"
+      # KeyName: "eks-cluster-concurrent"
       Tags:
         - Key: "Name"
-          Value: { Fn::Join: ['-', [ 'DiyNat', !Ref AWS::StackId ]] }
+          Value: { Fn::Join: ['-', [ 'DiyNat', !Ref AWS::StackName ]] }
   DiyNatRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VpcId
       Tags:
       - Key: Name
-        Value: { Fn::Join: ['-', [ 'DiyNatRouteTable', !Ref AWS::StackId ]] }
-  PublicRoute1:   # Public route table has direct routing to IGW:
+        Value: { Fn::Join: ['-', [ 'DiyNatRouteTable', !Ref AWS::StackName ]] }
+  PublicRoute1:   # Public route table has direct routing to IGW
     Type: AWS::EC2::Route
     DependsOn: DiyNatInstance
     Properties:
       RouteTableId: !Ref DiyNatRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       InstanceId: !Ref DiyNatInstance
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Ref Subnet1Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: { Fn::Join: ['-', [ 'PrivateSubnet1', !Ref AWS::StackName ]] }
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Ref Subnet2Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: { Fn::Join: ['-', [ 'PrivateSubnet2', !Ref AWS::StackName ]] }
+  PrivateSubnet3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VpcId
+      CidrBlock: !Ref Subnet3Cidr
+      MapPublicIpOnLaunch: false
+      Tags:
+      - Key: Name
+        Value: { Fn::Join: ['-', [ 'PrivateSubnet3', !Ref AWS::StackName ]] }
+  PrivateSubnet1RouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DiyNatRouteTable
+      SubnetId: !Ref PrivateSubnet1
+  PrivateSubnet2RouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DiyNatRouteTable
+      SubnetId: !Ref PrivateSubnet2
+  PrivateSubnet3RouteTable:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DiyNatRouteTable
+      SubnetId: !Ref PrivateSubnet3
