@@ -36,7 +36,7 @@ def get_lambda_configuration(event, context):
         operation = event['httpMethod']
         if (operation != 'GET'):
             return respond(ValueError('Unsupported method ' + str(operation)))
-
+        res:str = ""
         res += f"""<p><pre>
         sys.version={sys.version}
         sys.path={sys.path}
@@ -62,7 +62,7 @@ def get_lambda_configuration(event, context):
 
         # execute pipdeptree as a subprocess; Note that we are not executing the cli command pipdeptree since it doesn't work in the lambda environment.  But a programmatic invocation of the entrypoint in the pipdeptree module below works
         c_proc:subprocess.CompletedProcess = subprocess.run([sys.executable, "-c", "import sys; sys.path.append('/opt/python'); print('sys.path=' + str(sys.path) ); from pipdeptree.__main__ import main; main(); "], capture_output=True)
-        res += f"""<h1> output of pipdeptree </h1>
+        res += f"""<h1> output of pipdeptree using subprocess: pipdeptree.__main__ import main; main(); </h1>
         stdout: <pre>{c_proc.stdout.decode('utf-8')}</pre>
         stderr: <pre>{c_proc.stderr.decode('utf-8')}</pre>
         """
@@ -73,7 +73,7 @@ def get_lambda_configuration(event, context):
         with redirect_stdout(f):
             from pipdeptree.__main__ import main
             main()
-        res += f"""<h1> output of pipdeptree </h1>
+        res += f"""<h1> output of pipdeptree using inline call: pipdeptree.__main__ import main; main(); </h1> 
         stdout: <pre>{f.getvalue()}</pre>
         """
 

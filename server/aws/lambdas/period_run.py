@@ -49,7 +49,7 @@ def period_run(event, context):
     logger.info('## EVENT')
     logger.info(event)
     
-    # allow invocation of period_run() from api gateway and event bridge --> sql --> period_run()
+    # allow invocation of period_run() from api gateway and event bridge --> sqs --> period_run()
     item = json.loads(event.get('body')) if event.get('httpMethod') else event
 
     periodic_run_id = item['periodic_run_id']
@@ -94,8 +94,11 @@ def period_run(event, context):
     period_type = periodic_run_info['period']['type']
     dag_event['DROP_DEAD_TIME'] = get_drop_dead_time(period_type)
 
+    # previous_run_status == None (never ran before) | running | failed | success
     previous_run_status, prev_start_time, prev_end_time \
         = get_previous_run_status(cognito_username, periodic_run_info)
+    # previous_run_status == first_run | running | failed | success
+    if not previous_run_status: previous_run_status = 'first_run'
 
     periodic_run_start_time = None
     if previous_run_status == 'running':
@@ -114,6 +117,7 @@ def period_run(event, context):
         dag_event['dagParamsJson'] = munged_dag
     dag_event['periodic_run_start_time'] = start_time
     dag_event['periodic_run_end_time'] = end_time
+    dag_event['periodic_run_last_status'] = previous_run_status
 
     print("Periodic execution of dag for dagid " + periodic_run_info['dagid'])
     return execute_dag.execute_dag(dag_event, None)

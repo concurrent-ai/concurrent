@@ -134,6 +134,8 @@ def execute_dag(event, context):
     periodic_run_start_time = run_params.get('periodic_run_start_time')
     periodic_run_end_time = run_params.get('periodic_run_end_time')
     periodic_run_frequency = run_params.get('periodic_run_frequency')
+    # status of the last periodic run of this DAG
+    periodic_run_last_status:str = run_params.get('periodic_run_last_status')  
     dagParamsJsonRuntime = None
     if 'dagParamsJson' in run_params:
         dagParamsJsonRuntime = json.loads(run_params['dagParamsJson'])
@@ -318,7 +320,7 @@ def execute_dag(event, context):
                                                     parent_run_id=parent_run_id, last_in_chain_of_xforms='False',
                                                     parallelization=parallelization, k8s_params=k8s_params,
                                                     periodic_run_start_time=periodic_run_start_time,
-                                                    periodic_run_end_time=periodic_run_end_time)
+                                                    periodic_run_end_time=periodic_run_end_time, periodic_run_last_status=periodic_run_last_status)
                     futures.append(FutureDetails(launch_future, n, False))
                 
                 fut_to_be_polled:List[FutureDetails] = _futures_to_be_polled(futures)
@@ -880,7 +882,7 @@ def launch_bootstrap_run_project(
         periodic_run_name, dag_execution_info,
         xform_path=None, parent_run_id=None, last_in_chain_of_xforms='False',
         parallelization=None, k8s_params=None, periodic_run_start_time=None,
-        periodic_run_end_time=None):
+        periodic_run_end_time=None, periodic_run_last_status=None):
     logger.debug("RUN_ID -> INPUT_SPEC #")
     logger.debug(str(run_input_spec_map))
     logger.debug(artifact_uri)
@@ -902,11 +904,13 @@ def launch_bootstrap_run_project(
     body['parent_run_id'] = parent_run_id
     body['experiment_id'] = experiment_id
     if periodic_run_start_time:
-      body['periodic_run_start_time'] = periodic_run_start_time
+        body['periodic_run_start_time'] = periodic_run_start_time
     if periodic_run_end_time:
-      body['periodic_run_end_time'] = periodic_run_end_time
+        body['periodic_run_end_time'] = periodic_run_end_time
     if periodic_run_frequency:
-      body['periodic_run_frequency'] = periodic_run_frequency
+        body['periodic_run_frequency'] = periodic_run_frequency
+    if periodic_run_last_status:
+        body['periodic_run_last_status'] = periodic_run_last_status
     body['last_in_chain_of_xforms'] = last_in_chain_of_xforms
     body['instance_type'] = instance_type
     body['original_node'] = orig_node

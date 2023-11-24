@@ -555,6 +555,8 @@ export BOOTSTRAP_LOG_FILE
 export PERIODIC_RUN_FREQUENCY
 export PERIODIC_RUN_START_TIME
 export PERIODIC_RUN_END_TIME
+# previous_run_status == first_run | running | failed | success
+export PERIODIC_RUN_LAST_STATUS
 export ORIGINAL_NODE_ID
 export USE_FARGATE
 

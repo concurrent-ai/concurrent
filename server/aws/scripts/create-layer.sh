@@ -35,13 +35,18 @@ pip install python-jose
 pip install adal
 pip install casbin
 pip install kubernetes
-pip install google-api-python-client
+# Not used anymore: google cloud REST API client
+# https://github.com/googleapis/google-api-python-client/blob/main/docs/README.md; https://github.com/googleapis/google-api-python-client/blob/main/samples/compute/create_instance.py
+# pip install google-api-python-client
+# GKE api: 
+# https://cloud.google.com/python/docs/reference/container/latest; https://pypi.org/project/google-cloud-container/; https://github.com/googleapis/google-cloud-python/blob/main/packages/google-cloud-container/samples/generated_samples/container_v1_generated_cluster_manager_create_cluster_sync.py
 pip install google-cloud-container
 # lambda error: /lib64/libc.so.6: version `GLIBC_2.28' not found (required by /opt/python/cryptography/hazmat/bindings/_rust.abi3.so)
 # https://github.com/pyca/cryptography/issues/6390
 # https://stackoverflow.com/questions/69475140/lambda-function-failing-with-lib64-libc-so-6-version-glibc-2-18-not-found
 pip install cryptography==3.4.8
 pip install pipdeptree
+pip install traceback-with-variables
 /bin/rm -f requirements.txt
 pip freeze > requirements.txt
 
@@ -95,7 +100,7 @@ for dir in package/python/scipy/integrate/tests \
     package/python/Pillow.libs \
     package/python/scipy/special ; do
     
-    [ -d $dir ] && { echo "Removing directory to reduce python lambda layer size: $dir";  rm -rf $dir; }
+        [ -d $dir ] && { echo "Removing directory to reduce python lambda layer size: $dir";  rm -rf $dir; }
 done;
 
 # remove all __pycache__ directories to reduce size
