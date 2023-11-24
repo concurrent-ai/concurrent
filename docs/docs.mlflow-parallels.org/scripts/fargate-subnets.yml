@@ -29,11 +29,28 @@ Resources:
   DiyNatInstance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: ami-0230bd60aa48260c6
-      InstanceType: t2.micro
+      ImageId: "ami-0230bd60aa48260c6"
+      InstanceType: "t2.micro"
       SecurityGroupIds: 
         - !GetAtt DiyNatSecurityGroup.GroupId
       SourceDestCheck: false
       SubnetId: !Ref VpcPublicSubnetId
-      UserData: IyEvYmluL2Jhc2gKeXVtIGluc3RhbGwgLXkgaXB0YWJsZXMKc3lzY3RsIC13IG5ldC5pcHY0LmlwX2ZvcndhcmQ9MQppcHRhYmxlcyAtdCBuYXQgLUEgUE9TVFJPVVRJTkcgLWogTUFTUVVFUkFERQo=
-      KeyName: eks-cluster-concurrent
+      UserData: "IyEvYmluL2Jhc2gKeXVtIGluc3RhbGwgLXkgaXB0YWJsZXMKc3lzY3RsIC13IG5ldC5pcHY0LmlwX2ZvcndhcmQ9MQppcHRhYmxlcyAtdCBuYXQgLUEgUE9TVFJPVVRJTkcgLWogTUFTUVVFUkFERQo="
+      KeyName: "eks-cluster-concurrent"
+      Tags:
+        - Key: "Name"
+          Value: { Fn::Join: ['-', [ 'DiyNat', !Ref AWS::StackId ]] }
+  DiyNatRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VpcId
+      Tags:
+      - Key: Name
+        Value: { Fn::Join: ['-', [ 'DiyNatRouteTable', !Ref AWS::StackId ]] }
+  PublicRoute1:   # Public route table has direct routing to IGW:
+    Type: AWS::EC2::Route
+    DependsOn: DiyNatInstance
+    Properties:
+      RouteTableId: !Ref DiyNatRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      InstanceId: !Ref DiyNatInstance
