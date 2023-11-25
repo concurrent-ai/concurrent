@@ -444,8 +444,9 @@ def get_docker_image(parent_run_id:str) -> Tuple[str, str]:
             do_build = False
     else:
         logger.info("Using aws ecr describe-images to determine if full image needs to be built")
+        ecr_region = os.environ['ECR_REGION']
         repository_name = repository_uri[repository_uri.find('/') + 1:]
-        cmd = ['aws', 'ecr', 'describe-images', '--repository-name', repository_name]
+        cmd = ['aws', '--region', ecr_region, 'ecr', 'describe-images', '--repository-name', repository_name]
         logger.info(f'Executing command {cmd}')
         try:
             js = json.loads(subprocess.check_output(cmd))
