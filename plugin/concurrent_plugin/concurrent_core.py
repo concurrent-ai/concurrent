@@ -450,7 +450,14 @@ def _apply_keygen(df, keygen_src):
     df['partitioning_key'] = keydf['partitioning_key']
     return sorted(keydf['partitioning_key'].unique())
 
-
-
-
+def download_remote_path(run_id, path, tmpdir):
+    experiment_id = mlflow.get_run(run_id=run_id).info.experiment_id
+    experiment = mlflow.get_experiment(experiment_id)
+    bucket = urlparse(experiment.artifact_location).netloc
+    fnl = path[path.rfind('/')+1:]
+    lfn = os.path.join(tmpdir, fnl)
+    print(f'download_remote_path: run_id={run_id}, bucket={bucket}, path={path}, lfn={lfn}', flush=True)
+    s3client = boto3.client('s3')
+    s3client.download_file(bucket, path, lfn)
+    return lfn
 

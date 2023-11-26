@@ -44,8 +44,12 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         fh.write("  name: \"{replaced with MLflow Project name}\"\n")
         fh.write("  namespace: {}\n".format(namespace))
         fh.write("spec:\n")
-        #fh.write("  ttlSecondsAfterFinished: 600\n")
-        fh.write("  backoffLimit: 0\n")
+        fh.write("  ttlSecondsAfterFinished: 60\n")
+        fh.write("  completions: 1\n")
+        if use_fargate:
+            fh.write("  backoffLimit: 0\n")
+        else:
+            fh.write("  backoffLimit: 3\n")
         fh.write("  template:\n")
         if use_fargate:
             fh.write("    metadata:\n")
@@ -67,20 +71,18 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         fh.write("        imagePullPolicy: IfNotPresent\n")
         fh.write("        resources:\n")
         fh.write("          limits:\n")
+        fh.write("            ephemeral-storage: \"100Gi\"\n")
         if 'RESOURCES_LIMITS_CPU' in os.environ:
             fh.write("            cpu: \"{}\"\n".format(os.environ['RESOURCES_LIMITS_CPU']))
         if 'RESOURCES_LIMITS_MEMORY' in os.environ:
             fh.write("            memory: \"{}\"\n".format(os.environ['RESOURCES_LIMITS_MEMORY']))
-        if "RESOURCES_LIMITS_EPHEMERAL_STORAGE" in os.environ:
-            fh.write("            ephemeral-storage: \"{}\"\n".format(os.environ['RESOURCES_LIMITS_EPHEMERAL_STORAGE']))
-        else:
-            fh.write("            ephemeral-storage: \"10Gi\"\n")
         if "RESOURCES_LIMITS_HUGEPAGES" in os.environ:
             HP_SIZE, HP_VALUE = os.environ['RESOURCES_LIMITS_HUGEPAGES'].split('/')[:2]
             fh.write("            hugepages-{}: \"{}\"\n".format(HP_SIZE, HP_VALUE))
         if "RESOURCES_LIMITS_NVIDIA_COM_GPU" in os.environ:
             fh.write("            nvidia.com/gpu: {}\n".format(os.environ['RESOURCES_LIMITS_NVIDIA_COM_GPU']))
-            fh.write("          requests:\n")
+        fh.write("          requests:\n")
+        fh.write("            ephemeral-storage: \"100Gi\"\n")
         if "RESOURCES_REQUESTS_CPU" in os.environ:
             fh.write("            cpu: \"{}\"\n".format(os.environ['RESOURCES_REQUESTS_CPU']))
         if "RESOURCES_REQUESTS_MEMORY" in os.environ:

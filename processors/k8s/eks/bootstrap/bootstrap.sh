@@ -4,18 +4,10 @@
 set -e
 set -x
 
-#if [ ${BACKEND_TYPE} != "eks" ] ; then
-#  export DOCKER_HOST="tcp://docker-dind:2375"
-#fi
-
 logit() {
     echo "`date` - $$ - INFO - bootstrap.sh - ${*}" # >> ${LOG_FILE}
     # [ -n "$LOG_FILE" ] && echo "`date` - $$ - INFO - bootstrap.sh - ${*}"  >> "${LOG_FILE}"
 }
-
-##
-## Begin concurrent code
-##
 
 BOOTSTRAP_LOG_FILE="/tmp/bootstrap-log-${ORIGINAL_NODE_ID}.txt"
 
@@ -117,66 +109,6 @@ setup_docker_secret() {
   echo "type: kubernetes.io/dockerconfigjson" >> $1
 }
 
-generate_kubernetes_job_template() {
-  /bin/rm -f $1
-  echo "apiVersion: batch/v1" > $1
-  echo "kind: Job" >> $1
-  echo "metadata:" >> $1
-  echo "  name: \"{replaced with MLflow Project name}\"" >> $1
-  echo "  namespace: $2" >> $1
-  echo "spec:" >> $1
-  echo "  ttlSecondsAfterFinished: 600" >> $1
-  echo "  backoffLimit: 0" >> $1
-  echo "  template:" >> $1
-  echo "    spec:" >> $1
-  echo "      containers:" >> $1
-  echo "      - name: \"{replaced with MLflow Project name}\"" >> $1
-  echo "        image: \"{replaced with URI of Docker image created during Project execution}\"" >> $1
-  echo "        command: [\"{replaced with MLflow Project entry point command}\"]" >> $1
-  echo "        imagePullPolicy: IfNotPresent" >> $1
-  echo "        securityContext:" >> $1
-  echo "          privileged: true" >> $1
-  echo "          capabilities:" >> $1
-  echo "            add:" >> $1
-  echo "              - SYS_ADMIN" >> $1
-  echo "        resources:" >> $1
-  echo "          limits:" >> $1
-  if [ x"${RESOURCES_LIMITS_CPU}" != "x" ] ; then
-    echo "            cpu: \"${RESOURCES_LIMITS_CPU}\"" >> $1
-  fi
-  if [ x"${RESOURCES_LIMITS_MEMORY}" != "x" ] ; then
-    echo "            memory: \"${RESOURCES_LIMITS_MEMORY}\"" >> $1
-  fi
-  if [ x"${RESOURCES_LIMITS_HUGEPAGES}" != "x" ] ; then
-    HP_SIZE=`echo ${RESOURCES_LIMITS_HUGEPAGES} | awk -F/ '{ print $1 }'`
-    HP_VALUE=`echo ${RESOURCES_LIMITS_HUGEPAGES} | awk -F/ '{ print $2 }'`
-    echo "            hugepages-${HP_SIZE}: \"${HP_VALUE}\"" >> $1
-  fi
-  if [ x"${RESOURCES_LIMITS_NVIDIA_COM_GPU}" != "x" ] ; then
-    echo "            nvidia.com/gpu: ${RESOURCES_LIMITS_NVIDIA_COM_GPU}" >> $1
-  fi
-  echo "          requests:" >> $1
-  if [ x"${RESOURCES_REQUESTS_CPU}" != "x" ] ; then
-    echo "            cpu: \"${RESOURCES_REQUESTS_CPU}\"" >> $1
-  fi
-  if [ x"${RESOURCES_REQUESTS_MEMORY}" != "x" ] ; then
-    echo "            memory: \"${RESOURCES_REQUESTS_MEMORY}\"" >> $1
-  fi
-  if [ x"${RESOURCES_REQUESTS_HUGEPAGES}" != "x" ] ; then
-    HP_SIZE=`echo ${RESOURCES_REQUESTS_HUGEPAGES} | awk -F/ '{ print $1 }'`
-    HP_VALUE=`echo ${RESOURCES_REQUESTS_HUGEPAGES} | awk -F/ '{ print $2 }'`
-    echo "            hugepages-${HP_SIZE}: \"${HP_VALUE}\"" >> $1
-  fi
-  if [ x"${RESOURCES_REQUESTS_NVIDIA_COM_GPU}" != "x" ] ; then
-    echo "            nvidia.com/gpu: ${RESOURCES_REQUESTS_NVIDIA_COM_GPU}" >> $1
-  fi
-  if [ ${ECR_TYPE} == "private" ] ; then
-    echo "      imagePullSecrets:" >> $1
-    echo "      - name: ecr-private-key" >> $1
-  fi
-  echo "      restartPolicy: Never" >> $1
-}
-
 get_repository_uri() {
   /bin/rm -f /tmp/reps
   if ! aws --profile ecr --region $2 $1 describe-repositories > /tmp/reps ; then
@@ -198,27 +130,6 @@ for one in reps['repositories']:
 sys.exit(255)
 ENDPY
   return $?
-}
-
-get_mlflow_param() {
-  export MLFLOW_RUN_ID
-  export PNAME=$1
-  python3 << ENDPY
-import sys
-import os
-import mlflow
-from mlflow.tracking import MlflowClient
-${ADDITIONAL_IMPORTS}
-
-client = MlflowClient()
-run = client.get_run(os.getenv('MLFLOW_RUN_ID'))
-param = os.getenv('PNAME')
-if param in run.data.params:
-  print(run.data.params[param])
-  sys.exit(0)
-else:
-  sys.exit(255)
-ENDPY
 }
 
 download_project_files() {

@@ -389,6 +389,8 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                 body['namespace'] = backend_config['kube-namespace']
             else:
                 body['namespace'] = 'default'
+            body['resources.requests.ephemeral-storage'] = '100Gi'
+            body['resources.limits.ephemeral-storage'] = '100Gi'
         kube_context = backend_config.get('kube-context')
         if kube_context:
             body['kube_context'] = kube_context
@@ -609,7 +611,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         job_namespace = job_template["metadata"]["namespace"]
         _load_kube_context(context=kube_context)
         kubernetes.client.configuration.retries = 24
-        print(f'run_eks_job: Overrode default kubernetes.client.configuration.retries to 10')
+        print(f'run_eks_job: Overrode default kubernetes.client.configuration.retries to 24')
 
         core_api_instance = kubernetes.client.CoreV1Api()
         tok = base64.b64encode(get_token_file_obj('r').read().encode('utf-8')).decode('utf-8')
@@ -664,7 +666,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
 
         side_car_volume_mounts = volume_mounts.copy()
 
-        job_template["spec"]["ttlSecondsAfterFinished"] = int(os.getenv("CONCURRENT_KUBE_JOB_TEMPLATE_TTL", "86400"))
+        job_template["spec"]["ttlSecondsAfterFinished"] = 60
         
         if os.getenv("CONCURRENT_PRIVILEGED_MLFLOW_CONTAINER"): 
             # create 'securityContext' if needed
@@ -676,7 +678,8 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         # The following snippet configures the rescheduling policy
         # See https://kubernetes.io/docs/concepts/workloads/controllers/job/#pod-failure-policy
         job_template["spec"]["template"]["spec"]["restartPolicy"] = "Never" # pod is never restarted on the same node
-        job_template["spec"]["backoffLimit"] = 6
+        if not 'backoffLimit' in job_template['spec']:
+            job_template["spec"]["backoffLimit"] = 3
         podFailurePolicy = {"rules": [
                                         {
                                             "action": "Ignore",
@@ -713,9 +716,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             job_template["spec"]["template"]["spec"]["volumes"].append(
                 kubernetes.client.V1Volume(name="iam-roles-anywhere-volume", secret=kubernetes.client.V1SecretVolumeSource(secret_name=os.getenv("IAM_ROLES_ANYWHERE_SECRET_NAME"))))
         
-        _logger.info(f'run_eks_job: job_template before filtering= { job_template }')
-        # Note: job_template is not just a 'dict' containing 'lists' and 'scalars'.  It has other objects like V1Volume and others.  so filter_empty_in_dict_list_scalar() will not filter correctly.  Also yaml.safe_dump() will not be able to dump such a hybrid correctly as a string
-        #_logger.info(f'run_eks_job: job_template after  filtering= { yaml.safe_dump(concurrent_plugin.utils.filter_empty_in_dict_list_scalar(job_template)) }')
+        _logger.info(f'run_eks_job: job_template before calling create_namespaced_job = { job_template }')
         api_instance = kubernetes.client.BatchV1Api()
         resp:kubernetes.client.V1Job = api_instance.create_namespaced_job(namespace=job_namespace, body=job_template, pretty=True)
         _logger.info( resp.kind + " " + resp.metadata.name +" created." )

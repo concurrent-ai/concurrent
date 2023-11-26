@@ -342,8 +342,6 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         print('No params')
     if 'parent_run_id' in item:
         cmap.data['PARENT_RUN_ID'] = item['parent_run_id']
-    if 'last_in_chain_of_xforms' in item:
-        cmap.data['LAST_IN_CHAIN_OF_XFORMS'] = item['last_in_chain_of_xforms']
     if 'kube_job_template_contents' in item:
         cmap.data['KUBE_JOB_TEMPLATE_CONTENTS'] = item['kube_job_template_contents']
     if 'git_commit' in item:
@@ -356,13 +354,9 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         cmap.data['ADDITIONAL_IMPORTS'] = subs['additionalImports']['S']
     # this is the command that'll be used to install concurrent in the bootstrap and the mlflow project pod.  Set this in subscribers table to something similar to "pip install --no-cache-dir --upgrade http://xyz.com/packages/concurrent-plugin/concurrent_plugin-0.3.27-py3-none-any.whl"
     if 'concurrentPluginPipInstallCmd' in subs: cmap.data['CONCURRENT_PLUGIN_PIP_INSTALL_CMD'] = subs['concurrentPluginPipInstallCmd']['S']
-    # this is used to set the ttlSecondsAfterFinished for the kubernetes job launched for the mlflow project.  Set this in subscribers table 
-    if 'concurrentKubeJobTemplateTtl' in subs: cmap.data['CONCURRENT_KUBE_JOB_TEMPLATE_TTL'] = subs['concurrentKubeJobTemplateTtl']['S']
     if 'concurrentPrivilegedMlflowContainer' in subs: cmap.data['CONCURRENT_PRIVILEGED_MLFLOW_CONTAINER'] = subs['concurrentPrivilegedMlflowContainer']['S']
     # PYTHONUNBUFFERED is an environment variable in Python that can be used to disable output buffering for all streams. When this variable is set to a non-empty string, Python automatically sets the PYTHONUNBUFFERED flag, which forces Python to disable buffering for sys.stdout and sys.stderr.
     cmap.data['PYTHONUNBUFFERED'] = 'true'
-    # set 'concurrentUseDockerBuild' to "yes" or "no"
-    if 'concurrentUseDockerBuild' in subs: cmap.data['USE_DOCKER_BUILD'] = subs['concurrentUseDockerBuild']['S']
         
     tokfile_contents = 'Token=' + item['parallels_token'] + '\n'
     if backend_type == 'eks':
@@ -390,25 +384,29 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
 
     if 'bootstrapImage' in subs:
         bootstrap_image = subs['bootstrapImage']['S']
+        logger.info(f'kickoff_bootstrap: Using bootstrap image specified in subscriber table = {bootstrap_image}')
     else:
         bootstrap_image = 'public.ecr.aws/u5q3r5r0/concurrent-bootstrap'
+        logger.info(f'kickoff_bootstrap: Using default bootstrap image = {bootstrap_image}')
 
     try:
         pod_failure_policy = kubernetes_client.V1PodFailurePolicy([
             kubernetes_client.V1PodFailurePolicyRule(action="Ignore", on_exit_codes=kubernetes_client.V1PodFailurePolicyOnExitCodesRequirement(operator="In", values=[143])),
             kubernetes_client.V1PodFailurePolicyRule(action="FailJob", on_exit_codes=kubernetes_client.V1PodFailurePolicyOnExitCodesRequirement(operator="NotIn", values=[0])),
-            kubernetes_client.V1PodFailurePolicyRule(action="Ignore", on_pod_conditions=kubernetes_client.V1PodFailurePolicyOnPodConditionsPattern(status="True", type="DisruptionTarget"))
+            kubernetes_client.V1PodFailurePolicyRule(action="Ignore", on_pod_conditions=[kubernetes_client.V1PodFailurePolicyOnPodConditionsPattern(status='True', type="DisruptionTarget")])
             ])
         if use_fargate:
             logger.info(f'kickoff_bootstrap: use_fargate is True')
             use_fargate_value = "yes"
             pod_metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm, 'concurrent-node-type': 'system'}, namespace=namespace)
             tolerations=None
+            backoff_limit = 0
         else:
             logger.info(f'kickoff_bootstrap: use_fargate is False')
             use_fargate_value = "no"
             pod_metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm}, namespace=namespace)
             tolerations=[kubernetes_client.V1Toleration(key="concurrent-node-type", operator="Equal", value="system", effect="NoSchedule")]
+            backoff_limit = 3
         pod_template = kubernetes_client.V1PodTemplateSpec(
             metadata=pod_metadata,
             spec=kubernetes_client.V1PodSpec(
@@ -449,7 +447,7 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                 api_version="batch/v1",
                 kind="Job",
                 metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, namespace=namespace, labels={"job_name": canonical_nm}),
-                spec=kubernetes_client.V1JobSpec(completions=1, template=pod_template)#, pod_failure_policy=pod_failure_policy)
+                spec=kubernetes_client.V1JobSpec(ttl_seconds_after_finished=60, completions=1, backoff_limit=backoff_limit, template=pod_template, pod_failure_policy=pod_failure_policy)
             )
         logger.info(f'kickoff_bootstrap: creating namespaced job={job}')
     except Exception as exp1:
