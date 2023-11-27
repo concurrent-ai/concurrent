@@ -110,6 +110,7 @@ def add_kube_cluster(event, context):
         ecr_role_ext = item['ecr_role_ext']
         ecr_type = item['ecr_type']
         ecr_region = item['ecr_region']
+        use_fargate = item['use_fargate']
         record = {
             'hash_key': {'S': hash_key},
             'range_key': {'S': range_key},
@@ -120,7 +121,8 @@ def add_kube_cluster(event, context):
             'ecr_role': {'S': ecr_role},
             'ecr_role_ext': {'S': ecr_role_ext},
             'ecr_type': {'S': ecr_type},
-            'ecr_region': {'S': ecr_region}
+            'ecr_region': {'S': ecr_region},
+            'use_fargate': {'S': use_fargate}
         }
     else:
         return respond("Invalid Cluster Type", dict())
