@@ -29,6 +29,7 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         image_uri = image_tag + "@" + image_digest
     else:
         image_uri = image_tag
+    # Note: most of these environment variables are added to the sidecar container and not to the MLproject container.  For the latter, it is done in concurrent_backend.py::_get_kubernetes_job_definition()
     mlflow_tracking_uri = os.environ['MLFLOW_TRACKING_URI']
     concurrent_uri = os.environ['MLFLOW_CONCURRENT_URI']
     dag_execution_id = os.getenv('DAG_EXECUTION_ID')
@@ -36,6 +37,7 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
     periodic_run_frequency = os.getenv('PERIODIC_RUN_FREQUENCY')
     periodic_run_start_time = os.getenv('PERIODIC_RUN_START_TIME')
     periodic_run_end_time = os.getenv('PERIODIC_RUN_END_TIME')
+    periodic_run_last_status = os.getenv('PERIODIC_RUN_LAST_STATUS')
     dag_id = os.getenv('DAGID')
     with open(job_tmplate_file, "w") as fh:
         fh.write("apiVersion: batch/v1\n")
@@ -127,6 +129,9 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         if periodic_run_end_time:
             fh.write("        - name: PERIODIC_RUN_END_TIME\n")
             fh.write("          value: \"{}\"\n".format(periodic_run_end_time))
+        if periodic_run_last_status:
+            fh.write("        - name: PERIODIC_RUN_LAST_STATUS\n")
+            fh.write("          value: \"{}\"\n".format(periodic_run_last_status))
         fh.write("        - name: MY_POD_NAME\n")
         fh.write("          valueFrom:\n")
         fh.write("            fieldRef:\n")
@@ -157,6 +162,7 @@ def generate_backend_config_json(backend_conf_file:str, input_spec, run_id, k8s_
     """
     writes the backend config json to 'backend_conf_file'.
     {backend-type: <backend_type>, repository-uri: <uri>, git-commit: <git>, run-id:<runid>, INPUT_DATA_SPEC:<spec>, IMAGE_TAG:<tag>, IMAGE_DIGEST:<digest>, kube-job-template-path:<path> }
+    Example: backend_config={'backend-type': 'eks', 'repository-uri': '687391518391.dkr.ecr.us-east-1.amazonaws.com/mlflow/xyz/b7eb693cbc63d8f1988d2644499fc6fdfb42e348acd527751102febb78293f2e', 'git-commit': '61e1dc0de189c961bb27e6a4e413b830db98ccbb', 'run-id': '105-17010909470620000000098', 'INPUT_DATA_SPEC': 'bnVsbA==', 'IMAGE_TAG': '687391518391.dkr.ecr.us-east-1.amazonaws.com/mlflow/xyz/b7eb693cbc63d8f1988d2644499fc6fdfb42e348acd527751102febb78293f2e:61e1dc0', 'kube-job-template-path': '/tmp/kubernetes_job_template-105-17010909470620000000098.yaml', 'ENV_MANAGER': None, 'SYNCHRONOUS': False, 'DOCKER_ARGS': {}, 'STORAGE_DIR': None, 'build_image': False, 'docker_auth': None}
 
     Args:
         backend_conf_file (str): file to write the backend config json to

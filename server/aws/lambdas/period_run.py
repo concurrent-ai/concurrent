@@ -24,6 +24,8 @@ from urllib.parse import urlparse
 from mlflow_utils import call_create_run
 import run_project 
 
+from typing import Tuple, Dict, List, Any, Optional
+
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
@@ -123,7 +125,17 @@ def period_run(event, context):
     return execute_dag.execute_dag(dag_event, None)
 
 
-def get_previous_run_status(cognito_username, periodic_run_info):
+def get_previous_run_status(cognito_username:str, periodic_run_info:dict) -> Tuple[str, datetime, datetime]:
+    """
+    Returns the tuple (running|success|failure|None, start_time, end_time)
+
+    Args:
+        cognito_username (str): _description_
+        periodic_run_info (dict): _description_
+
+    Returns:
+        Tuple[str, datetime, datetime]: see description
+    """
     dagid = periodic_run_info['dagid']
     exp_id = str(periodic_run_info['experiment_id'])
     period_type = periodic_run_info.get('period').get('type')

@@ -9,6 +9,7 @@ import boto3
 import ddb_mlflow_parallels_queries as ddb_pqrs
 from mlflow_utils import fetch_mlflow_artifact_file
 from utils import get_custom_token
+from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -125,7 +126,19 @@ def create_new_dag_json(old_dag_json, new_node_dict, new_edge_dict):
 
 
 
-def get_dag_execution_record(cognito_username, groups, dag_id, dag_execution_id):
+def get_dag_execution_record(cognito_username:str, groups:List[str], dag_id:str, dag_execution_id:str) -> Dict[str, Any]:
+    """
+    Get the dag_execution_record for the given dag_id and dag_execution_id
+
+    Args:
+        cognito_username (str): _description_
+        groups (List[str]): _description_
+        dag_id (str): _description_
+        dag_execution_id (str): _description_
+
+    Returns:
+        Dict[str, Any]: returns a dict, with some keys being 'dag_id', 'dag_execution_id', 'auth_info', 'update_time', 'parent_run_id', 'start_time' and others
+    """
     client = boto3.client('dynamodb')
 
     key = dict()
@@ -224,7 +237,19 @@ def get_spec_list_from_named_input_map(named_map):
     return input_list
 
 
-def fetch_dag_execution_info(cognito_username, groups, dag_id, dag_execution_id):
+def fetch_dag_execution_info(cognito_username:str, groups:List[str], dag_id:str, dag_execution_id:str) -> Dict[str, Any]:
+    """
+    returns a dict with some keys being 'dag_json', 'run_status', 'auth_info'
+
+    Args:
+        cognito_username (str): _description_
+        groups (List[str]): _description_
+        dag_id (str): _description_
+        dag_execution_id (str): _description_
+
+    Returns:
+        Dict[str, Any]: See return value above
+    """
     record = get_dag_execution_record(cognito_username, groups, dag_id, dag_execution_id)
     dag_runtime_info = fetch_dag_runtime_artifact(cognito_username, groups,
                                                   record['auth_info'], record['parent_run_id'])

@@ -206,6 +206,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             _type_: _description_
         """
         if (verbose):
+            # backend_config = {'backend-type': 'eks', 'repository-uri': '687391518391.dkr.ecr.us-east-1.amazonaws.com/mlflow/raj-isstage2-isstage8/b7eb693cbc63d8f1988d2644499fc6fdfb42e348acd527751102febb78293f2e', 'git-commit': '61e1dc0de189c961bb27e6a4e413b830db98ccbb', 'run-id': '105-17010909470620000000098', 'INPUT_DATA_SPEC': 'bnVsbA==', 'IMAGE_TAG': '687391518391.dkr.ecr.us-east-1.amazonaws.com/mlflow/raj-isstage2-isstage8/b7eb693cbc63d8f1988d2644499fc6fdfb42e348acd527751102febb78293f2e:61e1dc0', 'kube-job-template-path': '/tmp/kubernetes_job_template-105-17010909470620000000098.yaml', 'ENV_MANAGER': None, 'SYNCHRONOUS': False, 'DOCKER_ARGS': {}, 'STORAGE_DIR': None, 'build_image': False, 'docker_auth': None}
             _logger.info("PluginConcurrentProjectBackend: Entered. project_uri=" + str(project_uri)\
                 + ", entry_point=" + str(entry_point)\
                 + ", params=" + str(params)\
@@ -266,7 +267,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
     def run_eks(self, run_id:str, backend_type:str, bucket_name:str, path_in_bucket:str, work_dir:str, project_uri:str, entry_point:str, params:str,
             version, backend_config:dict, tracking_store_uri:str, experiment_id:str, project:str, active_run:mlflow.entities.Run):
         """
-        _summary_
+        runs the concurrent MLproject either 'locally' (creates a k8s Job to run it) or in the 'backend' (invokes run_project lambda), based on backend_config['kube-client-location'] = local|backend
 
         _extended_summary_
 
@@ -458,6 +459,7 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         Returns:
             _type_: _description_
         """
+        # backend_config={'backend-type': 'eks', 'repository-uri': '687391518391.dkr.ecr.us-east-1.amazonaws.com/mlflow/xyz/b7eb693cbc63d8f1988d2644499fc6fdfb42e348acd527751102febb78293f2e', 'git-commit': '61e1dc0de189c961bb27e6a4e413b830db98ccbb', 'run-id': '105-17010909470620000000098', 'INPUT_DATA_SPEC': 'bnVsbA==', 'IMAGE_TAG': '687391518391.dkr.ecr.us-east-1.amazonaws.com/mlflow/xyz/b7eb693cbc63d8f1988d2644499fc6fdfb42e348acd527751102febb78293f2e:61e1dc0', 'kube-job-template-path': '/tmp/kubernetes_job_template-105-17010909470620000000098.yaml', 'ENV_MANAGER': None, 'SYNCHRONOUS': False, 'DOCKER_ARGS': {}, 'STORAGE_DIR': None, 'build_image': False, 'docker_auth': None}
         kube_context = backend_config.get('kube-context')
         repository_uri = backend_config.get('repository-uri')
         git_commit = backend_config.get('git-commit')
@@ -507,9 +509,21 @@ class PluginConcurrentProjectBackend(AbstractBackend):
             raise Exception('Image not available, build or pull before attempting to run')
 
 
-    def _get_kubernetes_job_definition(
-        self, project_name, image_tag, image_digest, command, env_vars, job_template
-    ):
+    def _get_kubernetes_job_definition(self, project_name:str, image_tag:str, image_digest:str, command:str, env_vars:dict, job_template:dict) -> dict:
+        """
+        returns the given job_template after adding other provided arguments to the template like project_name, image_tag, env_vars etc.  These are only added to the MLproject container of the pod and not to the sidecar container
+
+        Args:
+            project_name (str): _description_
+            image_tag (str): _description_
+            image_digest (str): _description_
+            command (str): _description_
+            env_vars (dict): _description_
+            job_template (dict): _description_
+
+        Returns:
+            dict: see description above
+        """
         if image_digest:
             container_image = image_tag + "@" + image_digest
         else:
@@ -582,13 +596,15 @@ class PluginConcurrentProjectBackend(AbstractBackend):
                 + ', env_vars=' + str(env_vars) + ', input_data_spec=' + str(input_data_spec)\
                 + ', kube_context=' + str(kube_context) + ', job_template=' + str(job_template))
         if os.getenv('PERIODIC_RUN_NAME'):
-          env_vars['PERIODIC_RUN_NAME'] = os.getenv('PERIODIC_RUN_NAME')
+            env_vars['PERIODIC_RUN_NAME'] = os.getenv('PERIODIC_RUN_NAME')
         if os.getenv('PERIODIC_RUN_FREQUENCY'):
-          env_vars['PERIODIC_RUN_FREQUENCY'] = os.getenv('PERIODIC_RUN_FREQUENCY')
+            env_vars['PERIODIC_RUN_FREQUENCY'] = os.getenv('PERIODIC_RUN_FREQUENCY')
         if os.getenv('PERIODIC_RUN_START_TIME'):
-          env_vars['PERIODIC_RUN_START_TIME'] = os.getenv('PERIODIC_RUN_START_TIME')
+            env_vars['PERIODIC_RUN_START_TIME'] = os.getenv('PERIODIC_RUN_START_TIME')
         if os.getenv('PERIODIC_RUN_END_TIME'):
-          env_vars['PERIODIC_RUN_END_TIME'] = os.getenv('PERIODIC_RUN_END_TIME')
+            env_vars['PERIODIC_RUN_END_TIME'] = os.getenv('PERIODIC_RUN_END_TIME')
+        if os.getenv('PERIODIC_RUN_LAST_STATUS'):
+            env_vars['PERIODIC_RUN_LAST_STATUS'] = os.getenv('PERIODIC_RUN_LAST_STATUS')
         env_vars['MLFLOW_CONCURRENT_URI'] = os.getenv('MLFLOW_CONCURRENT_URI')
         env_vars['DAG_EXECUTION_ID'] = os.getenv('DAG_EXECUTION_ID')
         env_vars['DAGID'] = os.getenv('DAGID')
@@ -599,6 +615,8 @@ class PluginConcurrentProjectBackend(AbstractBackend):
         kubernetes.client.V1PodFailurePolicyRule = V1FixedPodFailurePolicyRule
         kubernetes.client.models.V1PodFailurePolicyRule = V1FixedPodFailurePolicyRule
 
+        # returns the given job_template after adding other provided arguments to the template like project_name, image_tag, env_vars etc.  These are only added to the MLproject container of the pod and not to the sidecar container
+        # Note that for the sidecar container, the environment variables are added in task_launcher.py::generate_kubernetes_job_template()
         job_template = self._get_kubernetes_job_definition(
             project_name, image_tag, image_digest, _get_run_command(command), env_vars, job_template
         )

@@ -144,7 +144,7 @@ def execute_dag(event, context):
 
     experiment_id = run_params.get('experiment_id')
     
-    # if dag is already executing and execute_dag() callback invoked by executing dag's nodes
+    # if dag is already executing and execute_dag() callback (http rest call) invoked by a node in an executing dag
     if dag_execution_id:
         lock_key, lock_lease_time = acquire_idle_row_lock(dag_id, dag_execution_id)
         dag_exec_record = dag_utils.fetch_dag_execution_info(cognito_username, groups, dag_id, dag_execution_id)
@@ -171,7 +171,7 @@ def execute_dag(event, context):
             and dagParamsJsonRuntime['recovery'].lower() == 'true':
             dag_json = override_dag_runtime_params_for_recovery(dag_json, dagParamsJsonRuntime, dag_execution_status)
 
-    else:  # a dag execution is starting with an invocation of execute_dag()
+    else:  # if a new dag execution is starting with an invocation of execute_dag()
         dag_json = dag_utils.fetch_dag_details(cognito_username, dag_id)
         print(f"dag_json={dag_json}")
 
