@@ -433,7 +433,7 @@ fi
 MLFLOW_PROJECT_DIR=/tmp/workdir/${USE_SUBDIR}
 
 # Note: we are uploading the modified Dockerfile here.  If this script runs again, with the same artificat location (with this same mlflow run id), it will force a rebuild of the MLproject environment image due to this modified docker file
-log_mlflow_artifact ${PARENT_RUN_ID} ${MLFLOW_PROJECT_DIR} '.concurrent/project_files'
+log_mlflow_artifact ${PARENT_RUN_ID} ${MLFLOW_PROJECT_DIR} ".concurrent/${ORIGINAL_NODE_ID}/project_files"
 
 # Next, repository for full image, i.e. MLproject env base plus project code/data
 REPO_NAME_MUNGED=`find ${MLFLOW_PROJECT_DIR} -type f|sort|xargs sha256sum|awk -F ' ' '{ print $1 }'|sha256sum|awk -F ' ' '{ print $1 }'`
