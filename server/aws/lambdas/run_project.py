@@ -99,13 +99,13 @@ def run_project(event, context):
         return respond(ValueError(err))
 
 
-def lookup_gke_cluster_config(cognito_username, groups, kube_cluster_name, subs):
+def lookup_gke_cluster_config(cognito_username, groups, kube_cluster_name, kube_cluster_ns, subs):
     # First lookup user specific cluster
     gke_location_type, gke_location, gke_project_id, gke_creds = None, None, None, None
     kube_clusters = query_user_accessible_clusters(cognito_username, groups)
     for cl in kube_clusters:
-        if cl['cluster_name'] == kube_cluster_name and cl['cluster_type'] == 'GKE':
-            logger.info("Found user's cluser " + kube_cluster_name)
+        if cl['cluster_name'] == kube_cluster_name and cl['cluster_type'] == 'GKE' and cl['namespace'] == kube_cluster_ns:
+            logger.info(f"Found user's cluser {kube_cluster_name}, namespace={kube_cluster_ns}")
             return cl['gke_location_type'], cl['gke_location'], cl['gke_project'], cl['gke_creds']
 
     logger.info("Use cluster info for subscriber")
@@ -124,8 +124,9 @@ def run_project_gke(cognito_username, groups, context, subs, item, service_conf:
         return respond(ValueError('Project Backend Configuration must include kube_context'))
 
     gke_cluster_name = item['kube_context']
+    kube_cluster_ns = item['namespace']
     gke_location_type, gke_location, gke_project_id, gke_creds \
-        = lookup_gke_cluster_config(cognito_username, groups, gke_cluster_name, subs)
+        = lookup_gke_cluster_config(cognito_username, groups, gke_cluster_name, kube_cluster_ns, subs)
 
     _, creds_file_path = mkstemp(suffix='.json', text=True)
     with open(creds_file_path, 'w') as tmp_creds_file:
@@ -463,13 +464,13 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     else:
         logger.info(f'kickoff_bootstrap: create_namespaced_pod of bootstrap returned api_ver={ yaml.safe_dump(utils.filter_empty_in_dict_list_scalar(arv.to_dict())) }')
 
-def lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, subs):
+def lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, kube_cluster_ns, subs):
     # First lookup user specific cluster
     eks_region, eks_role, eks_role_ext = None, None, None
     kube_clusters = query_user_accessible_clusters(cognito_username, groups)
     for cl in kube_clusters:
-        if cl['cluster_name'] == kube_cluster_name and cl['cluster_type'] == 'EKS':
-            logger.info("Found user's cluser " + kube_cluster_name)
+        if cl['cluster_name'] == kube_cluster_name and cl['cluster_type'] == 'EKS' and cl['namespace'] == kube_cluster_ns:
+            logger.info(f"Found user's cluser {kube_cluster_name}, namespace={kube_cluster_ns}")
             if 'use_fargate' in cl and cl['use_fargate'] == 'yes':
                 use_fargate = True
             else:
@@ -561,6 +562,7 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
     if not 'kube_context' in item:
         return respond(ValueError('Project Backend Configuration must include kube_context'))
     kube_cluster_name = item['kube_context']
+    kube_cluster_ns = item['namespace']
 
     eks_access_key_id = None
     eks_secret_access_key = None
@@ -568,7 +570,7 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
 
     eks_region, eks_role, eks_role_ext, \
         ecr_role, ecr_role_ext, ecr_type, ecr_region, use_fargate \
-        = lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, subs)
+        = lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, kube_cluster_ns, subs)
     ecr_aws_account_id = None
 
     if eks_role and eks_role_ext:
