@@ -169,34 +169,6 @@ def run_project_gke(cognito_username, groups, context, subs, item, service_conf:
     os.remove(creds_file_path)
     return respond(None, {})
 
-def _create_prio_class(con, name, val, global_default, preemption_policy=None):
-    api_resp = None
-    api_instance = kubernetes_client.SchedulingV1Api(api_client=api_client.ApiClient(configuration=con))
-    try:
-        api_resp:kubernetes_client.V1PriorityClass = api_instance.read_priority_class(name)
-    except ApiException as ae:
-        print('While reading ' + str(name) + ', caught ' + str(ae))
-        _do_create_prio_class(con, name, val, global_default, preemption_policy=preemption_policy)
-    else:
-        print(f'Successfully read priority class name={name} api_resp={ yaml.safe_dump(utils.filter_empty_in_dict_list_scalar(api_resp.to_dict()))}')
-        return
-
-def _do_create_prio_class(con, name, val, global_default, preemption_policy=None):
-    api_resp = None
-    api_instance = kubernetes_client.SchedulingV1Api(api_client=api_client.ApiClient(configuration=con))
-    body = kubernetes_client.V1PriorityClass(value=val, metadata=kubernetes_client.V1ObjectMeta(name=name),
-                                             global_default=global_default, preemption_policy=preemption_policy)
-    try:
-        api_resp:kubernetes_client.V1PriorityClass = api_instance.create_priority_class(body)
-    except ApiException as ae:
-        print('While creating ' + str(name) + ', caught ' + str(ae))
-    else:
-        print(f'Successfully created priority class name = {name}; api_resp = { yaml.safe_dump(utils.filter_empty_in_dict_list_scalar(api_resp.to_dict())) }')
-
-def _create_prio_classes(con):
-    _create_prio_class(con, 'concurrent-high-non-preempt-prio', 1000, False, preemption_policy='Never')
-    _create_prio_class(con, 'parallels-lo-prio', 100, True)
-
 @dataclass
 class HpeClusterConfig:
     HPE_CLUSTER_TYPE = 'HPE'
@@ -242,7 +214,6 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         subs (dict): subscriber information
         con (Configuration): _description_
     """
-    _create_prio_classes(con)
     run_id = item['run_id']
     canonical_nm = 'mlflow-project-' + run_id + "-" + str(int(time.time() * 1000))
     if 'namespace' in item:
@@ -438,7 +409,6 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                     )
                 ],
                 restart_policy='Never',
-                priority_class_name='parallels-lo-prio',
                 volumes=volumes,
                 service_account_name='k8s-serviceaccount-for-parallels-' + namespace,
                 tolerations=tolerations
