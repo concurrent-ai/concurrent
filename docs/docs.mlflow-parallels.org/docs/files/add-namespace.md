@@ -4,61 +4,37 @@ This page describes the process for creating a new namespace called **newnsforco
 
 ## Create namespace
 
-Download the following policy template:
-
-```
-wget https://docs.concurrent-ai.org/scripts/k8s-service-role.yaml
-```
-
-Modify the role to reflect the new name. In the following example, we are creating a new namespace called **newnsforconcurrent**:
-```
-sed -e 's/parallelsns/newnsforconcurrent/g' k8s-service-role.yaml > k8s-service-role-new.yaml
-```
-
-Create a namespace called **newnsforconcurrent**
-
 ```
 kubectl create namespace newnsforconcurrent
 ```
 
-## Create Privileged Role for System Components
+## k8s Roles/ServiceAccounts
 
-Next, create a priveleged role for system components in this new namespace
+Next, we will configure two Kubernetes ServiceAccounts **k8s-serviceaccount-for-parallels-NAMESPACE** and **k8s-serviceaccount-for-users-NAMESPACE**. The first ServiceAccount is for the Concurrent bootstrap job, which creates the Docker container required for the MLproject and the second is for the Concurrent worker code. We will also associate each ServiceAccount with a Role that provides it the required permissions.
 
-```
-kubectl apply -f k8s-service-role-new.yaml
-```
+### ServiceAccounts
 
-## Create Low Privelege Role for User Code
+- k8s-serviceaccount-for-parallels-NAMESPACE
+- k8s-serviceaccount-for-users-NAMESPACE
 
-```
-wget https://docs.concurrent-ai.org/scripts/user-role.yaml
-```
+### Roles
 
-Next, edit the user-role.yaml file to change the namespace from parallelsns to the new namespace being created 
+- k8s-role-for-concurrent-bootstrap: This role is for the ServiceAccount **k8s-serviceaccount-for-parallels-NAMESPACE** and is used by Concurrent bootstrap to create the Docker container if necessary
+- k8s-role-for-users-<namespace>: This role is for the ServiceAccount **k8s-serviceaccount-for-users-NAMESPACE** and is used by user code from the MLproject
 
-```
-sed -e 's/parallelsns/newnsforconcurrent/g' user-role.yaml > user-role-new.yaml
-```
-
-Finally, apply to the k8s cluster
+Download the following policy template:
 
 ```
-kubectl apply -f user-role-new.yaml 
+wget https://docs.concurrent-ai.org/scripts/new-namespace-template.yaml
 ```
 
-Here's an example output:
-
+Modify the role to reflect the new name. In the following example, we are creating a new namespace called **newnsforconcurrent**:
 ```
-clusterrole.rbac.authorization.k8s.io/k8s-role-for-users-newnsforconcurrent created
-serviceaccount/k8s-serviceaccount-for-users-newnsforconcurrent created
-rolebinding.rbac.authorization.k8s.io/k8s-serviceaccount-for-users-newnsforconcurrent-binding created
+sed -e 's/REPLACE_WITH_NEW_NAMESPACE_NAME/newnsforconcurrent/g' new-namespace-template.yaml > new-namespace.yaml
 ```
 
-## Test new namespace
-
-Finally, test that cluster setup worked by running a test MLflow Project as follows:
+Apply to the kubernetes cluster
 
 ```
-mlflow run -b concurrent-backend --backend-config '{"backend-type": "gke", "kube-context": "<your_cluster_name_here>", "kube-namespace": "newnsforconcurrent", "resources.requests.memory": "1024Mi", "kube-client-location": "backend"}' https://github.com/jagane-infinstor/mlflow-example-docker.git -Palpha=0.62 -Pl1_ratio=0.02
+kubectl apply -f new-namespace.yaml
 ```
