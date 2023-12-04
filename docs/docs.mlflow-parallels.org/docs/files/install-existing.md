@@ -1,13 +1,12 @@
 # Configure an existing EKS Cluster for use with Concurrent for MLflow
 
-There are six steps that need to be performed in order for an existing cluster to be configured for use with Concurrent for MLflow.
+Here are the steps that need to be performed in order for an EKS cluster to be configured for use with Concurrent for MLflow.
 
 - Create an AWS IAM role for the Concurrent for MLflow Service to access your EKS cluster with admin privileges
 - Create a mapping in your Kubernetes cluster's aws-auth ConfigMap from the IAM role created above to the 'system-manager' 
-- Create a k8s role for concurrent system components
-- Create different nodegroups for running Concurrent system, worker and deployment pods
-- Create a namespace for running Concurrent DAGs and configure k8s roles for it
-- Update Concurrent configuration with information about this k8s cluster
+- Create nodegroups or Fargate Profiles for running Concurrent system, worker and optionally deployment pods
+- Create and configure one or more namespaces for Concurrent
+- Update Concurrent configuration with information about this k8s cluster/namespace
 
 ## Step 1: Create AWS IAM Role
 
@@ -116,19 +115,7 @@ configmap/aws-auth patched
 
 ```
 
-## Step 3: Create k8s role for concurrent system
-
-In this step, we create a k8s role for concurrent system components
-
-This cluster wide role needs to be created only once per cluster
-
-Download the yaml file k8s-role-for-parallels.yaml from [here](/scripts/k8s-role-for-parallels.yaml "Download k8s-role-for-parallels.yaml"). Apply this yaml file to your cluster
-
-```
-kubectl apply -f k8s-role-for-parallels.yaml
-```
-
-## Step 4: Prepare Compute
+## Step 3: Prepare Compute
 
 ### Option 1: Create node groups
 
@@ -288,7 +275,9 @@ The next three screen capture images are for creating the *concurrent-worker* fa
 
 That's it. Now Concurrent pipelines can be run on these two fargate profiles
 
-## Step 5: Create a namespace for running Concurrent DAGs and configure k8s roles for it
+## Step 5: Create namespace(s)
+
+In this step, we create one or more namespaces for running Concurrent DAGs and configure the required k8s SystemAccount and roles for each namespace
 
 Directions for creating a new namespace and configuring it for use with Concurrent are described in detail [here](/files/add-namespace/ "Add namespace")
 
