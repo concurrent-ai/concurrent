@@ -9,9 +9,61 @@ There are six steps that need to be performed in order for an existing cluster t
 - Create a namespace for running Concurrent DAGs and configure k8s roles for it
 - Update Concurrent configuration with information about this k8s cluster
 
-## Step 1: Create IAM Role
+## Step 1: Create AWS IAM Role
 
-Browse to AWS CloudFormation console in the region where your EKS cluster is deployed, then click on ``Create stack -> With new resources (standard)``.
+The AWS IAM role must be created in the AWS account where the EKS cluster is running. We provide a convenient CloudFormation template for creating this role. Otherwise, you can create an IAM role manually and provide it the following permissions
+
+### Option 1: Manual
+
+#### IAM Role Permissions
+
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "ecr:*"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "eks:*"
+            ],
+            "Resource": "arn:aws:eks:<REGION>:<AWS_ACCOUNT_NUMBER_WHERE_EKS_IS_RUNNING>:cluster/<EKS_CLUSTER_NAME>",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "sts:GetServiceBearerToken"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ses:SendEmail",
+                "ses:SendRawEmail"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+
+#### Notes
+
+- Replace **REGION**, **AWS_ACCOUNT_NUMBER_WHERE_EKS_IS_RUNNING**, and **EKS_CLUSTER_NAME**
+- ECR permissions allows Concurrent to create containers required for running MLflow projects as part of the pipeline
+- SES permission allows Concurrent pipelines to send email using SES, for example, InfinLogs utilizes this permission to send alerts to users
+- Be sure to configure an external ID for this manually created IAM Role and take note of the IAM Role ARN and the external ID. This will be used while configuring Concurrent to use this EKS cluster
+
+### Option 2: Using CloudFormation
+
+For convenience, we provide a CloudFormation template that you can use to create the IAM Role. Browse to AWS CloudFormation console in the region where your EKS cluster is deployed, then click on ``Create stack -> With new resources (standard)``.
 
 [![](https://docs.concurrent-ai.org/images/install-existing-1.png?raw=true)](https://docs.concurrent-ai.org/images/install-existing-1.png?raw=true)
 
@@ -40,7 +92,7 @@ Here's a screen capture:
 
 [![](https://docs.concurrent-ai.org/images/install-existing-4.png?raw=true)](https://docs.concurrent-ai.org/images/install-existing-4.png?raw=true)
 
-## Step 2: Map IAM Role to K8s system-manager
+## Step 2: Map AWS IAM Role to K8s system-manager
 
 In this step, you will create a mapping in your Kubernetes cluster's aws-auth ConfigMap from the IAM role created above to the 'system-manager' 
 
