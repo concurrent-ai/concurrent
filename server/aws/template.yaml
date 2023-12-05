@@ -65,7 +65,7 @@ Parameters:
 Globals:
   #https://github.com/awslabs/serverless-application-model/blob/develop/docs/globals.rst
   Function:
-    Runtime: python3.9
+    Runtime: python3.11
     MemorySize: 2048
     Timeout: 900
     Environment:
@@ -85,7 +85,7 @@ Resources:
       Description: Dependencies for the parallels-mlflow-server
       ContentUri: package/.
       CompatibleRuntimes:
-        - python3.8
+        - python3.11
   MLflowLambdaRole:
     Type: AWS::IAM::Role
     Properties:
