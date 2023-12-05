@@ -15,7 +15,7 @@ else    # if $CONDA_PREFIX/bin/activate does not exist (this doesn't exist outsi
     conda activate base
 fi; 
 conda env remove -y --name mlflow-parallels-dev
-conda create -y --name mlflow-parallels-dev python=3.9
+conda create -y --name mlflow-parallels-dev python=3.11
 if [ -x "$CONDA_PREFIX/bin/activate" ]; then
     source $CONDA_PREFIX/bin/activate mlflow-parallels-dev
 else    
