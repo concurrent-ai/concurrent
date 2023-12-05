@@ -24,8 +24,8 @@ else
 fi;    
 pip install setuptools==57.5.0
 #pip install awscli
-#pip install boto3
-#pip install botocore
+pip install boto3
+pip install botocore
 pip install certifi==2021.10.8
 pip install sqlparse
 pip install mlflow==2.5.0
@@ -78,8 +78,6 @@ done;
 for dir in package/python/scipy/integrate/tests \
     package/python/importlib_resources/tests \
     package/python/greenlet/tests \
-    package/python/boto3 \
-    package/python/botocore \
     package/python/scipy/sparse/tests \
     package/python/scipy/io/arff/tests \
     package/python/scipy/ndimage/tests \
