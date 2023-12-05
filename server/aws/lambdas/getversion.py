@@ -2,7 +2,7 @@ import json
 import os
 
 from parallels_version import get_version
-from utils import get_service_conf, cognito_callback_url, cognito_domain
+from utils import get_service_conf, cognito_callback_url, cognito_domain, check_if_external_oauth
 
 def respond(err, res=None):
     return {
@@ -53,7 +53,7 @@ def getversion(event, context):
     rv['region'] = os.environ['AWS_REGION']
     rv['cognitoCallbackUrl'] = cognito_callback_url(conf)
     rv['cognitoDomain'] = cognito_domain(conf)
-    rv['isExternalAuth'] = conf['isExternalAuth']['S'] == 'true' if conf.get('isExternalAuth', False) else False
+    rv['isExternalAuth'] = check_if_external_oauth()
     rv['mlflowParallelsDnsName'] = conf['mlflowParallelsDnsName']['S']
     rv['mlflowParallelsUiDnsName'] = conf['mlflowParallelsUiDnsName']['S']
     rv['cookieHost'] = conf['cookieHost']['S']

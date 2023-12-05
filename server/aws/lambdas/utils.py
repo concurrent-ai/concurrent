@@ -150,6 +150,61 @@ def add_cognito_user_specific_configs(subs, cognito_username):
     print('add_cognito_user_specific_configs: no user specific configs in parallels yet')
     return
 
+is_external_oauth = None
+
+def update_is_external_oauth():
+    global is_external_oauth
+    if (is_external_oauth == None):
+        print("is_external_oauth: Checking to see if service is configured for external oauth")
+        success, status, conf = get_service_conf()
+        if (not success):
+            print("update_is_external_oauth: Error getting service conf")
+            return
+        if 'useDirectAad' in conf and conf['useDirectAad']['S'] == 'true':
+            print("update_is_external_oauth: using direct aad. external oauth is true")
+            is_external_oauth = True
+            return
+        result = None
+        client = boto3.client('cognito-idp')
+        retryInterval = 0.8
+        while retryInterval < 30:
+            try:
+                result = client.describe_user_pool_client(UserPoolId = conf['cognitoUserPool']['S'],
+                        ClientId=conf['cognitoMlflowuiClientId']['S'])
+            except botocore.exceptions.ClientError as err:
+                response = err.response
+                print("Failed to get_user :" + str(response), exc_info=err)
+                if (response and response.get("Error", {}).get("Code") ==
+                        "TooManyRequestsException"):
+                    print("Continue for TooManyRequestsException exception.")
+                    # randomize the retry interval
+                    time.sleep(retryInterval + random.uniform(0,1))
+                    # exponential backoff
+                    retryInterval = 2 * retryInterval
+                    continue
+            break
+        if not result:
+            raise ("Could not find subscriber info")
+        upc = result['UserPoolClient']
+        if ('SupportedIdentityProviders' in upc):
+            sip = upc['SupportedIdentityProviders']
+            for os in sip:
+                if (os != 'COGNITO'):
+                    print("is_external_oauth: Found supported identity provider "
+                        + os + ", hence is_external_oauth is True")
+                    is_external_oauth = True
+                    return
+            print("is_external_oauth: Did not find any identity provider other than COGNITO, hence is_external_oauth is False")
+            is_external_oauth = False
+        else:
+            print("is_external_oauth: No key SupportedIdentityProviders. hence is_external_oauth is False")
+            is_external_oauth = False
+
+def check_if_external_oauth():
+    update_is_external_oauth()
+    global is_external_oauth
+    return is_external_oauth
+
 subscriber_info_cache = {}
 def get_subscriber_info(cognito_username:str, ignore_cache:bool=False) -> Tuple[bool, str, dict]:
     """ returns 
@@ -161,9 +216,10 @@ def get_subscriber_info(cognito_username:str, ignore_cache:bool=False) -> Tuple[
     if not ignore_cache and cognito_username in subscriber_info_cache:
         print("Found subscriber info in cache: " + str(subscriber_info_cache[cognito_username]))
         return subscriber_info_cache[cognito_username]
-    success, status, conf = get_service_conf()
-    ext_oauth = conf['isExternalAuth']['S'] == 'true' if conf.get('isExternalAuth', False) else False
-    if (ext_oauth == True):
+
+    update_is_external_oauth()
+    global is_external_oauth
+    if (is_external_oauth == True):
         print("get_subscriber_info: Service is configured for external oauth")
         success, status, subs = lookup_subscriber_by_name('root')
         if cognito_username == 'root':
