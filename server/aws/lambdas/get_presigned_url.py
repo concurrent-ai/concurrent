@@ -199,6 +199,18 @@ def get_presigned_url(event, context):
                 # for list_objects: Marker is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified key. Marker can be any key in the bucket.
                 if 'Marker' in qs:
                     params['Marker'] = qs['Marker']
+                # response = s3client.upload_file(fn, args.bucket, obj_name, ExtraArgs={"Metadata": {"infinsnap_start": str(start_time_epochms), "infinsnap_end": str(end_time_epochms)}})
+                # metadata is a quoted json string: urllib.parse.quote(json.dumps(ExtraArgs['Metadata']))
+                if 'metadata' in qs:
+                    md_s = unquote(qs['metadata'])
+                    try:
+                        metadata = json.loads(md_s)
+                        params['Metadata'] = metadata
+                    except Exception as e1:
+                        logger.error(f"Caught {e1} while parsing metadata json", exc_info=e1)
+                        metadata = None
+                else:
+                    metadata = None
 
             # https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListObjectsV2.html#API_ListObjectsV2_RequestParameters
             # for list_objects_v2: StartAfter is where you want Amazon S3 to start listing from. Amazon S3 starts listing after this specified key. StartAfter can be any key in the bucket.
