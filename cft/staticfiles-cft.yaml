@@ -87,7 +87,7 @@ Resources:
       Handler: index.handler
       Role: !GetAtt S3CustomResourceAWSLambdaExecutionRole.Arn
       Timeout: 900
-      MemorySize: 10240
+      MemorySize: 3000
       Runtime: python3.8
       Code:
         # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-lambda-function-code.html#cfn-lambda-function-code-zipfile
