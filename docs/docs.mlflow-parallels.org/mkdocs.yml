@@ -18,16 +18,18 @@ nav:
                 - 'Prepare k8s':
                         - 'Introduction': 'files/prepare-k8s-intro.md'
                         - 'EKS':
-                                - 'Create New EKS': 'files/install-create.md'
-                                - 'Use Existing EKS': 'files/install-existing.md'
+                                - 'Create EKS(optional)': 'files/install-create.md'
+                                - 'Connect to EKS': 'files/connect-to-eks.md'
+                                - 'Create Namespace(s)': 'files/add-namespace-eks.md'
+                                - 'Compute Resources': 'files/eks-compute.md'
+                                - 'Update Concurrent': 'files/update-concurrent.md'
                         - 'GKE':
                                 - 'Create Service Account': 'files/create-service-account.md'
                                 - 'Add k8s Roles': 'files/add-k8s-role.md'
                                 - 'Create Node Pools': 'files/create-node-pools.md'
-                                - 'Create Docker-In-Docker Service': 'files/create-dind.md'
+                                - 'Create Namespace(s)': 'files/add-namespace-gke.md'
                                 - 'Enable GPU support': 'files/gke-enable-gpu.md'
                                 - 'Test cluster': 'files/test-cluster.md'
-                        - 'Add new k8s namespace': 'files/add-namespace.md'
         - 'Use':
                 - 'MLproject': 'files/use-mlproject.md'
                 - 'Data': 'files/use-data.md'
