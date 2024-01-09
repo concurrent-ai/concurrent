@@ -15,13 +15,12 @@ In this step, we will configure Concurrent with the details of the EKS cluster a
 
 Finally, test the system by running a MLflow Project. For example,
 
-Login to the MLFlow UI and create an experiment: *https://mlflowui.infinstor.yourcompany.com*.  
-
-- Replace *mlflowui* (the default) in the URL above with the name you specified, if it was overridden.
-- Replace *infinstor.yourcompany.com* in the URL above,with the subdomain you specified, when installing *Infinstor MLflow* and *Concurrent*.
+- Login to the MLFlow UI and create an experiment: *https://mlflowui.infinstor.yourcompany.com*.  
+    - Replace *mlflowui* (the default) in the URL above with the name you specified, if it was [overridden during Infinstor MLflow installation](https://docs.infinstor.com/files/install-service/).
+    - Replace *infinstor.yourcompany.com* in the URL above,with the subdomain you specified, when [installing Infinstor MLflow](https://docs.infinstor.com/files/install-service/)
 - Create a new *mlflow experiment* and note down the *experiment ID*.
 
-Then execute the following commands in a shell:
+Then execute the following commands in a shell to run a test pipeline in *Concurrent*:
 
 ```shell
 # install the concurrent-plugin, if you haven't already done so.

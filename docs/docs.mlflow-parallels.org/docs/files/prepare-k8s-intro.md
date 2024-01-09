@@ -9,7 +9,7 @@ These instructions differ from Kubernetes implementation to implementation. Curr
 The easiest way to prepare an EKS cluster for use by Concurrent for MLflow is to create a dedicated cluster. The IAM roles, the cluster itself, k8s roles in the cluster and service components in the cluster are all created by a single CFT. If you wish to create a brand new EKS Kubernetes cluster for use with Concurrent for MLflow, [Click here](/files/install-create "Create a new EKS Cluster for Concurrent for MLflow").
 
 
-Alternatively, you can also follow a series of steps and configure an existing EKS cluster for use with Concurrent for MLflow. [Click here](/files/install-existing "Create a new EKS Cluster for Concurrent for MLflow") for instructions on adding configuration items to your existing EKS Kubernetes cluster.
+Alternatively, you can also follow a series of steps and configure an existing EKS cluster for use with Concurrent for MLflow. [Click here](connect-to-eks.md) for instructions on adding configuration items to your existing EKS Kubernetes cluster.
 
 ## GKE
 
