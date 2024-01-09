@@ -15,7 +15,9 @@ Next, we will configure two Kubernetes ServiceAccounts **k8s-serviceaccount-for-
 ### ServiceAccounts
 
 - k8s-serviceaccount-for-parallels-NAMESPACE
+    - This *service account* is used by a pod to build docker images, to start kubernetes *jobs* and other operations needed to execute the *concurrent pipeline*.
 - k8s-serviceaccount-for-users-NAMESPACE
+    - This *service account* is used by a pod in the *concurrent pipeline* to collect its own logs, to check the status of the *main container* in the pod and others. 
 
 ### Roles
 

@@ -1,12 +1,12 @@
-# Add compute resources to your EKS Cluster for Concurrent
+# 1. Add compute resources to your EKS Cluster for Concurrent
 
 Compute resources need to be added to your EKS cluster. This can be accomplished using **node groups** or **Fargate Profiles**
 
-## Option 1: Create node groups
+## 1.1. Option 1: Create node groups
 
 Concurrent uses the following node groups:
 
-### system
+### 1.1.1. system node group
 
 This node group is used for running the bootstrap container. Bootstrap is a system component that builds the worker container image and kicks of the kubernetes job for the worker node.
 
@@ -37,7 +37,7 @@ Value: system
 Effect: NoSchedule
 ```
 
-### worker
+### 1.1.2. worker node group
 
 This node group is used for running the pipeline(DAG) nodes.
 
@@ -68,9 +68,9 @@ Value: worker
 Effect: NoSchedule
 ```
 
-### deployment
+### 1.1.3. deployment node group
 
-This node group is optional and only used for deployment.
+This node group is optional and only used for model deployment.
 
 It is acceptable to use spot instances for the *deployment* node group. Here's a suggested list of instance types for this node group
 
@@ -99,11 +99,11 @@ Value: deployment
 Effect: NoSchedule
 ```
 
-## Option 2: Use Fargate Profiles
+## 1.2. Option 2: Use Fargate Profiles
 
 Concurrent can be configured to use EKS Fargate Profiles for compute instead of node pools. In order to do this, you must first prepare your VPC for EKS Fargate use. Next, you must create two Fargate Profiles for your EKS cluster.
 
-### Prepare VPC
+### 1.2.1. Prepare VPC
 
 EKS Fargate Profiles can only run in private subnets of the VPC. Additionally, the private subnets must have Internet access through a NAT Gateway or a NAT Instance. Here are the requirements:
 
@@ -133,10 +133,11 @@ Noteable parameters in the above CloudFormation template are:
 
 Once this CloudFormation template has run to completion, it will have created three new private subnets for the EKS Fargate profiles to use. Configuration of the EKS fargate profiles is described next.
 
-### Configure EKS
+### 1.2.2. Configure EKS
 
 Two Fargate Profiles are required for Concurrent - they are named *concurrent-worker* and *concurrent-system* in the following screen captures.
 
+#### 1.2.2.1. concurrent-system Fargate profile
 In the following screencapture, the name of the fargate profile is *concurrent-system* and the subnets chosen are the ones created by the CFT above
 
 [![](https://docs.concurrent-ai.org/images/conf-fargate-system-1.png?raw=true)](https://docs.concurrent-ai.org/images/conf-fargate-system-1.png?raw=true)
@@ -148,10 +149,11 @@ In the following screencapture, the pod selectors are configured as follows:
 
 [![](https://docs.concurrent-ai.org/images/conf-fargate-system-2.png?raw=true)](https://docs.concurrent-ai.org/images/conf-fargate-system-2.png?raw=true)
 
-Here is the summary of the fargate profile called *concurrent-worker*
+Here is the summary of the fargate profile called *concurrent-system*
 
 [![](https://docs.concurrent-ai.org/images/conf-fargate-system-3.png?raw=true)](https://docs.concurrent-ai.org/images/conf-fargate-system-3.png?raw=true)
 
+#### 1.2.2.2. concurrent-worker Fargate profile
 The next three screen capture images are for creating the *concurrent-worker* fargate profile
 
 [![](https://docs.concurrent-ai.org/images/conf-fargate-worker-1.png?raw=true)](https://docs.concurrent-ai.org/images/conf-fargate-worker-1.png?raw=true)
