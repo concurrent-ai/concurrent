@@ -26,10 +26,12 @@ Then execute the following commands in a shell to run a test pipeline in *Concur
 # install the concurrent-plugin, if you haven't already done so.
 python3 -m pip install concurrent-plugin
 
-# Set MLFLOW_EXPERIMENT_ID with the ID of the experiment you created above. 
-# Set infinstor.yourcompany.com with the domain name you specified, when installing Infinstor MLflow
-# replace 'mlflow' and 'concurrent' in the URLs below, if they were overridden with different values during the install.
-export MLFLOW_TRACKING_URI=infinstor://mlflow.infinstor.yourcompany.com; export MLFLOW_CONCURRENT_URI=https://concurrent.infinstor.yourcompany.com; export MLFLOW_EXPERIMENT_ID=YOUR_EXPERIMENT_ID;
+# replace YOUR_EXPERIMENT_ID with the ID of the experiment you created above. 
+# repalce infinstor.yourcompany.com in the URLs below with the domain name you specified, when installing Infinstor MLflow.
+# replace 'mlflow' and 'concurrent' in the URLs below, if they were overridden when installing Infinstor MLflow.
+export MLFLOW_TRACKING_URI=infinstor://mlflow.infinstor.yourcompany.com 
+export MLFLOW_CONCURRENT_URI=https://concurrent.infinstor.yourcompany.com 
+export MLFLOW_EXPERIMENT_ID=YOUR_EXPERIMENT_ID;
 
 # login to concurrent using your username and password. This generates a temporary token for invoking the REST API.
 login_concurrent
