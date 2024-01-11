@@ -38,6 +38,7 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
     periodic_run_start_time = os.getenv('PERIODIC_RUN_START_TIME')
     periodic_run_end_time = os.getenv('PERIODIC_RUN_END_TIME')
     periodic_run_last_status = os.getenv('PERIODIC_RUN_LAST_STATUS')
+    disable_node_pinning:bool = os.getenv('CONCURRENT_DISABLE_NODE_PINNING') == 'true'
     dag_id = os.getenv('DAGID')
     with open(job_tmplate_file, "w") as fh:
         fh.write("apiVersion: batch/v1\n")
@@ -53,18 +54,21 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
         else:
             fh.write("  backoffLimit: 3\n")
         fh.write("  template:\n")
-        if use_fargate:
-            fh.write("    metadata:\n")
-            fh.write("      labels:\n")
-            fh.write("        concurrent-node-type: \"worker\"\n")
-            fh.write("    spec:\n")
+        if not disable_node_pinning:
+            if use_fargate:
+                fh.write("    metadata:\n")
+                fh.write("      labels:\n")
+                fh.write("        concurrent-node-type: \"worker\"\n")
+                fh.write("    spec:\n")
+            else:
+                fh.write("    spec:\n")
+                fh.write("      tolerations:\n")
+                fh.write("      - key: \"concurrent-node-type\"\n")
+                fh.write("        operator: \"Equal\"\n")
+                fh.write("        value: \"worker\"\n")
+                fh.write("        effect: \"NoSchedule\"\n")
         else:
             fh.write("    spec:\n")
-            fh.write("      tolerations:\n")
-            fh.write("      - key: \"concurrent-node-type\"\n")
-            fh.write("        operator: \"Equal\"\n")
-            fh.write("        value: \"worker\"\n")
-            fh.write("        effect: \"NoSchedule\"\n")
         fh.write("      shareProcessNamespace: true\n")
         fh.write("      containers:\n")
         fh.write("      - name: \"{replaced with MLflow Project name}\"\n")

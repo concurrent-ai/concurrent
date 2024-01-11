@@ -5,3 +5,4 @@ server/aws/requirements.txt
 __pycache__
 plugin/dist
 plugin/concurrent_plugin.egg-info
+docs/docs.mlflow-parallels.org/site

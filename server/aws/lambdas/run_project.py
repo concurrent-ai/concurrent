@@ -1,8 +1,11 @@
 if __name__ == '__main__':
     import os
-    env_vars = {'AWS_LAMBDA_FUNCTION_VERSION': '$LATEST', 'XFORMS_TABLE': 'parallels-Xforms', 'POOL_ID': 'us-east-1_C6lyJb6L8', 'AWS_SESSION_TOKEN': 'xxxx', 'DAG_TABLE': 'mlflow-parallels-dag', 'LD_LIBRARY_PATH': '/var/lang/lib:/lib64:/usr/lib64:/var/runtime:/var/runtime/lib:/var/task:/var/task/lib:/opt/lib', 'LAMBDA_TASK_ROOT': '/var/task', 'AWS_LAMBDA_LOG_GROUP_NAME': '/aws/lambda/concurrent-1-0-10-20221010-ParallelsOve-runproject-IEwJF835C8xq', 'KUBE_CLUSTERS_TABLE': 'parallels-k8s-clusters', 'AWS_LAMBDA_RUNTIME_API': '127.0.0.1:9001', 'AWS_LAMBDA_LOG_STREAM_NAME': '2022/10/11/[$LATEST]8f3597e881bd462dbb65e16b8ef20df1', 'AWS_EXECUTION_ENV': 'AWS_Lambda_python3.8', 'AWS_XRAY_DAEMON_ADDRESS': '169.254.79.129:2000', 'AWS_LAMBDA_FUNCTION_NAME': 'concurrent-1-0-10-20221010-ParallelsOve-runproject-IEwJF835C8xq', 'PATH': '/var/lang/bin:/usr/local/bin:/usr/bin/:/bin:/opt/bin', 'DAG_EXECUTION_TABLE': 'parallels-dag-execution', 'AWS_DEFAULT_REGION': 'us-east-1', 'PWD': '/var/task', 'SERVICE_CONF_TABLE': 'infinstor-ServiceConf', 'AWS_SECRET_ACCESS_KEY': 'xxxxxx', 'LAMBDA_RUNTIME_DIR': '/var/runtime', 'SUBSCRIBERS_TABLE': 'infinstor-Subscribers', 'LANG': 'en_US.UTF-8', 'AWS_LAMBDA_INITIALIZATION_TYPE': 'on-demand', 'PERIODIC_RUNS_TABLE': 'parallels-PeriodicRuns', 'TZ': ':UTC', 'AWS_REGION': 'us-east-1', 'CUSTOM_TOKENS_TABLE': 'infinstor-queue-message-tokens', 'AWS_ACCESS_KEY_ID': 'xxxxxx', 'SHLVL': '0', 'CREDENTIALS_TABLE': 'parallels-Credentials', '_AWS_XRAY_DAEMON_ADDRESS': '169.254.79.129', '_AWS_XRAY_DAEMON_PORT': '2000', 'AWS_XRAY_CONTEXT_MISSING': 'LOG_ERROR', '_HANDLER': 'run_project.run_project', 'AWS_LAMBDA_FUNCTION_MEMORY_SIZE': '2048', 'PYTHONPATH': '/var/runtime', '_X_AMZN_TRACE_ID': 'Root=1-6344e1c9-0774f02c3a7c71822e671f10;Parent=3e10b9915eae3f11;Sampled=0'}
+    env_vars = {'LAMBDA_LOG_LEVEL':'INFO', 
+                # 'POOL_ID': 'us-east-1_C6lyJb6L8',   # __main__hpe
+                'POOL_ID': 'us-east-1_XLUowB8BP',   # __main__isstage2
+                'PYTHONUNBUFFERED':'true', 'AWS_LAMBDA_FUNCTION_VERSION': '$LATEST', 'XFORMS_TABLE': 'parallels-Xforms', 'AWS_SESSION_TOKEN': 'xxxx', 'DAG_TABLE': 'mlflow-parallels-dag', 'LD_LIBRARY_PATH': '/var/lang/lib:/lib64:/usr/lib64:/var/runtime:/var/runtime/lib:/var/task:/var/task/lib:/opt/lib', 'LAMBDA_TASK_ROOT': '/var/task', 'AWS_LAMBDA_LOG_GROUP_NAME': '/aws/lambda/concurrent-1-0-10-20221010-ParallelsOve-runproject-IEwJF835C8xq', 'KUBE_CLUSTERS_TABLE': 'parallels-k8s-clusters', 'AWS_LAMBDA_RUNTIME_API': '127.0.0.1:9001', 'AWS_LAMBDA_LOG_STREAM_NAME': '2022/10/11/[$LATEST]8f3597e881bd462dbb65e16b8ef20df1', 'AWS_EXECUTION_ENV': 'AWS_Lambda_python3.8', 'AWS_XRAY_DAEMON_ADDRESS': '169.254.79.129:2000', 'AWS_LAMBDA_FUNCTION_NAME': 'concurrent-1-0-10-20221010-ParallelsOve-runproject-IEwJF835C8xq', 'PATH': '/var/lang/bin:/usr/local/bin:/usr/bin/:/bin:/opt/bin', 'DAG_EXECUTION_TABLE': 'parallels-dag-execution', 'AWS_DEFAULT_REGION': 'us-east-1', 'PWD': '/var/task', 'SERVICE_CONF_TABLE': 'infinstor-ServiceConf', 'AWS_SECRET_ACCESS_KEY': 'xxxxxx', 'LAMBDA_RUNTIME_DIR': '/var/runtime', 'SUBSCRIBERS_TABLE': 'infinstor-Subscribers', 'LANG': 'en_US.UTF-8', 'AWS_LAMBDA_INITIALIZATION_TYPE': 'on-demand', 'PERIODIC_RUNS_TABLE': 'parallels-PeriodicRuns', 'TZ': ':UTC', 'AWS_REGION': 'us-east-1', 'CUSTOM_TOKENS_TABLE': 'infinstor-queue-message-tokens', 'AWS_ACCESS_KEY_ID': 'xxxxxx', 'SHLVL': '0', 'CREDENTIALS_TABLE': 'parallels-Credentials', '_AWS_XRAY_DAEMON_ADDRESS': '169.254.79.129', '_AWS_XRAY_DAEMON_PORT': '2000', 'AWS_XRAY_CONTEXT_MISSING': 'LOG_ERROR', '_HANDLER': 'run_project.run_project', 'AWS_LAMBDA_FUNCTION_MEMORY_SIZE': '2048', 'PYTHONPATH': '/var/runtime', '_X_AMZN_TRACE_ID': 'Root=1-6344e1c9-0774f02c3a7c71822e671f10;Parent=3e10b9915eae3f11;Sampled=0'}
     
-    for var in ('DAG_TABLE', 'XFORMS_TABLE', 'POOL_ID', 'KUBE_CLUSTERS_TABLE', 'DAG_EXECUTION_TABLE', 'SERVICE_CONF_TABLE', 'SUBSCRIBERS_TABLE', 'PERIODIC_RUNS_TABLE', 'AWS_REGION', 'CUSTOM_TOKENS_TABLE', 'CREDENTIALS_TABLE'):
+    for var in ('LAMBDA_LOG_LEVEL', 'PYTHONUNBUFFERED', 'DAG_TABLE', 'XFORMS_TABLE', 'POOL_ID', 'KUBE_CLUSTERS_TABLE', 'DAG_EXECUTION_TABLE', 'SERVICE_CONF_TABLE', 'SUBSCRIBERS_TABLE', 'PERIODIC_RUNS_TABLE', 'AWS_REGION', 'CUSTOM_TOKENS_TABLE', 'CREDENTIALS_TABLE'):
         os.environ[var] = env_vars[var]
         print(f"setting env variable: {os.environ[var]} = {env_vars[var]}")
 
@@ -12,8 +15,8 @@ import json
 import os
 import logging
 from typing import List, Tuple
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(process)d - %(name)s - %(levelname)s - %(message)s")
+if os.getenv('LAMBDA_LOG_LEVEL'):
+    logging.basicConfig(level=logging.getLevelName(os.getenv('LAMBDA_LOG_LEVEL',"INFO")), format="%(asctime)s - %(process)d - %(name)s - %(levelname)s - %(message)s", force=True)
 
 import traceback
 import boto3
@@ -41,7 +44,7 @@ import utils
 # pylint: disable=logging-not-lazy,bad-indentation,broad-except,logging-fstring-interpolation
 
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.getLevelName(os.getenv('LAMBDA_LOG_LEVEL',"INFO")))
 
 def respond(err, res=None) -> dict:
     return {
@@ -222,9 +225,9 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
         namespace = 'default'
     print('run_mlflow_project_kube: namespace=' + str(namespace))
 
-    cmap = kubernetes_client.V1ConfigMap()
+    cmap:kubernetes_client.V1ConfigMap = kubernetes_client.V1ConfigMap()
     cmap.metadata = kubernetes_client.V1ObjectMeta(name=canonical_nm)
-    cmap.data = {}
+    cmap.data:dict = {}
     cmap.data['BACKEND_TYPE'] = backend_type
     cmap.data['ENDPOINT'] = endpoint
     cmap.data['CERT_AUTH'] = cert_auth
@@ -327,6 +330,10 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
     # this is the command that'll be used to install concurrent in the bootstrap and the mlflow project pod.  Set this in subscribers table to something similar to "pip install --no-cache-dir --upgrade http://xyz.com/packages/concurrent-plugin/concurrent_plugin-0.3.27-py3-none-any.whl"
     if 'concurrentPluginPipInstallCmd' in subs: cmap.data['CONCURRENT_PLUGIN_PIP_INSTALL_CMD'] = subs['concurrentPluginPipInstallCmd']['S']
     if 'concurrentPrivilegedMlflowContainer' in subs: cmap.data['CONCURRENT_PRIVILEGED_MLFLOW_CONTAINER'] = subs['concurrentPrivilegedMlflowContainer']['S']
+    # set to 'true' or 'false' or not set all
+    if 'concurrentDisableNodePinning' in subs: cmap.data['CONCURRENT_DISABLE_NODE_PINNING'] = subs['concurrentDisableNodePinning']['S']
+    disable_node_pinning:bool = cmap.data.get('CONCURRENT_DISABLE_NODE_PINNING') == 'true'
+    logger.info(f"subs.concurrentDisableNodePinning={subs.get('concurrentDisableNodePinning')} ; disable_node_pinning={disable_node_pinning}")
     # PYTHONUNBUFFERED is an environment variable in Python that can be used to disable output buffering for all streams. When this variable is set to a non-empty string, Python automatically sets the PYTHONUNBUFFERED flag, which forces Python to disable buffering for sys.stdout and sys.stderr.
     cmap.data['PYTHONUNBUFFERED'] = 'true'
         
@@ -367,18 +374,20 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
             kubernetes_client.V1PodFailurePolicyRule(action="FailJob", on_exit_codes=kubernetes_client.V1PodFailurePolicyOnExitCodesRequirement(operator="NotIn", values=[0])),
             kubernetes_client.V1PodFailurePolicyRule(action="Ignore", on_pod_conditions=[kubernetes_client.V1PodFailurePolicyOnPodConditionsPattern(status='True', type="DisruptionTarget")])
             ])
-        if use_fargate:
-            logger.info(f'kickoff_bootstrap: use_fargate is True')
-            use_fargate_value = "yes"
-            pod_metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm, 'concurrent-node-type': 'system'}, namespace=namespace)
-            tolerations=None
-            backoff_limit = 0
-        else:
-            logger.info(f'kickoff_bootstrap: use_fargate is False')
-            use_fargate_value = "no"
-            pod_metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm}, namespace=namespace)
-            tolerations=[kubernetes_client.V1Toleration(key="concurrent-node-type", operator="Equal", value="system", effect="NoSchedule")]
-            backoff_limit = 3
+        use_fargate_value:str = "no"
+        if not disable_node_pinning : 
+            if use_fargate:
+                logger.info(f'kickoff_bootstrap: use_fargate is True')
+                use_fargate_value = "yes"
+                pod_metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm, 'concurrent-node-type': 'system'}, namespace=namespace)
+                tolerations=None
+                backoff_limit = 0
+            else:
+                logger.info(f'kickoff_bootstrap: use_fargate is False')
+                use_fargate_value = "no"
+                pod_metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, labels={"pod_name": canonical_nm}, namespace=namespace)
+                tolerations=[kubernetes_client.V1Toleration(key="concurrent-node-type", operator="Equal", value="system", effect="NoSchedule")]
+                backoff_limit = 3
         pod_template = kubernetes_client.V1PodTemplateSpec(
             metadata=pod_metadata,
             spec=kubernetes_client.V1PodSpec(
@@ -414,20 +423,26 @@ def _kickoff_bootstrap(backend_type, endpoint, cert_auth, cluster_arn, item,
                 tolerations=tolerations
                 )
             )
-        job = kubernetes_client.V1Job(
+        job:kubernetes_client.V1Job = kubernetes_client.V1Job(
                 api_version="batch/v1",
                 kind="Job",
                 metadata=kubernetes_client.V1ObjectMeta(name=canonical_nm, namespace=namespace, labels={"job_name": canonical_nm}),
                 spec=kubernetes_client.V1JobSpec(ttl_seconds_after_finished=60, completions=1, backoff_limit=backoff_limit, template=pod_template, pod_failure_policy=pod_failure_policy)
             )
         logger.info(f'kickoff_bootstrap: creating namespaced job={job}')
+        try:
+            # if job.to_dict() is not used, then yaml.safe_dump() raises this: Caught ('cannot represent an object',
+            logger.info(f'kickoff_bootstrap: creating namespaced Job: dump Job as filtered yaml={yaml.safe_dump(utils.filter_empty_in_dict_list_scalar(job.to_dict()))}')
+        except Exception as exp2:
+            logger.error(f"Exception ignored when attempting to dump k8s job as yaml: {exp2}")
+            pass
     except Exception as exp1:
         traceback.print_exc()
         logger.info(f'kickoff_bootstrap: Caught {exp1}')
         return
 
     try:
-        arv = batch_v1_api.create_namespaced_job(namespace=namespace,body=job)
+        arv:kubernetes.client.V1Job = batch_v1_api.create_namespaced_job(namespace=namespace,body=job)
     except Exception as ex:
         traceback.print_exc()
         logger.error('kickoff_bootstrap: create_namespaced_pod of bootstrap caught ' + str(ex))
@@ -541,6 +556,7 @@ def run_project_eks(cognito_username, groups, context, subs, item, service_conf)
     eks_region, eks_role, eks_role_ext, \
         ecr_role, ecr_role_ext, ecr_type, ecr_region, use_fargate \
         = lookup_eks_cluster_config(cognito_username, groups, kube_cluster_name, kube_cluster_ns, subs)
+    logger.debug(f"eks_region={eks_region}, eks_role={eks_role}, eks_role_ext={eks_role_ext}, ecr_role={ecr_role}, ecr_role_ext={ecr_role_ext}, ecr_type={ecr_type}, ecr_region={ecr_region}, use_fargate={use_fargate}")
     ecr_aws_account_id = None
 
     if eks_role and eks_role_ext:
@@ -876,8 +892,10 @@ if __name__ == '__main__':
             "resourceId": "kbmwvh",
             "authorizer": {
                 "aud": "1pcfrh7i2eckcbu82ncg4i3icp",
-                "principalId": "raj-hpe",
-                "cognito:username": "raj-hpe",
+                #"principalId": "raj-hpe", # __main__hpe
+                "principalId": "raj-isstage2-isstage8",  # __main__isstage2
+                #"cognito:username": "raj-hpe", # __main__hpe
+                "cognito:username": "raj-isstage2-isstage8",  # __main__isstage2
                 "integrationLatency": 1778
             },
             "resourcePath": "/2.0/mlflow/parallels/run-project",
@@ -908,7 +926,8 @@ if __name__ == '__main__':
             "domainName": "concurrent.xxxxx",
             "apiId": "wncjve35gc"
         },
-        "body": "{\"backend_type\": \"HPE\", \"MLFLOW_TRACKING_URI\": \"infinstor://mlflow.hpe.infinstor.com\", \"MLFLOW_CONCURRENT_URI\": \"https://concurrent.hpe.infinstor.com\", \"params\": {\"alpha\": \"0.62\", \"l1_ratio\": \"0.02\"}, \"run_id\": \"1-16654586075810000000002\", \"experiment_id\": \"1\", \"docker_image\": \"mlflow-docker-example\", \"resources.requests.memory\": \"1024Mi\", \"namespace\": \"parallelsns\", \"kube_context\": \"isstage23-cluster-1\", \"docker_repo_name\": \"https://github.com/jagane-infinstor/mlflow-example-docker.git\", \"git_commit\": \"5ebaa6d3130fec010e49c19b948468eff0aafe51\"}",
+        #"body": "{\"backend_type\": \"HPE\", \"MLFLOW_TRACKING_URI\": \"infinstor://mlflow.hpe.infinstor.com\", \"MLFLOW_CONCURRENT_URI\": \"https://concurrent.hpe.infinstor.com\", \"params\": {\"alpha\": \"0.62\", \"l1_ratio\": \"0.02\"}, \"run_id\": \"1-16654586075810000000002\", \"experiment_id\": \"1\", \"docker_image\": \"mlflow-docker-example\", \"resources.requests.memory\": \"1024Mi\", \"namespace\": \"parallelsns\", \"kube_context\": \"isstage23-cluster-1\", \"docker_repo_name\": \"https://github.com/jagane-infinstor/mlflow-example-docker.git\", \"git_commit\": \"5ebaa6d3130fec010e49c19b948468eff0aafe51\"}",   # __main__hpe
+        "body": '{"backend_type": "eks", "MLFLOW_TRACKING_URI": "infinstor://mlflow.ml1.concurrent-ai.org", "MLFLOW_CONCURRENT_URI": "https://concurrent.ml1.concurrent-ai.org", "params": {"alpha": "0.62", "l1_ratio": "0.02"}, "run_id": "1-16654586075810000000002", "experiment_id": "1", "docker_image": "mlflow-docker-example", "resources.requests.memory": "1024Mi", "namespace": "unpriv-ns-raj", "kube_context": "concurrent", "docker_repo_name": "https://github.com/jagane-infinstor/mlflow-example-docker.git", "git_commit": "5ebaa6d3130fec010e49c19b948468eff0aafe51"}',   # __main__isstage2
         "isBase64Encoded": False
         }
             

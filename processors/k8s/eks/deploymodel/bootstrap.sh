@@ -310,6 +310,7 @@ if [ x${RESOURCES_LIMITS_NVIDIA_COM_GPU} == "x" ] ; then
   RESOURCES_LIMITS_NVIDIA_COM_GPU=$RESOURCES_REQUESTS_NVIDIA_COM_GPU
 fi
 
+# TODO: need to fix to accommodate CONCURRENT_DISABLE_NODE_PINNING | concurrentDisableNodePinning
 cat > /tmp/deployment.$$.yaml << EOYAML
 apiVersion: apps/v1
 kind: Deployment

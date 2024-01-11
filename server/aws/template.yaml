@@ -219,6 +219,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   deploymodel: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -247,6 +249,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   createendpoint: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -275,6 +279,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   listdeployments: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -303,6 +309,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   parallelsauth:
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -324,6 +332,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   getversion:
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -354,6 +364,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   cliclientauthorize:
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -384,6 +396,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   addmodperiodicrun: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -412,6 +426,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   delperiodicrun: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -440,6 +456,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   listperiodicruns: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -468,6 +486,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   periodrun:
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -496,6 +516,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   listdag: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -524,6 +546,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   executedag: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -552,6 +576,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   getdagexecinfo: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -580,6 +606,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   createparallel: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -608,6 +636,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   updateparallel: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -636,6 +666,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   deleteparallel: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -664,6 +696,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   renameparallel: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -692,6 +726,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   getparallel: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -720,6 +756,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   searchparallels: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -748,6 +786,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   setparalleltag: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -776,6 +816,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   removeparalleltag: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -804,6 +846,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   addkubecluster: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -832,6 +876,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   removekubecluster: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -860,6 +906,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   getkubeclusters: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -888,6 +936,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   addclusteraccess: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -916,6 +966,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   removeclusteraccess: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -944,6 +996,8 @@ Resources:
           DAG_TABLE: !Ref dagTable
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   getuserbuckets: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -973,6 +1027,8 @@ Resources:
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
           STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   getpresignedurl: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -1002,6 +1058,8 @@ Resources:
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
           STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   adduserbucket: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -1031,6 +1089,8 @@ Resources:
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
           STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   removeuserbucket: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -1060,6 +1120,8 @@ Resources:
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
           STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   getconcurrentauth: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -1089,6 +1151,8 @@ Resources:
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
           STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   addconcurrentauth: # no _ in name
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -1118,6 +1182,8 @@ Resources:
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
           STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
   getlambdaconfiguration: # no _ in name. This is a custom REST API, not really an MLflow API
     Type: 'AWS::Serverless::Function'
     Properties:
@@ -1149,7 +1215,8 @@ Resources:
           DAG_EXECUTION_TABLE: !Ref dagexecutionTable
           KUBE_CLUSTERS_TABLE: !Ref kubeClustersTable
           STORAGE_CREDENTIALS_TABLE: !Ref storageCredentialsTable
-   
+          PYTHONUNBUFFERED: 'true'
+          LAMBDA_LOG_LEVEL: INFO
 Outputs:
   MlflowParallelsApiId:
     Description: Root resource ID for the REST Api published by this application
