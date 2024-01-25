@@ -24,7 +24,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_tag,
-                                     image_digest, side_car_name, use_fargate):
+                                     image_digest, side_car_name, use_fargate, add_labels):
     if image_digest:
         image_uri = image_tag + "@" + image_digest
     else:
@@ -59,8 +59,16 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
                 fh.write("    metadata:\n")
                 fh.write("      labels:\n")
                 fh.write("        concurrent-node-type: \"worker\"\n")
+                if add_labels:
+                    for ky, vl in add_labels.items():
+                        fh.write(f"        {ky}: \"{vl}\"\n")
                 fh.write("    spec:\n")
             else:
+                if add_labels:
+                    fh.write("    metadata:\n")
+                    fh.write("      labels:\n")
+                    for ky, vl in add_labels.items():
+                        fh.write(f"        {ky}: \"{vl}\"\n")
                 fh.write("    spec:\n")
                 fh.write("      tolerations:\n")
                 fh.write("      - key: \"concurrent-node-type\"\n")
@@ -68,6 +76,11 @@ def generate_kubernetes_job_template(job_tmplate_file, namespace, run_id, image_
                 fh.write("        value: \"worker\"\n")
                 fh.write("        effect: \"NoSchedule\"\n")
         else:
+            if add_labels:
+                fh.write("    metadata:\n")
+                fh.write("      labels:\n")
+                for ky, vl in add_labels.items():
+                    fh.write(f"        {ky}: \"{vl}\"\n")
             fh.write("    spec:\n")
         fh.write("      shareProcessNamespace: true\n")
         fh.write("      containers:\n")
@@ -557,9 +570,19 @@ def main(run_id_list, input_data_specs, parent_run_id):
                 else:
                     use_fargate = False
                     logger.info("USE_FARGATE not true")
+                add_labels={}
+                if 'PROJECT_PARAMS' in os.environ:
+                    params = json.loads(base64.b64decode(os.getenv('PROJECT_PARAMS')).decode('utf-8'))
+                    for k, v in params.items():
+                        if k == 'k8s-labels':
+                            splitv = v.split(',')
+                            for i in range(int(len(splitv)/2)):
+                                lblname=splitv[(2*i)]
+                                lblval=splitv[(2*i)+1]
+                                add_labels[lblname]=lblval
                 # do not use image.tags[0] since a single image may have multiple taggings (see above).  we want to use the tagging 'os.environ['repository_uri']:tag' for the image in the k8s job and not image.tags[0]
                 generate_kubernetes_job_template(k8s_job_template_file, os.environ['NAMESPACE'],
-                                                run_id, image_uri_with_tag, image_digest, side_car_name, use_fargate)
+                                                run_id, image_uri_with_tag, image_digest, side_car_name, use_fargate, add_labels)
 
             k8s_backend_config_file = "/tmp/k8s-backend-config-" + run_id + ".json"
             if os.path.exists(k8s_backend_config_file):
@@ -572,8 +595,9 @@ def main(run_id_list, input_data_specs, parent_run_id):
             if 'PROJECT_PARAMS' in os.environ:
                 params = json.loads(base64.b64decode(os.getenv('PROJECT_PARAMS')).decode('utf-8'))
                 for k, v in params.items():
-                    mlflow_cmd.append('-P')
-                    mlflow_cmd.append(k + '=' + v)
+                    if k != 'k8s-labels':
+                        mlflow_cmd.append('-P')
+                        mlflow_cmd.append(k + '=' + v)
             mlflow_cmd_list.append((run_id, mlflow_cmd))
 
         launch_mlflow_commands(mlflow_cmd_list)
